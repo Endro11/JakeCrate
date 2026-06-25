@@ -67,7 +67,7 @@
         .slider-container { display:flex; align-items:center; flex-grow:1; gap:8px; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:6px; }
         #brushLabel { color:#aaa; font-size:11px; font-family:monospace; background:#111; padding:4px; border-radius:4px; min-width:28px; text-align:center; }
         #brushSize { width:100%; margin:0; }
-        .modal { position:absolute; top:15%; left:50%; transform:translateX(-50%); background:rgba(20,20,25,0.98); padding:20px; border-radius:12px; border:1px solid #555; display:flex; flex-direction:column; align-items:center; gap:15px; z-index:30; box-shadow:0 10px 40px rgba(0,0,0,0.9); width:280px; max-height:90vh; overflow-y:auto; color:white; }
+        .modal { position:absolute; top:15%; left:50%; transform:translateX(-50%); background:rgba(20,20,25,0.98); padding:20px; border-radius:12px; border:1px solid #555; display:flex; flex-direction:column; align-items:center; gap:15px; z-index:55; box-shadow:0 10px 40px rgba(0,0,0,0.9); width:280px; max-height:90vh; overflow-y:auto; color:white; }
         #scoreboard.in-entry { position:static; top:auto; right:auto; bottom:auto; left:auto; transform:none; min-width:0; width:100%; max-width:360px; box-shadow:none; margin:10px auto 0; background:rgba(0,0,0,0.25); }
         #scoreboard.in-entry #score-list { max-height:26vh; }
         .modal-title { font-weight:bold; font-size:1.2em; border-bottom:2px solid #444; padding-bottom:5px; width:100%; text-align:center; }
@@ -251,7 +251,7 @@
         <button id="modeBtn">🖌️ Paint</button>
     </div>
     <div class="ui-row">
-        <button id="eyedropperBtn" style="flex-grow:0;width:70px;background:#1565c0;">💧 Pick</button>
+        <button id="eyedropperBtn" style="flex-grow:0;width:70px;background:#1565c0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:2px;"><path d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 0 0 5 16v3h3a2 2 0 0 0 1.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 0 0 0-1.41z"/></svg>PICK</button>
         <div id="colorSwatch" onclick="toggleColorModal(true)"></div>
         <div class="slider-container">
             <input type="range" id="brushSize" min="1" max="30" value="10">
