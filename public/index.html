@@ -65,7 +65,7 @@
         #poseBtn { background:#f9a825; color:black; }
         #colorSwatch { width:45px; height:35px; border:2px solid #fff; border-radius:6px; background:#ff0000; cursor:pointer; box-shadow:0 0 5px rgba(0,0,0,0.5); flex-shrink:0; }
         .slider-container { display:flex; align-items:center; flex-grow:1; gap:8px; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:6px; }
-        #brushLabel { color:#aaa; font-size:11px; font-family:monospace; background:#111; padding:4px; border-radius:4px; min-width:28px; text-align:center; }
+        #brushLabel { color:#fff; font-size:15px; font-weight:bold; font-family:monospace; background:#222; padding:4px 6px; border-radius:4px; min-width:38px; text-align:center; flex-shrink:0; }
         #brushSize { width:100%; margin:0; }
         .modal { position:absolute; top:15%; left:50%; transform:translateX(-50%); background:rgba(20,20,25,0.98); padding:20px; border-radius:12px; border:1px solid #555; display:flex; flex-direction:column; align-items:center; gap:15px; z-index:55; box-shadow:0 10px 40px rgba(0,0,0,0.9); width:280px; max-height:90vh; overflow-y:auto; color:white; }
         #scoreboard.in-entry { position:static; top:auto; right:auto; bottom:auto; left:auto; transform:none; min-width:0; width:100%; max-width:360px; box-shadow:none; margin:10px auto 0; background:rgba(0,0,0,0.25); }
@@ -109,7 +109,7 @@
         #pokeBtn:active { transform:translateX(-50%) scale(0.94); }
         #pokeBtn:disabled { background:#666; opacity:0.55; }
         #lobbyDoneBtn { display:none; position:absolute; top:calc(12px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:17; padding:12px 30px; font-size:1em; font-weight:bold; letter-spacing:1px; color:#fff; background:#2e7d32; border:none; border-radius:30px; box-shadow:0 4px 16px rgba(0,0,0,0.5); text-transform:uppercase; cursor:pointer; }
-        #framer-modal { display:none; width:300px; top:50%; transform:translate(-50%,-50%); }
+        #framer-modal { display:none; width:300px; top:50%; transform:translate(-50%,-50%); z-index:65; }
 
         /* ── Stroke Off UI ── */
         #so-screen { display:none; position:absolute; inset:0; z-index:45; background:#050508; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#fff; padding:20px; text-align:center; }
@@ -242,7 +242,7 @@
         <button onclick="useFramedPhoto()" style="background:#37474f;">✂️ CROP</button>
         <button onclick="useFullPhoto()" style="background:#2e7d32;">🖼️ FULL</button>
     </div>
-    <button onclick="document.getElementById('framer-modal').style.display='none';" style="width:100%;background:#555;padding:8px;">CANCEL</button>
+    <button onclick="closeFramer()" style="width:100%;background:#555;padding:8px;">CANCEL</button>
 </div>
 
 <div id="ui-bar" style="display:none;">
@@ -254,8 +254,8 @@
         <button id="eyedropperBtn" style="flex-grow:0;width:70px;background:#1565c0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:2px;"><path d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 0 0 5 16v3h3a2 2 0 0 0 1.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 0 0 0-1.41z"/></svg>PICK</button>
         <div id="colorSwatch" onclick="toggleColorModal(true)"></div>
         <div class="slider-container">
-            <input type="range" id="brushSize" min="1" max="30" value="10">
             <span id="brushLabel">10px</span>
+            <input type="range" id="brushSize" min="1" max="30" value="10">
         </div>
         <button id="whistleBtn" style="flex-grow:0;width:50px;background:#37474f;">🔔</button>
     </div>
@@ -662,6 +662,7 @@ function toggleSettingsModal(show) {
         const sel = document.getElementById('seekerName'), prev = sel.value, list = Object.values(otherPlayers);
         sel.innerHTML = '<option value="">— PICK —</option>' + list.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         if (prev && list.some(p => p.id === prev)) sel.value = prev;
+        if (!bg) loadSampleBg('kitchen', 'TACO BELL');
     }
 }
 function startGame() {
@@ -740,13 +741,14 @@ function drawNoSignal(){ctx.fillStyle='#0b0b14';ctx.fillRect(0,0,SPACE_W,SPACE_H
 function pushBackground(img,name,broadcast){const MAX=2200;let w=img.width||1600,h=img.height||900;if(w>MAX||h>MAX){const s=Math.min(MAX/w,MAX/h);w=Math.round(w*s);h=Math.round(h*s);}const off=document.createElement('canvas');off.width=w;off.height=h;off.getContext('2d').drawImage(img,0,0,w,h);const dataUrl=off.toDataURL('image/jpeg',0.85);const fin=new Image();fin.onload=()=>setBackground(fin,name);fin.src=dataUrl;if(broadcast)socket.emit('hostMap',{feedIndex:0,dataUrl,name});}
 function loadSampleBg(key,name){const img=new Image();img.onload=()=>pushBackground(img,name,true);img.src='/scenes/'+key+'.png';showToast('🌮 Loading '+name+'…');}
 const framer={img:null,scale:1,minScale:1,ox:0,oy:0,drag:null};
-function openFramer(file){if(!file)return;const reader=new FileReader();reader.onload=(ev)=>{const img=new Image();img.onload=()=>{framer.img=img;fitFramer();document.getElementById('framerZoom').value=0;document.getElementById('framer-modal').style.display='flex';drawFramer();};img.src=ev.target.result;};reader.readAsDataURL(file);}
+function openFramer(file){if(!file)return;document.getElementById('settings-modal').style.display='none';const reader=new FileReader();reader.onload=(ev)=>{const img=new Image();img.onload=()=>{framer.img=img;fitFramer();document.getElementById('framerZoom').value=0;document.getElementById('framer-modal').style.display='flex';drawFramer();};img.src=ev.target.result;};reader.readAsDataURL(file);}
+function closeFramer(){document.getElementById('framer-modal').style.display='none';document.getElementById('settings-modal').style.display='flex';}
 function fitFramer(){const cv=document.getElementById('framerCvs'),im=framer.img;framer.scale=framer.minScale=Math.max(cv.width/im.width,cv.height/im.height);framer.ox=(cv.width-im.width*framer.scale)/2;framer.oy=(cv.height-im.height*framer.scale)/2;}
 function clampFramer(){const cv=document.getElementById('framerCvs'),dw=framer.img.width*framer.scale,dh=framer.img.height*framer.scale;framer.ox=Math.min(0,Math.max(cv.width-dw,framer.ox));framer.oy=Math.min(0,Math.max(cv.height-dh,framer.oy));}
 function drawFramer(){const cv=document.getElementById('framerCvs'),g=cv.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cv.width,cv.height);if(framer.img)g.drawImage(framer.img,framer.ox,framer.oy,framer.img.width*framer.scale,framer.img.height*framer.scale);g.strokeStyle='rgba(255,255,255,0.8)';g.lineWidth=2;g.strokeRect(1,1,cv.width-2,cv.height-2);}
 function rotateFramerImg(){const im=framer.img;if(!im)return;const c=document.createElement('canvas');c.width=im.height;c.height=im.width;const cx=c.getContext('2d');cx.translate(c.width/2,c.height/2);cx.rotate(Math.PI/2);cx.drawImage(im,-im.width/2,-im.height/2);framer.img=c;fitFramer();drawFramer();}
-function useFramedPhoto(){if(!framer.img)return;const cv=document.getElementById('framerCvs'),OUT_W=1600,OUT_H=Math.round(OUT_W*cv.height/cv.width),k=OUT_W/cv.width;const out=document.createElement('canvas');out.width=OUT_W;out.height=OUT_H;const g=out.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,OUT_W,OUT_H);g.drawImage(framer.img,framer.ox*k,framer.oy*k,framer.img.width*framer.scale*k,framer.img.height*framer.scale*k);const dataUrl=out.toDataURL('image/jpeg',0.85);const fin=new Image();fin.onload=()=>setBackground(fin,'CUSTOM ROOM');fin.src=dataUrl;socket.emit('hostMap',{feedIndex:0,dataUrl,name:'CUSTOM ROOM'});document.getElementById('framer-modal').style.display='none';showToast('📷 Room set (cropped)');}
-function useFullPhoto(){if(!framer.img)return;pushBackground(framer.img,'CUSTOM ROOM',true);document.getElementById('framer-modal').style.display='none';showToast('🖼️ Room set (full)');}
+function useFramedPhoto(){if(!framer.img)return;const cv=document.getElementById('framerCvs'),OUT_W=1600,OUT_H=Math.round(OUT_W*cv.height/cv.width),k=OUT_W/cv.width;const out=document.createElement('canvas');out.width=OUT_W;out.height=OUT_H;const g=out.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,OUT_W,OUT_H);g.drawImage(framer.img,framer.ox*k,framer.oy*k,framer.img.width*framer.scale*k,framer.img.height*framer.scale*k);const dataUrl=out.toDataURL('image/jpeg',0.85);const fin=new Image();fin.onload=()=>setBackground(fin,'CUSTOM ROOM');fin.src=dataUrl;socket.emit('hostMap',{feedIndex:0,dataUrl,name:'CUSTOM ROOM'});closeFramer();showToast('📷 Room set (cropped)');}
+function useFullPhoto(){if(!framer.img)return;pushBackground(framer.img,'CUSTOM ROOM',true);closeFramer();showToast('🖼️ Room set (full)');}
 (function(){const cv=document.getElementById('framerCvs');const pt=(e)=>{const r=cv.getBoundingClientRect();const s=(e.touches&&e.touches[0])?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};};const down=(e)=>{if(!framer.img)return;e.preventDefault();framer.drag=pt(e);};const move=(e)=>{if(!framer.drag)return;e.preventDefault();const p=pt(e);framer.ox+=p.x-framer.drag.x;framer.oy+=p.y-framer.drag.y;framer.drag=p;clampFramer();drawFramer();};const up=()=>{framer.drag=null;};cv.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);cv.addEventListener('touchstart',down);cv.addEventListener('touchmove',move);cv.addEventListener('touchend',up);document.getElementById('framerZoom').addEventListener('input',(e)=>{framer.scale=framer.minScale*(1+e.target.value/33);clampFramer();drawFramer();});})();
 
 // Color wheel
