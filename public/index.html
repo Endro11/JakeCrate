@@ -536,6 +536,7 @@ function applyChromeVisibility() {
     const isSeeker = socket.id === seekerSocketId;
     const inLobby = gamePhase === 'LOBBY';
     const inRoom = !inLobby;
+    if (inRoom && isJoined) { document.getElementById('hub-screen').style.display='none'; document.getElementById('room-lobby').style.display='none'; }
     const editing = inLobby && isJoined && lobbyEditing;
     document.getElementById('hostBtn').style.display = (isRoomHost && selectedGame === 'tacostealth') ? 'inline-block' : 'none';
     document.getElementById('findMeBtn').style.display = (inRoom && isJoined && !isSeeker && selectedGame === 'tacostealth') ? 'inline-block' : 'none';
@@ -794,12 +795,6 @@ function loop(){
     if(!camera.scale||isNaN(camera.scale)||camera.scale<=0)camera.scale=fitScale()||0.25;
 
     ctx.fillStyle='#050508';ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#f00';ctx.fillRect(0,0,200,72);ctx.fillStyle='#fff';ctx.font='13px monospace';ctx.textBaseline='top';
-    ctx.fillText('sc:'+camera.scale.toFixed(3)+' bg:'+(bg?'Y':'N'),4,4);
-    ctx.fillText('cx:'+Math.round(camera.x)+' cy:'+Math.round(camera.y),4,20);
-    ctx.fillText('cw:'+canvas.width+' ch:'+canvas.height,4,36);
-    ctx.fillText('ph:'+gamePhase+' j:'+isJoined,4,52);
-    ctx.textBaseline='alphabetic';
     ctx.save();ctx.translate(camera.x,camera.y);ctx.scale(camera.scale,camera.scale);
     if(bg)ctx.drawImage(bg,0,0,SPACE_W,SPACE_H);else drawNoSignal();
 
