@@ -16,7 +16,7 @@
         .hub-sub { font-family:monospace; color:#5a7aaa; letter-spacing:6px; font-size:0.82em; margin-top:-10px; }
         #hubNameInput { width:min(320px,90%); padding:14px; font-size:1.15em; text-align:center; border-radius:8px; border:none; outline:none; font-weight:bold; text-transform:uppercase; background:#ddd; color:#111; }
         .hub-btn-row { display:flex; gap:10px; width:min(320px,90%); }
-        .hub-btn { flex:1; padding:15px; font-weight:bold; font-size:1em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; }
+        .hub-btn { flex:1; padding:15px; font-weight:bold; font-size:1em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; user-select:none; -webkit-user-select:none; }
         #hubCreateBtn { background:#c62828; }
         #hubJoinBtn { background:#1565c0; }
         #hubCodeWrap { display:none; flex-direction:column; align-items:center; gap:10px; width:min(320px,90%); }
@@ -30,9 +30,9 @@
         .rl-code { font-family:monospace; font-size:2em; font-weight:bold; letter-spacing:12px; color:#fff; background:rgba(255,255,255,0.07); border:1px solid #333; border-radius:10px; padding:10px 20px; }
         .rl-hint { font-family:monospace; color:#556; font-size:0.78em; letter-spacing:2px; }
         #rl-players { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:420px; }
-        .lobby-chip { background:rgba(255,255,255,0.08); border:1px solid #3a4a66; border-radius:20px; padding:7px 14px; font-weight:bold; font-size:0.9em; }
+        .lobby-chip { background:rgba(255,255,255,0.08); border:1px solid #3a4a66; border-radius:20px; padding:7px 14px; font-weight:bold; font-size:0.9em; user-select:none; -webkit-user-select:none; }
         #rl-game-pick { display:flex; flex-direction:column; gap:10px; width:min(380px,92%); margin-top:4px; }
-        .game-card { display:flex; align-items:center; gap:14px; padding:16px; background:rgba(255,255,255,0.05); border:2px solid #2a3450; border-radius:14px; cursor:pointer; transition:border-color .15s, background .15s; }
+        .game-card { display:flex; align-items:center; gap:14px; padding:16px; background:rgba(255,255,255,0.05); border:2px solid #2a3450; border-radius:14px; cursor:pointer; transition:border-color .15s, background .15s; user-select:none; -webkit-user-select:none; }
         .game-card:hover, .game-card.selected { border-color:#ffeb3b; background:rgba(255,235,59,0.06); }
         .game-card.soon { opacity:.45; cursor:default; pointer-events:none; }
         .gc-icon { font-size:2em; }
@@ -58,7 +58,7 @@
         /* ── TacoStealth UI ── */
         #ui-bar { position:absolute; bottom:calc(10px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; align-items:center; background:rgba(25,25,30,0.95); padding:12px 10px; border-radius:12px; box-shadow:0px -4px 20px rgba(0,0,0,0.8); width:95%; max-width:450px; z-index:10; border:1px solid #444; }
         .ui-row { display:flex; gap:8px; width:100%; align-items:center; justify-content:center; }
-        button, .btn-custom { padding:10px; font-weight:bold; cursor:pointer; border:none; border-radius:6px; background:#333; color:#fff; font-size:0.85em; flex-grow:1; text-align:center; text-transform:uppercase; }
+        button, .btn-custom { padding:10px; font-weight:bold; cursor:pointer; border:none; border-radius:6px; background:#333; color:#fff; font-size:0.85em; flex-grow:1; text-align:center; text-transform:uppercase; user-select:none; -webkit-user-select:none; }
         .btn-custom { background:#2e7d32; }
         .cam-load { flex:1; background:#37474f; color:#fff; padding:8px 4px; font-size:0.72em; font-weight:bold; text-align:center; border-radius:6px; cursor:pointer; }
         .cam-load:active { background:#455a64; }
@@ -152,9 +152,9 @@
     <div id="rl-players"></div>
     <div id="rl-game-pick">
         <div class="game-card" id="gc-ts" onclick="pickGame('tacostealth')">
-            <div class="gc-icon">🌮</div>
+            <div class="gc-icon">🎨</div>
             <div class="gc-info">
-                <div class="gc-name">Taco Stealth</div>
+                <div class="gc-name">Paint or Poke</div>
                 <div class="gc-desc">Paint your disguise and hide from the seeker</div>
             </div>
         </div>
@@ -357,6 +357,7 @@ function hubJoin() {
 function doJoinRoom(code) {
     currentRoomCode = code;
     localStorage.setItem('jc_room', code);
+    isJoined = true;
     socket.emit('joinRoom', { code, playerData: { name: playerName, x: SPACE_W/2 - 37, y: SPACE_H/2 - 37, color: activeColor, pose: currentIdx, token: myToken } });
 }
 
