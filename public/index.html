@@ -495,10 +495,16 @@ socket.on('gameState', (state) => {
             if (isJoined && !isSeeker) {
                 player.x = SPACE_W * (0.15 + Math.random() * 0.7) - playerSize/2;
                 player.y = SPACE_H * (0.18 + Math.random() * 0.64) - playerSize/2;
-                clampPlayerToSpace(); followPlayer(true);
+                clampPlayerToSpace();
+                const snapCamera = () => {
+                    if (canvas.width <= 0 || canvas.height <= 0) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+                    followPlayer(true);
+                };
+                snapCamera();
+                setTimeout(snapCamera, 200);
                 selfFlashUntil = Date.now() + 10000;
                 showToast('🙈 Hide! Drag blob to move • drag bg to pan • pinch to zoom • 🖌️ paint');
-            } else if (isSeeker) { focusWholeSpace(); }
+            } else if (isSeeker) { setTimeout(() => { if(canvas.width<=0||canvas.height<=0){canvas.width=window.innerWidth;canvas.height=window.innerHeight;} focusWholeSpace(); }, 200); focusWholeSpace(); }
             setCamTitle();
         }
         if (isSeeker && state.phase === 'SEEKING' && prevPhase !== 'SEEKING') {
