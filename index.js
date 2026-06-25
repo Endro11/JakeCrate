@@ -216,6 +216,7 @@ io.on('connection', (socket) => {
 
         if (room.seekerToken === token) room.seekerSocketId = socket.id;
         if (room.hostToken === token) room.hostSocketId = socket.id;
+        isHost(room, socket); // auto-assigns host to first joiner if none set yet
 
         console.log(`👤 ${playerData.name} joined room ${code}`);
 

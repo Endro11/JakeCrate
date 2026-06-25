@@ -394,7 +394,6 @@ function showRoomLobby() {
 }
 
 function pickGame(gameId) {
-    if (!isRoomHost) return;
     socket.emit('selectGame', gameId);
 }
 
