@@ -95,6 +95,7 @@
         #score-list { max-height:52vh; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#444 transparent; }
         #player-count { font-size:0.7em; color:#888; font-family:monospace; margin-left:4px; }
         #scoreboard { position:absolute; top:calc(50px + env(safe-area-inset-top)); right:calc(12px + env(safe-area-inset-right)); background:rgba(15,15,20,0.96); border:1px solid #444; border-radius:10px; padding:12px 14px; z-index:19; display:none; flex-direction:column; gap:6px; min-width:230px; font-family:monospace; color:white; box-shadow:0 4px 24px rgba(0,0,0,0.9); }
+        #so-scoreboard { background:rgba(0,0,0,0.3); border:1px solid #444; border-radius:10px; padding:12px 14px; display:none; flex-direction:column; gap:6px; width:100%; max-width:360px; font-family:monospace; color:white; }
         #scoreboard .sb-title { font-size:0.85em; font-weight:bold; letter-spacing:2px; color:#ffeb3b; border-bottom:1px solid #333; padding-bottom:6px; margin-bottom:2px; text-align:center; }
         #scoreboard .sb-header { display:flex; justify-content:space-between; font-size:0.65em; color:#666; padding:0 2px; }
         .sb-row { display:flex; align-items:center; gap:6px; padding:4px 2px; border-radius:4px; font-size:0.82em; }
@@ -111,18 +112,30 @@
         #lobbyDoneBtn { display:none; position:absolute; top:calc(12px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:17; padding:12px 30px; font-size:1em; font-weight:bold; letter-spacing:1px; color:#fff; background:#2e7d32; border:none; border-radius:30px; box-shadow:0 4px 16px rgba(0,0,0,0.5); text-transform:uppercase; cursor:pointer; }
         #framer-modal { display:none; width:300px; top:50%; transform:translate(-50%,-50%); z-index:65; }
 
-        /* ── Stroke Off UI ── */
-        #so-screen { display:none; position:absolute; inset:0; z-index:45; background:#050508; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#fff; padding:20px; text-align:center; }
-        #so-canvas { border:2px solid #333; border-radius:8px; background:#111; touch-action:none; cursor:crosshair; max-width:100%; max-height:55vh; }
-        .so-prompt-box { background:rgba(255,255,255,0.07); border:1px solid #333; border-radius:10px; padding:14px 24px; font-size:1.4em; font-weight:bold; letter-spacing:2px; }
-        .so-timer { font-family:monospace; font-size:2.5em; font-weight:bold; color:#ffeb3b; }
-        #so-reveal-screen { display:none; position:absolute; inset:0; z-index:46; background:#050508; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#fff; padding:20px; }
-        #so-reveal-canvas { border:2px solid #333; border-radius:8px; background:#111; max-width:100%; max-height:50vh; }
-        .so-reveal-player { font-family:monospace; font-size:1.1em; color:#ffeb3b; letter-spacing:2px; }
-        #so-vote-screen { display:none; position:absolute; inset:0; z-index:47; background:#050508; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#fff; padding:20px; }
-        #so-vote-list { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:420px; }
-        .so-vote-btn { padding:14px 20px; background:rgba(255,255,255,0.07); border:1px solid #444; border-radius:10px; font-weight:bold; font-size:0.9em; cursor:pointer; color:#fff; text-transform:uppercase; }
-        .so-vote-btn:hover { background:rgba(198,40,40,0.3); border-color:#c62828; }
+        /* ── Stroke Off UI — mobile-first ── */
+        #so-screen { display:none; position:absolute; inset:0; z-index:45; background:#050508; overflow:hidden; }
+        #so-canvas { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#111; touch-action:none; cursor:crosshair; }
+        #so-hud-top { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; pointer-events:none; padding:0 12px; color:#fff; }
+        .so-theme-box { background:rgba(5,5,10,0.85); border:1px solid #444; border-radius:8px; padding:6px 16px; font-size:1em; font-weight:bold; letter-spacing:1px; text-align:center; white-space:nowrap; max-width:90vw; overflow:hidden; text-overflow:ellipsis; }
+        .so-part-box { background:rgba(255,235,59,0.1); border:1px solid rgba(255,235,59,0.35); border-radius:8px; padding:4px 14px; font-size:0.82em; color:#ffeb3b; font-family:monospace; letter-spacing:1px; text-align:center; }
+        #so-timer { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:calc(12px + env(safe-area-inset-right)); font-family:monospace; font-size:2em; font-weight:bold; color:#ffeb3b; text-shadow:0 0 12px rgba(255,235,59,0.7),2px 2px 2px #000; z-index:2; pointer-events:none; }
+        #so-toolbar { position:absolute; bottom:calc(12px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:10px; background:rgba(10,10,16,0.9); border:1px solid #333; border-radius:30px; padding:8px 18px; z-index:2; white-space:nowrap; }
+        #so-brush-label { font-family:monospace; color:#aaa; font-size:0.8em; min-width:28px; text-align:right; }
+        /* Reveal screen */
+        #so-reveal-screen { display:none; position:absolute; inset:0; z-index:46; background:#050508; overflow:hidden; }
+        #so-reveal-canvas { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#111; }
+        #so-reveal-hud { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; pointer-events:none; color:#fff; font-family:monospace; }
+        .so-reveal-player { font-size:1.1em; font-weight:bold; color:#ffeb3b; letter-spacing:2px; }
+        #so-reveal-hint { font-size:0.8em; color:#556; }
+        /* Vote screen */
+        #so-vote-screen { display:none; position:absolute; inset:0; z-index:47; background:rgba(5,5,8,0.95); flex-direction:column; align-items:center; justify-content:center; gap:12px; color:#fff; padding:20px; overflow-y:auto; }
+        #so-vote-timer { font-family:monospace; font-size:2em; font-weight:bold; color:#ffeb3b; }
+        #so-vote-list { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:440px; }
+        .so-vote-btn { padding:14px 20px; background:rgba(255,255,255,0.07); border:2px solid #444; border-radius:10px; font-weight:bold; font-size:0.9em; cursor:pointer; color:#fff; text-transform:uppercase; transition:background .15s,border-color .15s; }
+        .so-vote-btn:not(:disabled):hover,.so-vote-btn:not(:disabled):active { background:rgba(198,40,40,0.3); border-color:#c62828; }
+        .so-vote-btn:disabled { opacity:0.5; cursor:default; }
+        #so-voters-status { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
+        .so-voter-chip { background:rgba(46,125,50,0.25); border:1px solid #2e7d32; border-radius:12px; padding:3px 10px; color:#81c784; }
     </style>
 </head>
 <body>
@@ -170,9 +183,14 @@
     <div id="rl-wait">Waiting for the host to start…</div>
     <button id="rl-volunteer" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
     <div id="scoreboard">
-        <div class="sb-title">🏆 STANDINGS <span id="player-count"></span></div>
+        <div class="sb-title">🎨 PAINT OR POKE <span id="player-count"></span></div>
         <div class="sb-header"><span style="flex:1;padding-left:24px;">PLAYER</span><span style="width:44px;text-align:center;">🫥 HID</span><span style="width:44px;text-align:center;">👁️ GOT</span></div>
         <div id="score-list"><div class="sb-empty">No rounds played yet.</div></div>
+    </div>
+    <div id="so-scoreboard" style="display:none;">
+        <div class="sb-title">🖌️ STROKE OFF</div>
+        <div class="sb-header"><span style="flex:1;padding-left:24px;">PLAYER</span><span style="width:52px;text-align:center;">✅ GOT</span><span style="width:52px;text-align:center;">🥷 FAKED</span></div>
+        <div id="so-score-list"><div class="sb-empty">No rounds played yet.</div></div>
     </div>
 </div>
 
@@ -276,29 +294,38 @@
     </div>
 </div>
 
-<!-- ════════════════════ STROKE OFF UI ════════════════════ -->
+<!-- ════════════════════ STROKE OFF DRAW SCREEN ════════════════════ -->
 <div id="so-screen">
-    <div style="font-size:1.8em;font-weight:900;letter-spacing:3px;color:#ffeb3b;">STROKE OFF</div>
-    <div class="so-prompt-box">DRAW: <span id="so-prompt-text">???</span></div>
     <canvas id="so-canvas" width="800" height="450"></canvas>
-    <div class="so-timer" id="so-timer">60</div>
-    <div style="font-family:monospace;color:#556;font-size:0.8em;">Everyone is painting simultaneously. One player doesn't know the prompt.</div>
+    <div id="so-hud-top">
+        <div class="so-theme-box">🖌️ DRAW: <span id="so-theme-text">???</span> <span id="so-theme-emoji"></span></div>
+        <div class="so-part-box">YOUR PART: <span id="so-part-text">???</span></div>
+    </div>
+    <div id="so-timer">60</div>
+    <div id="so-toolbar">
+        <span style="font-size:0.75em;color:#666;font-family:monospace;letter-spacing:1px;">BRUSH</span>
+        <input type="range" id="so-brush-size" min="1" max="20" value="3" style="width:90px;">
+        <span id="so-brush-label">3px</span>
+    </div>
 </div>
 
+<!-- ════════════════════ STROKE OFF REVEAL SCREEN ════════════════════ -->
 <div id="so-reveal-screen">
-    <div style="font-size:1.4em;font-weight:bold;color:#ffeb3b;letter-spacing:2px;">REPLAY</div>
-    <div class="so-reveal-player" id="so-reveal-player-name">PLAYER NAME</div>
     <canvas id="so-reveal-canvas" width="800" height="450"></canvas>
-    <div style="font-family:monospace;color:#7a8fa8;font-size:0.85em;" id="so-reveal-hint">Watching their strokes appear…</div>
-    <button id="so-next-btn" onclick="soNextReveal()" style="padding:14px 32px;background:#1565c0;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:1em;cursor:pointer;letter-spacing:1px;text-transform:uppercase;">NEXT PLAYER →</button>
+    <div id="so-reveal-hud">
+        <div class="so-reveal-player" id="so-reveal-player-name"></div>
+        <div id="so-reveal-hint">Get ready…</div>
+    </div>
 </div>
 
+<!-- ════════════════════ STROKE OFF VOTE SCREEN ════════════════════ -->
 <div id="so-vote-screen">
     <div style="font-size:1.4em;font-weight:bold;color:#ffeb3b;letter-spacing:2px;">WHO'S THE FAKE?</div>
-    <div style="font-family:monospace;color:#7a8fa8;font-size:0.9em;">The prompt was: <span id="so-real-prompt" style="color:#fff;"></span></div>
-    <div style="font-size:0.85em;color:#556;font-family:monospace;">Tap to vote. Most votes loses.</div>
+    <div style="font-family:monospace;color:#7a8fa8;font-size:0.9em;">Theme: <span id="so-real-prompt" style="color:#fff;font-weight:bold;"></span></div>
+    <div id="so-vote-timer"></div>
     <div id="so-vote-list"></div>
-    <div id="so-vote-result" style="display:none;font-family:monospace;font-size:1em;color:#ffeb3b;text-align:center;padding:10px;"></div>
+    <div id="so-voters-status"></div>
+    <div id="so-vote-result" style="display:none;font-family:monospace;font-size:0.92em;color:#ffeb3b;text-align:center;padding:10px;max-width:380px;line-height:1.6;"></div>
     <button id="so-lobby-btn" onclick="soReturnToLobby()" style="display:none;padding:14px 32px;background:#2e7d32;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:1em;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">BACK TO LOBBY</button>
 </div>
 
@@ -516,6 +543,11 @@ socket.on('gameState', (state) => {
         if (inLobby && !lobbyEditing) {
             show('room-lobby'); renderRoomLobby();
         }
+    }
+
+    if (soActive && inLobby) {
+        soCleanup();
+        show('room-lobby'); renderRoomLobby();
     }
 
     applyChromeVisibility();
@@ -855,18 +887,30 @@ function loop(){
     requestAnimationFrame(loop);
 }
 
-// ── Stroke Off client scaffold ─────────────────────────────────────────────
-let soDrawing = false, soLastPt = null, soRevealData = null, soRevealIndex = 0;
+// ── Stroke Off ─────────────────────────────────────────────────────────────
+let soDrawing = false, soLastPt = null;
+let soRevealHistory = null, soRevealPlayers = null, soRevealAnimInterval = null;
 
 function soResizeCanvas() {
-    const maxW = Math.min(window.innerWidth - 40, 800);
-    const maxH = Math.min(window.innerHeight * 0.55, 450);
     const aspect = 800 / 450;
-    let w = maxW, h = maxW / aspect;
-    if (h > maxH) { h = maxH; w = h * aspect; }
-    soCanvas.style.width = w + 'px'; soCanvas.style.height = h + 'px';
-    soRevealCanvas.style.width = w + 'px'; soRevealCanvas.style.height = h + 'px';
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const isMobile = vw <= vh;
+    let dispW, dispH;
+    if (isMobile) {
+        dispW = vw; dispH = vw / aspect;
+        if (dispH > vh) { dispH = vh; dispW = vh * aspect; }
+    } else {
+        const maxW = Math.min(vw * 0.82, vh * aspect * 0.88, 1000);
+        dispW = maxW; dispH = maxW / aspect;
+    }
+    soCanvas.style.width = Math.round(dispW) + 'px'; soCanvas.style.height = Math.round(dispH) + 'px';
+    soRevealCanvas.style.width = Math.round(dispW) + 'px'; soRevealCanvas.style.height = Math.round(dispH) + 'px';
 }
+
+function soGetBrushSize() { return parseFloat(document.getElementById('so-brush-size').value) || 3; }
+document.getElementById('so-brush-size').addEventListener('input', (e) => {
+    document.getElementById('so-brush-label').innerText = e.target.value + 'px';
+});
 
 function soPickFakeAndStart() {
     const players = Object.values(otherPlayers);
@@ -875,19 +919,24 @@ function soPickFakeAndStart() {
     socket.emit('soStartGame', { fakeId: fake.id });
 }
 
-socket.on('strokeStart', ({ prompt, isFake, duration }) => {
+socket.on('strokeStart', ({ theme, emoji, part, isFake, duration }) => {
     hide('room-lobby');
-    const so = document.getElementById('so-screen');
-    so.style.display = 'flex';
-    document.getElementById('so-prompt-text').innerText = prompt;
+    document.getElementById('so-screen').style.display = 'block';
+    document.getElementById('so-theme-text').innerText = theme || '???';
+    document.getElementById('so-theme-emoji').innerText = emoji || '';
+    document.getElementById('so-part-text').innerText = part || '???';
     soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
     soDrawing = true;
 
     let t = duration;
-    document.getElementById('so-timer').innerText = t;
-    const ti = setInterval(() => { t--; document.getElementById('so-timer').innerText = t; if (t <= 0) { clearInterval(ti); soDrawing = false; } }, 1000);
+    const timerEl = document.getElementById('so-timer');
+    timerEl.innerText = t;
+    const ti = setInterval(() => {
+        t--;
+        if (timerEl) timerEl.innerText = t > 0 ? t : '';
+        if (t <= 0) { clearInterval(ti); soDrawing = false; }
+    }, 1000);
 
-    // Touch/mouse drawing on so-canvas
     soCanvas.ontouchstart = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); soLastPt = pt; soEmitStroke(pt, pt); };
     soCanvas.ontouchmove = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); if (soLastPt) soEmitStroke(soLastPt, pt); soLastPt = pt; };
     soCanvas.ontouchend = () => { soLastPt = null; };
@@ -898,14 +947,14 @@ socket.on('strokeStart', ({ prompt, isFake, duration }) => {
 
 function soPoint(e) {
     const r = soCanvas.getBoundingClientRect();
-    const scaleX = soCanvas.width / r.width, scaleY = soCanvas.height / r.height;
-    return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY };
+    return { x: (e.clientX - r.left) * soCanvas.width / r.width, y: (e.clientY - r.top) * soCanvas.height / r.height };
 }
 
 function soEmitStroke(from, to) {
     if (!soDrawing) return;
-    soDrawLine(soCtx, from.x, from.y, to.x, to.y, activeColor, parseFloat(document.getElementById('brushSize').value));
-    socket.emit('soStroke', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, color: activeColor, size: parseFloat(document.getElementById('brushSize').value) });
+    const size = soGetBrushSize();
+    soDrawLine(soCtx, from.x, from.y, to.x, to.y, activeColor, size);
+    socket.emit('soStroke', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, color: activeColor, size });
 }
 
 function soDrawLine(c, x1, y1, x2, y2, color, size) {
@@ -914,87 +963,111 @@ function soDrawLine(c, x1, y1, x2, y2, color, size) {
     c.beginPath(); c.arc(x2, y2, size, 0, 7); c.fillStyle = color; c.fill();
 }
 
-socket.on('soStroke', (s) => {
-    soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size);
-});
+socket.on('soStroke', (s) => { soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size); });
 
-socket.on('strokeReveal', ({ history, players, prompt }) => {
-    soRevealData = { history, players, prompt };
-    soRevealIndex = 0;
+// Server-driven reveal
+socket.on('soRevealBegin', ({ history, players, prompt }) => {
+    soRevealHistory = history; soRevealPlayers = players;
     hide('so-screen');
-    document.getElementById('so-real-prompt').innerText = prompt;
-    soShowNextReveal();
+    soRevealCtx.fillStyle = '#111'; soRevealCtx.fillRect(0, 0, soRevealCanvas.width, soRevealCanvas.height);
+    document.getElementById('so-reveal-player-name').innerText = '';
+    document.getElementById('so-reveal-hint').innerText = 'Get ready…';
+    document.getElementById('so-reveal-screen').style.display = 'block';
 });
 
-function soShowNextReveal() {
-    if (!soRevealData || soRevealIndex >= soRevealData.players.length) {
-        // All done — show vote screen
-        hide('so-reveal-screen');
-        const voteList = document.getElementById('so-vote-list');
-        voteList.innerHTML = soRevealData.players.map(p =>
-            `<button class="so-vote-btn" onclick="soVote('${p.id}')">${foodHead(p.token)} ${p.name}</button>`
-        ).join('');
-        document.getElementById('so-vote-result').style.display = 'none';
-        document.getElementById('so-lobby-btn').style.display = 'none';
-        document.getElementById('so-vote-screen').style.display = 'flex';
-        return;
-    }
-    const player = soRevealData.players[soRevealIndex];
-    document.getElementById('so-reveal-player-name').innerText = `${foodHead(player.token)} ${player.name}`;
-    document.getElementById('so-reveal-hint').innerText = 'Watching their strokes appear…';
-    document.getElementById('so-next-btn').disabled = true;
-
-    const rev = document.getElementById('so-reveal-screen');
-    rev.style.display = 'flex';
-
+socket.on('soRevealNext', ({ player, idx, total }) => {
+    if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
     soRevealCtx.fillStyle = '#111'; soRevealCtx.fillRect(0, 0, soRevealCanvas.width, soRevealCanvas.height);
+    document.getElementById('so-reveal-player-name').innerText = `${foodHead(player.token)} ${player.name}  [${idx + 1}/${total}]`;
+    document.getElementById('so-reveal-hint').innerText = 'Painting…';
 
-    const strokes = soRevealData.history.filter(s => s.socketId === player.id);
+    const strokes = (soRevealHistory || []).filter(s => s.socketId === player.id);
     let i = 0;
-    const speed = Math.max(8, Math.floor(strokes.length / 120)); // ~2s per player
-    const interval = setInterval(() => {
+    const speed = Math.max(1, Math.ceil(strokes.length / 200));
+    soRevealAnimInterval = setInterval(() => {
         for (let j = 0; j < speed && i < strokes.length; j++, i++) {
-            const s = strokes[i];
-            soDrawLine(soRevealCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size);
+            const s = strokes[i]; soDrawLine(soRevealCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size);
         }
         if (i >= strokes.length) {
-            clearInterval(interval);
-            document.getElementById('so-reveal-hint').innerText = strokes.length === 0 ? '(no strokes drawn)' : 'Done!';
-            document.getElementById('so-next-btn').disabled = false;
+            clearInterval(soRevealAnimInterval); soRevealAnimInterval = null;
+            document.getElementById('so-reveal-hint').innerText = strokes.length === 0 ? '(drew nothing)' : 'Done!';
         }
     }, 16);
-}
+});
 
-function soNextReveal() {
-    soRevealIndex++;
-    soShowNextReveal();
-}
+socket.on('soVoteOpen', ({ players, prompt, timeLeft }) => {
+    if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
+    hide('so-reveal-screen');
+    soRevealPlayers = players;
+    document.getElementById('so-real-prompt').innerText = prompt || '???';
+    document.getElementById('so-vote-timer').innerText = timeLeft;
+    document.getElementById('so-voters-status').innerHTML = '';
+    document.getElementById('so-vote-result').style.display = 'none';
+    document.getElementById('so-lobby-btn').style.display = 'none';
+    document.getElementById('so-vote-list').innerHTML = players.map(p =>
+        `<button class="so-vote-btn" onclick="soVote('${p.id}')" data-pid="${p.id}">${foodHead(p.token)} ${p.name}</button>`
+    ).join('');
+    document.getElementById('so-vote-screen').style.display = 'flex';
+});
 
-let soVotes = {};
+socket.on('strokePhaseChange', ({ phase, timeLeft }) => {
+    if (phase === 'VOTE') { const el = document.getElementById('so-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+});
+
+socket.on('soVoterUpdate', ({ voterNames }) => {
+    const el = document.getElementById('so-voters-status');
+    if (el) el.innerHTML = voterNames.map(n => `<span class="so-voter-chip">✓ ${n}</span>`).join('');
+});
+
+socket.on('soVoteResult', ({ fakeId, fakeName, fakeCaught, tallies, players, soScores }) => {
+    document.querySelectorAll('.so-vote-btn').forEach(b => b.disabled = true);
+    const timerEl = document.getElementById('so-vote-timer'); if (timerEl) timerEl.innerText = '';
+
+    const msg = fakeCaught ? `🎯 ${fakeName} was the fake — CAUGHT!` : `🥷 ${fakeName} was the fake — got away!`;
+    const tallyLines = (players || []).map(p => {
+        const v = tallies[p.id] || 0;
+        return `${foodHead(p.token)} ${p.name}${p.id === fakeId ? ' 🥷' : ''} — ${v} vote${v !== 1 ? 's' : ''}`;
+    }).join('\n');
+    const result = document.getElementById('so-vote-result');
+    result.innerHTML = `<div style="font-size:1.15em;margin-bottom:8px;">${msg}</div><div style="color:#aaa;font-size:0.82em;white-space:pre-line;">${tallyLines}</div>`;
+    result.style.display = 'block';
+
+    if (soScores) updateSoScoreDisplay(soScores);
+    setTimeout(() => { const btn = document.getElementById('so-lobby-btn'); if (btn) btn.style.display = 'block'; }, 3000);
+});
+
 function soVote(suspectId) {
     socket.emit('soVote', { suspectId });
     document.querySelectorAll('.so-vote-btn').forEach(b => b.disabled = true);
     showToast('✅ Vote cast!');
 }
 
-socket.on('soVote', ({ voterId, suspectId }) => {
-    soVotes[suspectId] = (soVotes[suspectId] || 0) + 1;
-    const result = document.getElementById('so-vote-result');
-    const tally = Object.entries(soVotes).map(([id, v]) => {
-        const p = soRevealData && soRevealData.players.find(x => x.id === id);
-        return `${p ? p.name : id}: ${v} vote${v !== 1 ? 's' : ''}`;
-    }).join(' • ');
-    result.innerText = '🗳️ ' + tally;
-    result.style.display = 'block';
-    document.getElementById('so-lobby-btn').style.display = 'block';
-});
+function soCleanup() {
+    hide('so-vote-screen'); hide('so-reveal-screen'); hide('so-screen');
+    if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
+    soRevealHistory = null; soRevealPlayers = null;
+}
 
 function soReturnToLobby() {
     socket.emit('soReturnToLobby');
-    hide('so-vote-screen'); hide('so-reveal-screen'); hide('so-screen');
-    soVotes = {}; soRevealData = null;
+    soCleanup();
     show('room-lobby'); renderRoomLobby();
 }
+
+function updateSoScoreDisplay(scoreData) {
+    const sb = document.getElementById('so-scoreboard');
+    const list = document.getElementById('so-score-list');
+    if (!sb || !list) return;
+    if (!scoreData || scoreData.length === 0) { sb.style.display = 'none'; return; }
+    sb.style.display = 'flex';
+    const sorted = [...scoreData].sort((a, b) => (b.correct + b.fakeWins * 2) - (a.correct + a.fakeWins * 2));
+    const medals = ['🥇', '🥈', '🥉'];
+    list.innerHTML = sorted.map((s, i) =>
+        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${s.name}</span><span class="sb-stat" style="color:#81c784;">${s.correct}</span><span class="sb-stat" style="color:#ce93d8;">${s.fakeWins}</span></div>`
+    ).join('');
+}
+
+socket.on('updateSoScores', updateSoScoreDisplay);
 
 applyColor();
 loop();

@@ -43,9 +43,14 @@ function makeRoom(code) {
         gameTimer: null,
         // Stroke Off state
         strokePrompt: null,
+        strokeTheme: null,
         strokeFakeId: null,
-        strokeHistory: [],    // { socketId, x1, y1, x2, y2, color, size, t }
-        strokePhase: 'LOBBY', // LOBBY | DRAWING | REVEAL | VOTE
+        strokeHistory: [],
+        strokeVotes: {},        // voterId -> suspectId
+        strokePlayerParts: {},  // socketId -> part string
+        strokePhase: 'LOBBY',
+        soScores: {},           // name -> { name, correct, fakeWins }
+        revealTimer: null,
     };
 }
 
@@ -129,23 +134,48 @@ function ts_checkReveal(room) {
 
 // ─── Stroke Off game logic ────────────────────────────────────────────────────
 
-const SO_PROMPTS = [
-    'a dog', 'a cat', 'a house', 'a rocket', 'a pizza', 'a tree', 'a fish',
-    'a car', 'a robot', 'a dragon', 'a bicycle', 'a banana', 'a castle',
-    'a ghost', 'a cactus', 'a penguin', 'a volcano', 'a submarine',
+const SO_THEMES = [
+    { theme: 'a dog',       emoji: '🐕', parts: ['the head','the body','the front legs','the back legs','the tail','the ears'] },
+    { theme: 'a cat',       emoji: '🐈', parts: ['the head','the body','the paws','the tail','the ears','the face'] },
+    { theme: 'a house',     emoji: '🏠', parts: ['the roof','the front wall','the door','the windows','the chimney','the yard'] },
+    { theme: 'a rocket',    emoji: '🚀', parts: ['the nose cone','the body','the fins','the engine','the flames','the windows'] },
+    { theme: 'a pizza',     emoji: '🍕', parts: ['the crust','the sauce','the cheese','the pepperoni','the toppings','the box'] },
+    { theme: 'a tree',      emoji: '🌳', parts: ['the trunk','the roots','the left branches','the right branches','the leaves','the top'] },
+    { theme: 'a fish',      emoji: '🐟', parts: ['the body','the head','the tail fin','the top fin','the scales','the eye'] },
+    { theme: 'a car',       emoji: '🚗', parts: ['the body','the wheels','the windows','the headlights','the doors','the bumper'] },
+    { theme: 'a robot',     emoji: '🤖', parts: ['the head','the torso','the arms','the legs','the control panel','the antenna'] },
+    { theme: 'a dragon',    emoji: '🐉', parts: ['the head','the body','the wings','the tail','the claws','the fire breath'] },
+    { theme: 'a bicycle',   emoji: '🚲', parts: ['the front wheel','the back wheel','the frame','the handlebars','the seat','the pedals'] },
+    { theme: 'a castle',    emoji: '🏰', parts: ['the left tower','the right tower','the main gate','the walls','the battlements','the flag'] },
+    { theme: 'a penguin',   emoji: '🐧', parts: ['the head','the body','the wings','the feet','the beak','the belly'] },
+    { theme: 'a submarine', emoji: '🌊', parts: ['the hull','the conning tower','the propeller','the periscope','the portholes','the torpedo bay'] },
+    { theme: 'a cactus',    emoji: '🌵', parts: ['the main trunk','the left arm','the right arm','the spines','the flowers','the pot'] },
+    { theme: 'a snowman',   emoji: '⛄', parts: ['the bottom ball','the middle ball','the head','the hat','the scarf','the arms'] },
+    { theme: 'a burger',    emoji: '🍔', parts: ['the top bun','the bottom bun','the patty','the lettuce','the cheese','the tomato'] },
 ];
 
 function so_startDrawing(room, fakeId) {
-    room.strokePrompt = SO_PROMPTS[Math.random() * SO_PROMPTS.length | 0];
+    const tObj = SO_THEMES[Math.random() * SO_THEMES.length | 0];
+    room.strokePrompt = tObj.theme;
+    room.strokeTheme = tObj;
     room.strokeFakeId = fakeId;
     room.strokeHistory = [];
+    room.strokeVotes = {};
     room.strokePhase = 'DRAWING';
     room.timeLeft = 60;
+
+    // Distribute parts evenly across players
+    const playerIds = Object.keys(room.players);
+    const shuffled = [...tObj.parts].sort(() => Math.random() - 0.5);
+    room.strokePlayerParts = {};
+    playerIds.forEach((sid, i) => { room.strokePlayerParts[sid] = shuffled[i % shuffled.length]; });
 
     Object.keys(room.players).forEach(sid => {
         const isFake = sid === fakeId;
         io.to(sid).emit('strokeStart', {
-            prompt: isFake ? '???' : room.strokePrompt,
+            theme: tObj.theme,
+            emoji: tObj.emoji,
+            part: isFake ? '???' : room.strokePlayerParts[sid],
             isFake,
             duration: 60,
         });
@@ -160,23 +190,101 @@ function so_startDrawing(room, fakeId) {
     }, 1000);
 }
 
+const SO_REVEAL_MS = 4500; // per-player reveal window
+
 function so_startReveal(room) {
     clearInterval(room.gameTimer);
+    clearTimeout(room.revealTimer);
     room.strokePhase = 'REVEAL';
-    broadcastRoom(room, 'strokeReveal', {
+
+    const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
+    broadcastRoom(room, 'soRevealBegin', {
         history: room.strokeHistory,
-        players: Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token })),
+        players,
         prompt: room.strokePrompt,
+        emoji: room.strokeTheme ? room.strokeTheme.emoji : '',
     });
+
+    let idx = 0;
+    function sendNext() {
+        if (idx >= players.length) { so_openVoting(room); return; }
+        broadcastRoom(room, 'soRevealNext', { player: players[idx], idx, total: players.length });
+        idx++;
+        room.revealTimer = setTimeout(sendNext, SO_REVEAL_MS);
+    }
+    room.revealTimer = setTimeout(sendNext, 700);
+}
+
+const SO_VOTE_DURATION = 20;
+
+function so_openVoting(room) {
+    clearTimeout(room.revealTimer);
+    room.strokePhase = 'VOTE';
+    room.strokeVotes = {};
+    room.timeLeft = SO_VOTE_DURATION;
+
+    const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
+    broadcastRoom(room, 'soVoteOpen', { players, prompt: room.strokePrompt, timeLeft: SO_VOTE_DURATION });
+
+    room.gameTimer = setInterval(() => {
+        room.timeLeft--;
+        broadcastRoom(room, 'strokePhaseChange', { phase: 'VOTE', timeLeft: room.timeLeft });
+        if (room.timeLeft <= 0) { clearInterval(room.gameTimer); so_resolveVotes(room); }
+    }, 1000);
+}
+
+function so_resolveVotes(room) {
+    clearInterval(room.gameTimer);
+    clearTimeout(room.revealTimer);
+    room.strokePhase = 'RESULT';
+
+    const tallies = {};
+    Object.values(room.strokeVotes).forEach(id => { tallies[id] = (tallies[id] || 0) + 1; });
+
+    let maxVotes = 0, mostVotedId = null;
+    Object.entries(tallies).forEach(([id, count]) => { if (count > maxVotes) { maxVotes = count; mostVotedId = id; } });
+
+    const fakeId = room.strokeFakeId;
+    const fakeCaught = mostVotedId === fakeId && maxVotes > 0;
+
+    // Update persistent SO scores
+    Object.values(room.players).forEach(p => {
+        if (!room.soScores[p.name]) room.soScores[p.name] = { name: p.name, correct: 0, fakeWins: 0 };
+        if (p.id === fakeId) {
+            if (!fakeCaught) room.soScores[p.name].fakeWins++;
+        } else {
+            if (room.strokeVotes[p.id] === fakeId) room.soScores[p.name].correct++;
+        }
+    });
+
+    const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
+    broadcastRoom(room, 'soVoteResult', {
+        fakeId,
+        fakeName: room.players[fakeId] ? room.players[fakeId].name : '???',
+        fakeCaught,
+        tallies,
+        players,
+        soScores: Object.values(room.soScores),
+    });
+
+    room.revealTimer = setTimeout(() => so_returnToLobby(room), 9000);
 }
 
 function so_returnToLobby(room) {
+    clearTimeout(room.revealTimer);
+    clearInterval(room.gameTimer);
     room.strokePhase = 'LOBBY';
     room.strokePrompt = null;
+    room.strokeTheme = null;
     room.strokeFakeId = null;
     room.strokeHistory = [];
+    room.strokeVotes = {};
+    room.strokePlayerParts = {};
     room.gamePhase = 'LOBBY';
     broadcastGameState(room);
+    if (Object.keys(room.soScores).length > 0) {
+        broadcastRoom(room, 'updateSoScores', Object.values(room.soScores));
+    }
 }
 
 // ─── Socket connections ────────────────────────────────────────────────────────
@@ -232,6 +340,9 @@ io.on('connection', (socket) => {
         broadcastRoom(room, 'updatePlayers', room.players);
         broadcastGameState(room);
         broadcastScores(room);
+        if (Object.keys(room.soScores).length > 0) {
+            socket.emit('updateSoScores', Object.values(room.soScores));
+        }
     });
 
     socket.on('selectGame', (gameId) => {
@@ -393,9 +504,19 @@ io.on('connection', (socket) => {
 
     socket.on('soVote', ({ suspectId }) => {
         const room = socketRoom(socket);
-        if (!room) return;
-        // Simple: broadcast the vote, let clients tally. Could track server-side later.
-        broadcastRoom(room, 'soVote', { voterId: socket.id, suspectId });
+        if (!room || room.strokePhase !== 'VOTE') return;
+        if (room.strokeVotes[socket.id]) return; // already voted
+        room.strokeVotes[socket.id] = suspectId;
+
+        const voterNames = Object.keys(room.strokeVotes)
+            .map(id => room.players[id] ? room.players[id].name : null)
+            .filter(Boolean);
+        broadcastRoom(room, 'soVoterUpdate', { voterNames });
+
+        if (Object.keys(room.strokeVotes).length >= Object.keys(room.players).length) {
+            clearInterval(room.gameTimer);
+            so_resolveVotes(room);
+        }
     });
 
     socket.on('soReturnToLobby', () => {
@@ -424,6 +545,7 @@ io.on('connection', (socket) => {
         // Clean up empty rooms
         if (Object.keys(room.players).length === 0) {
             clearInterval(room.gameTimer);
+            clearTimeout(room.revealTimer);
             delete rooms[room.code];
             console.log(`🗑️  Room ${room.code} removed (empty)`);
         }
