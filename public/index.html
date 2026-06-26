@@ -563,6 +563,12 @@ socket.on('updateScores', (scoreData) => {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// ── Stroke Off canvases (declared here to avoid TDZ crash in resize()) ────
+const soCanvas = document.getElementById('so-canvas');
+const soCtx = soCanvas.getContext('2d');
+const soRevealCanvas = document.getElementById('so-reveal-canvas');
+const soRevealCtx = soRevealCanvas.getContext('2d');
+
 let SPACE_W = 1600, SPACE_H = 900;
 let bg = null, bgName = 'TACO BELL';
 function setBackground(img, name) {
@@ -859,11 +865,6 @@ function loop(){
 }
 
 // ── Stroke Off client scaffold ─────────────────────────────────────────────
-const soCanvas = document.getElementById('so-canvas');
-const soCtx = soCanvas.getContext('2d');
-const soRevealCanvas = document.getElementById('so-reveal-canvas');
-const soRevealCtx = soRevealCanvas.getContext('2d');
-
 let soDrawing = false, soLastPt = null, soRevealData = null, soRevealIndex = 0;
 
 function soResizeCanvas() {
