@@ -202,6 +202,7 @@
 </div>
 <button id="pokeBtn" onclick="seekerPoke()">👉 POKE</button>
 <button id="lobbyDoneBtn" onclick="toggleLobbyEdit(false)">✓ DONE EDITING</button>
+<div id="debug-hud" style="display:none;position:fixed;bottom:200px;left:8px;z-index:999;color:lime;font:bold 11px monospace;background:rgba(0,0,0,0.85);padding:4px 7px;border-radius:4px;pointer-events:none;white-space:pre;line-height:1.5;"></div>
 
 <div id="settings-modal" class="modal" style="display:none;top:50%;transform:translate(-50%,-50%);max-height:90vh;overflow-y:auto;">
     <div class="modal-title">GAME SETTINGS</div>
@@ -847,6 +848,13 @@ function loop(){
         if(cooldownActive){ctx.strokeStyle='rgba(255,200,0,0.55)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(rx,ry,22,-Math.PI/2,-Math.PI/2+coolProg*Math.PI*2);ctx.stroke();}
         ctx.restore();
     }
+    const dbg = document.getElementById('debug-hud');
+    if (gamePhase !== 'LOBBY' && isJoined) {
+        dbg.style.display = 'block';
+        const hubD = document.getElementById('hub-screen').style.display;
+        const lobD = document.getElementById('room-lobby').style.display;
+        dbg.innerText = `cvs:${canvas.width}x${canvas.height}\nscale:${camera.scale.toFixed(3)} cam:(${Math.round(camera.x)},${Math.round(camera.y)})\nbg:${bg?bg.width+'x'+bg.height:'null'} phase:${gamePhase}\nhub:${hubD||'(css)'} lob:${lobD||'(css)'}`;
+    } else { dbg.style.display = 'none'; }
     requestAnimationFrame(loop);
 }
 
