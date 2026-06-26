@@ -513,9 +513,19 @@ io.on('connection', (socket) => {
     socket.on('soStroke', (stroke) => {
         const room = socketRoom(socket);
         if (!room || room.strokePhase !== 'DRAWING') return;
-        const s = { socketId: socket.id, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2, color: stroke.color, size: stroke.size, t: Date.now() };
+        const s = { socketId: socket.id, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2, color: stroke.color, size: stroke.size, t: Date.now(), gid: stroke.gid || 0 };
         room.strokeHistory.push(s);
         socket.broadcast.to(room.code).emit('soStroke', s);
+    });
+
+    socket.on('soUndo', ({ gid }) => {
+        const room = socketRoom(socket);
+        if (!room || room.strokePhase !== 'DRAWING') return;
+        const prev = room.strokeHistory.length;
+        room.strokeHistory = room.strokeHistory.filter(s => !(s.socketId === socket.id && s.gid === gid));
+        if (room.strokeHistory.length < prev) {
+            broadcastRoom(room, 'soRedraw', { history: room.strokeHistory });
+        }
     });
 
     socket.on('soVote', ({ suspectId }) => {
