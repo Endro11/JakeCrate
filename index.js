@@ -41,6 +41,7 @@ function makeRoom(code) {
         lastHideTime: 45,
         lastSeekTime: 120,
         gameTimer: null,
+        gameVotes: {},      // socketId -> gameId (lobby preference votes)
         // Stroke Off state
         strokePrompt: null,
         strokeTheme: null,
@@ -224,7 +225,7 @@ function so_openVoting(room) {
     room.timeLeft = SO_VOTE_DURATION;
 
     const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
-    broadcastRoom(room, 'soVoteOpen', { players, prompt: room.strokePrompt, timeLeft: SO_VOTE_DURATION });
+    broadcastRoom(room, 'soVoteOpen', { players, prompt: room.strokePrompt, emoji: room.strokeTheme ? room.strokeTheme.emoji : '', timeLeft: SO_VOTE_DURATION });
 
     room.gameTimer = setInterval(() => {
         room.timeLeft--;
@@ -343,6 +344,9 @@ io.on('connection', (socket) => {
         if (Object.keys(room.soScores).length > 0) {
             socket.emit('updateSoScores', Object.values(room.soScores));
         }
+        if (Object.keys(room.gameVotes).length > 0) {
+            socket.emit('gameVotes', { votes: room.gameVotes, players: room.players });
+        }
     });
 
     socket.on('selectGame', (gameId) => {
@@ -351,6 +355,17 @@ io.on('connection', (socket) => {
         room.selectedGame = gameId;
         broadcastGameState(room);
         console.log(`🎮 Room ${room.code} selected game: ${gameId}`);
+    });
+
+    socket.on('gameVote', (gameId) => {
+        const room = socketRoom(socket);
+        if (!room) return;
+        room.gameVotes[socket.id] = gameId;
+        if (isHost(room, socket)) {
+            room.selectedGame = gameId;
+            broadcastGameState(room);
+        }
+        broadcastRoom(room, 'gameVotes', { votes: room.gameVotes, players: room.players });
     });
 
     // ── Shared player events ──────────────────────────────────────────────────
@@ -491,6 +506,7 @@ io.on('connection', (socket) => {
         if (!room || !isHost(room, socket)) return;
         room.selectedGame = 'strokeoff';
         room.gamePhase = 'PLAYING';
+        room.gameVotes = {};
         so_startDrawing(room, fakeId);
     });
 

@@ -35,12 +35,13 @@
         .game-card { display:flex; align-items:center; gap:14px; padding:16px; background:rgba(255,255,255,0.05); border:2px solid #2a3450; border-radius:14px; cursor:pointer; transition:border-color .15s, background .15s; user-select:none; -webkit-user-select:none; }
         .game-card:hover, .game-card.selected { border-color:#ffeb3b; background:rgba(255,235,59,0.06); }
         .game-card.soon { opacity:.45; cursor:default; pointer-events:none; }
-        .gc-icon { font-size:2em; }
+        .gc-icon { font-size:2em; flex-shrink:0; }
         .gc-info { flex:1; }
         .gc-name { font-weight:bold; font-size:1.05em; }
         .gc-desc { font-size:0.78em; color:#7a8fa8; margin-top:2px; }
         .gc-badge { font-size:0.7em; background:#37474f; color:#90a4ae; padding:3px 8px; border-radius:10px; font-family:monospace; }
-        #rl-start-btn { width:min(380px,92%); padding:16px; font-weight:bold; font-size:1.1em; border:none; border-radius:12px; background:#c62828; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; display:none; }
+        .gc-voters { display:flex; flex-wrap:wrap; gap:1px; margin-top:5px; font-size:1.15em; line-height:1; min-height:1.3em; }
+        #rl-start-btn { padding:10px 28px; font-weight:bold; font-size:0.9em; border:none; border-radius:20px; background:#c62828; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; display:none; }
         #rl-wait { font-family:monospace; color:#556; font-size:0.9em; text-align:center; }
         #rl-volunteer { background:#37474f; border:none; border-radius:10px; padding:12px 24px; color:#fff; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size:0.9em; }
 
@@ -94,8 +95,16 @@
         @keyframes toast-in { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
         #score-list { max-height:52vh; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#444 transparent; }
         #player-count { font-size:0.7em; color:#888; font-family:monospace; margin-left:4px; }
-        #scoreboard { position:absolute; top:calc(50px + env(safe-area-inset-top)); right:calc(12px + env(safe-area-inset-right)); background:rgba(15,15,20,0.96); border:1px solid #444; border-radius:10px; padding:12px 14px; z-index:19; display:none; flex-direction:column; gap:6px; min-width:230px; font-family:monospace; color:white; box-shadow:0 4px 24px rgba(0,0,0,0.9); }
-        #so-scoreboard { background:rgba(0,0,0,0.3); border:1px solid #444; border-radius:10px; padding:12px 14px; display:none; flex-direction:column; gap:6px; width:100%; max-width:360px; font-family:monospace; color:white; }
+        #unified-scoreboard { background:rgba(15,15,22,0.97); border:1px solid #3a4a66; border-radius:12px; padding:14px 16px; display:none; flex-direction:column; gap:8px; width:min(420px,92%); font-family:monospace; color:white; box-shadow:0 4px 24px rgba(0,0,0,0.7); }
+        #unified-scoreboard .sb-title { font-size:0.9em; font-weight:bold; letter-spacing:2px; color:#ffeb3b; border-bottom:1px solid #333; padding-bottom:6px; text-align:center; }
+        #unified-scoreboard .sb-row { display:flex; align-items:center; gap:0; padding:5px 2px; border-radius:4px; font-size:0.82em; }
+        #unified-scoreboard .sb-row:nth-child(odd) { background:rgba(255,255,255,0.03); }
+        #unified-scoreboard .sb-rank { width:22px; color:#666; font-size:0.9em; text-align:center; flex-shrink:0; }
+        #unified-scoreboard .sb-name { flex:1; font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:4px; }
+        #unified-scoreboard .sb-col { width:38px; text-align:center; font-size:0.85em; }
+        #unified-scoreboard .sb-header { display:flex; font-size:0.68em; color:#556; padding:0 2px 2px; }
+        /* keep old IDs for backward compat but hide them */
+        #scoreboard, #so-scoreboard { display:none !important; }
         #scoreboard .sb-title { font-size:0.85em; font-weight:bold; letter-spacing:2px; color:#ffeb3b; border-bottom:1px solid #333; padding-bottom:6px; margin-bottom:2px; text-align:center; }
         #scoreboard .sb-header { display:flex; justify-content:space-between; font-size:0.65em; color:#666; padding:0 2px; }
         .sb-row { display:flex; align-items:center; gap:6px; padding:4px 2px; border-radius:4px; font-size:0.82em; }
@@ -169,6 +178,7 @@
             <div class="gc-info">
                 <div class="gc-name">Paint or Poke</div>
                 <div class="gc-desc">Paint your disguise and hide from the seeker</div>
+                <div class="gc-voters" id="gv-ts"></div>
             </div>
         </div>
         <div class="game-card" id="gc-so" onclick="pickGame('strokeoff')">
@@ -176,21 +186,26 @@
             <div class="gc-info">
                 <div class="gc-name">Stroke Off</div>
                 <div class="gc-desc">Everyone draws — one player doesn't know the prompt</div>
+                <div class="gc-voters" id="gv-so"></div>
             </div>
         </div>
     </div>
     <button id="rl-start-btn" onclick="rlStartGame()">🚀 START GAME</button>
     <div id="rl-wait">Waiting for the host to start…</div>
     <button id="rl-volunteer" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
-    <div id="scoreboard">
-        <div class="sb-title">🎨 PAINT OR POKE <span id="player-count"></span></div>
-        <div class="sb-header"><span style="flex:1;padding-left:24px;">PLAYER</span><span style="width:44px;text-align:center;">🫥 HID</span><span style="width:44px;text-align:center;">👁️ GOT</span></div>
-        <div id="score-list"><div class="sb-empty">No rounds played yet.</div></div>
-    </div>
-    <div id="so-scoreboard" style="display:none;">
-        <div class="sb-title">🖌️ STROKE OFF</div>
-        <div class="sb-header"><span style="flex:1;padding-left:24px;">PLAYER</span><span style="width:52px;text-align:center;">✅ GOT</span><span style="width:52px;text-align:center;">🥷 FAKED</span></div>
-        <div id="so-score-list"><div class="sb-empty">No rounds played yet.</div></div>
+    <div id="scoreboard" style="display:none;"><div id="score-list"></div></div>
+    <div id="so-scoreboard" style="display:none;"><div id="so-score-list"></div></div>
+    <div id="unified-scoreboard">
+        <div class="sb-title">🏆 STANDINGS</div>
+        <div class="sb-header">
+            <span style="width:22px;"></span>
+            <span style="flex:1;">PLAYER</span>
+            <span class="sb-col" title="Paint or Poke — rounds survived">🫥</span>
+            <span class="sb-col" title="Paint or Poke — players caught">👁️</span>
+            <span class="sb-col" title="Stroke Off — correctly ID'd fake">✅</span>
+            <span class="sb-col" title="Stroke Off — faked them out">🥷</span>
+        </div>
+        <div id="unified-score-list"><div class="sb-empty" style="color:#444;font-size:0.8em;text-align:center;padding:6px 0;">Play a round to see standings</div></div>
     </div>
 </div>
 
@@ -296,7 +311,7 @@
 
 <!-- ════════════════════ STROKE OFF DRAW SCREEN ════════════════════ -->
 <div id="so-screen">
-    <canvas id="so-canvas" width="800" height="450"></canvas>
+    <canvas id="so-canvas" width="450" height="800"></canvas>
     <div id="so-hud-top">
         <div class="so-theme-box">🖌️ DRAW: <span id="so-theme-text">???</span> <span id="so-theme-emoji"></span></div>
         <div class="so-part-box">YOUR PART: <span id="so-part-text">???</span></div>
@@ -311,7 +326,7 @@
 
 <!-- ════════════════════ STROKE OFF REVEAL SCREEN ════════════════════ -->
 <div id="so-reveal-screen">
-    <canvas id="so-reveal-canvas" width="800" height="450"></canvas>
+    <canvas id="so-reveal-canvas" width="450" height="800"></canvas>
     <div id="so-reveal-hud">
         <div class="so-reveal-player" id="so-reveal-player-name"></div>
         <div id="so-reveal-hint">Get ready…</div>
@@ -320,13 +335,20 @@
 
 <!-- ════════════════════ STROKE OFF VOTE SCREEN ════════════════════ -->
 <div id="so-vote-screen">
-    <div style="font-size:1.4em;font-weight:bold;color:#ffeb3b;letter-spacing:2px;">WHO'S THE FAKE?</div>
-    <div style="font-family:monospace;color:#7a8fa8;font-size:0.9em;">Theme: <span id="so-real-prompt" style="color:#fff;font-weight:bold;"></span></div>
-    <div id="so-vote-timer"></div>
+    <div style="font-size:1.3em;font-weight:bold;color:#ffeb3b;letter-spacing:2px;">WHO'S THE FAKE?</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+        <span id="so-vote-emoji" style="font-size:2.8em;line-height:1;"></span>
+        <div>
+            <div style="font-family:monospace;color:#7a8fa8;font-size:0.78em;letter-spacing:1px;">THEME</div>
+            <div id="so-real-prompt" style="font-weight:bold;font-size:1.05em;color:#fff;"></div>
+        </div>
+        <img id="so-vote-snap" style="height:80px;border-radius:6px;border:1px solid #333;flex-shrink:0;" src="" alt="">
+    </div>
+    <div id="so-vote-timer" style="font-family:monospace;font-size:1.6em;font-weight:bold;color:#ffeb3b;"></div>
     <div id="so-vote-list"></div>
     <div id="so-voters-status"></div>
     <div id="so-vote-result" style="display:none;font-family:monospace;font-size:0.92em;color:#ffeb3b;text-align:center;padding:10px;max-width:380px;line-height:1.6;"></div>
-    <button id="so-lobby-btn" onclick="soReturnToLobby()" style="display:none;padding:14px 32px;background:#2e7d32;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:1em;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">BACK TO LOBBY</button>
+    <button id="so-lobby-btn" onclick="soReturnToLobby()" style="display:none;padding:12px 28px;background:#2e7d32;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:0.95em;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">BACK TO LOBBY</button>
 </div>
 
 <script>
@@ -420,7 +442,7 @@ function showRoomLobby() {
 }
 
 function pickGame(gameId) {
-    socket.emit('selectGame', gameId);
+    socket.emit('gameVote', gameId);
 }
 
 function rlStartGame() {
@@ -581,12 +603,25 @@ function applyChromeVisibility() {
     document.getElementById('poke-counter').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'block' : 'none';
 }
 
+let tsScoreCache = {}, soScoreCache = {};
+
 socket.on('updateScores', (scoreData) => {
-    const list = document.getElementById('score-list');
-    if (!scoreData || scoreData.length === 0) { list.innerHTML = '<div class="sb-empty">No rounds played yet.</div>'; return; }
-    const sorted = [...scoreData].sort((a,b) => (b.survivals+b.catches*2)-(a.survivals+a.catches*2));
-    const medals = ['🥇','🥈','🥉'];
-    list.innerHTML = sorted.map((s,i) => `<div class="sb-row"><span class="sb-rank">${medals[i]||(i+1)}</span><span class="sb-name">${s.name}</span><span class="sb-stat sb-survivals">${s.survivals}</span><span class="sb-stat sb-catches">${s.catches}</span></div>`).join('');
+    tsScoreCache = {};
+    (scoreData || []).forEach(s => { tsScoreCache[s.name] = s; });
+    renderUnifiedScoreboard();
+});
+
+socket.on('gameVotes', ({ votes, players }) => {
+    const byGame = {};
+    Object.entries(votes || {}).forEach(([sid, gid]) => {
+        if (!byGame[gid]) byGame[gid] = [];
+        const p = players[sid];
+        if (p) byGame[gid].push(foodHead(p.token));
+    });
+    const tsEl = document.getElementById('gv-ts');
+    const soEl = document.getElementById('gv-so');
+    if (tsEl) tsEl.innerText = (byGame['tacostealth'] || []).join('');
+    if (soEl) soEl.innerText = (byGame['strokeoff'] || []).join('');
 });
 
 // ── Taco Stealth ──────────────────────────────────────────────────────────
@@ -892,19 +927,18 @@ let soDrawing = false, soLastPt = null;
 let soRevealHistory = null, soRevealPlayers = null, soRevealAnimInterval = null;
 
 function soResizeCanvas() {
-    const aspect = 800 / 450;
     const vw = window.innerWidth, vh = window.innerHeight;
-    const isMobile = vw <= vh;
     let dispW, dispH;
-    if (isMobile) {
-        dispW = vw; dispH = vw / aspect;
-        if (dispH > vh) { dispH = vh; dispW = vh * aspect; }
+    if (vw <= vh) {
+        // Portrait — canvas fills the full screen; HUD overlays on top
+        dispW = vw; dispH = vh;
     } else {
-        const maxW = Math.min(vw * 0.82, vh * aspect * 0.88, 1000);
-        dispW = maxW; dispH = maxW / aspect;
+        // Landscape / desktop — compact portrait canvas, height-constrained
+        dispH = Math.min(vh * 0.9, 700);
+        dispW = Math.round(dispH * 450 / 800);
     }
-    soCanvas.style.width = Math.round(dispW) + 'px'; soCanvas.style.height = Math.round(dispH) + 'px';
-    soRevealCanvas.style.width = Math.round(dispW) + 'px'; soRevealCanvas.style.height = Math.round(dispH) + 'px';
+    soCanvas.style.width = dispW + 'px'; soCanvas.style.height = dispH + 'px';
+    soRevealCanvas.style.width = dispW + 'px'; soRevealCanvas.style.height = dispH + 'px';
 }
 
 function soGetBrushSize() { return parseFloat(document.getElementById('so-brush-size').value) || 3; }
@@ -965,9 +999,11 @@ function soDrawLine(c, x1, y1, x2, y2, color, size) {
 
 socket.on('soStroke', (s) => { soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size); });
 
+let soCurrentEmoji = '';
+
 // Server-driven reveal
-socket.on('soRevealBegin', ({ history, players, prompt }) => {
-    soRevealHistory = history; soRevealPlayers = players;
+socket.on('soRevealBegin', ({ history, players, prompt, emoji }) => {
+    soRevealHistory = history; soRevealPlayers = players; soCurrentEmoji = emoji || '';
     hide('so-screen');
     soRevealCtx.fillStyle = '#111'; soRevealCtx.fillRect(0, 0, soRevealCanvas.width, soRevealCanvas.height);
     document.getElementById('so-reveal-player-name').innerText = '';
@@ -977,7 +1013,7 @@ socket.on('soRevealBegin', ({ history, players, prompt }) => {
 
 socket.on('soRevealNext', ({ player, idx, total }) => {
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
-    soRevealCtx.fillStyle = '#111'; soRevealCtx.fillRect(0, 0, soRevealCanvas.width, soRevealCanvas.height);
+    // No canvas clear — strokes accumulate to build the full picture
     document.getElementById('so-reveal-player-name').innerText = `${foodHead(player.token)} ${player.name}  [${idx + 1}/${total}]`;
     document.getElementById('so-reveal-hint').innerText = 'Painting…';
 
@@ -995,18 +1031,25 @@ socket.on('soRevealNext', ({ player, idx, total }) => {
     }, 16);
 });
 
-socket.on('soVoteOpen', ({ players, prompt, timeLeft }) => {
+socket.on('soVoteOpen', ({ players, prompt, emoji, timeLeft }) => {
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
     hide('so-reveal-screen');
     soRevealPlayers = players;
     document.getElementById('so-real-prompt').innerText = prompt || '???';
+    const emojiEl = document.getElementById('so-vote-emoji');
+    if (emojiEl) emojiEl.innerText = emoji || soCurrentEmoji || '';
     document.getElementById('so-vote-timer').innerText = timeLeft;
     document.getElementById('so-voters-status').innerHTML = '';
     document.getElementById('so-vote-result').style.display = 'none';
     document.getElementById('so-lobby-btn').style.display = 'none';
-    document.getElementById('so-vote-list').innerHTML = players.map(p =>
-        `<button class="so-vote-btn" onclick="soVote('${p.id}')" data-pid="${p.id}">${foodHead(p.token)} ${p.name}</button>`
-    ).join('');
+    // Snapshot the finished cumulative painting
+    const snap = document.getElementById('so-vote-snap');
+    if (snap) { try { snap.src = soRevealCanvas.toDataURL('image/jpeg', 0.82); snap.style.display = ''; } catch(e) { snap.style.display = 'none'; } }
+    // Color-coded buttons matching each player's stroke color
+    document.getElementById('so-vote-list').innerHTML = players.map(p => {
+        const color = soGetPlayerColor(p.id);
+        return `<button class="so-vote-btn" onclick="soVote('${p.id}')" data-pid="${p.id}" style="border-color:${color};box-shadow:0 0 0 1px ${color}22 inset;"><span style="color:${color};margin-right:3px;">●</span>${foodHead(p.token)} ${p.name}</button>`;
+    }).join('');
     document.getElementById('so-vote-screen').style.display = 'flex';
 });
 
@@ -1054,20 +1097,35 @@ function soReturnToLobby() {
     show('room-lobby'); renderRoomLobby();
 }
 
-function updateSoScoreDisplay(scoreData) {
-    const sb = document.getElementById('so-scoreboard');
-    const list = document.getElementById('so-score-list');
+function soGetPlayerColor(playerId) {
+    const stroke = (soRevealHistory || []).find(s => s.socketId === playerId);
+    return stroke ? stroke.color : 'rgba(255,255,255,0.4)';
+}
+
+function renderUnifiedScoreboard() {
+    const sb = document.getElementById('unified-scoreboard');
+    const list = document.getElementById('unified-score-list');
     if (!sb || !list) return;
-    if (!scoreData || scoreData.length === 0) { sb.style.display = 'none'; return; }
+    const allNames = new Set([...Object.keys(tsScoreCache), ...Object.keys(soScoreCache)]);
+    if (allNames.size === 0) { sb.style.display = 'none'; return; }
     sb.style.display = 'flex';
-    const sorted = [...scoreData].sort((a, b) => (b.correct + b.fakeWins * 2) - (a.correct + a.fakeWins * 2));
+    const rows = [...allNames].map(name => {
+        const ts = tsScoreCache[name] || { survivals: 0, catches: 0 };
+        const so = soScoreCache[name] || { correct: 0, fakeWins: 0 };
+        const total = (ts.survivals || 0) + (ts.catches || 0) * 2 + (so.correct || 0) + (so.fakeWins || 0) * 2;
+        return { name, ts, so, total };
+    }).sort((a, b) => b.total - a.total);
     const medals = ['🥇', '🥈', '🥉'];
-    list.innerHTML = sorted.map((s, i) =>
-        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${s.name}</span><span class="sb-stat" style="color:#81c784;">${s.correct}</span><span class="sb-stat" style="color:#ce93d8;">${s.fakeWins}</span></div>`
+    list.innerHTML = rows.map((r, i) =>
+        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${r.name}</span><span class="sb-col" style="color:#81c784;">${r.ts.survivals || 0}</span><span class="sb-col" style="color:#ef9a9a;">${r.ts.catches || 0}</span><span class="sb-col" style="color:#80cbc4;">${r.so.correct || 0}</span><span class="sb-col" style="color:#ce93d8;">${r.so.fakeWins || 0}</span></div>`
     ).join('');
 }
 
-socket.on('updateSoScores', updateSoScoreDisplay);
+socket.on('updateSoScores', (scoreData) => {
+    soScoreCache = {};
+    (scoreData || []).forEach(s => { soScoreCache[s.name] = s; });
+    renderUnifiedScoreboard();
+});
 
 applyColor();
 loop();
