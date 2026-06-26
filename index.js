@@ -198,16 +198,6 @@ const PAINTINGS = [
         parts: ['the Infanta Margarita (center)','the two ladies-in-waiting beside her','the large dog lying in the foreground','Velázquez at his easel (far left)','the mirror reflecting the king and queen','the open doorway with standing figure','the dwarfs and courtiers (right side)','the large dark paintings on the back wall'],
     },
 ];
-    { theme: 'a robot',     emoji: '🤖', parts: ['the head','the torso','the arms','the legs','the control panel','the antenna'] },
-    { theme: 'a dragon',    emoji: '🐉', parts: ['the head','the body','the wings','the tail','the claws','the fire breath'] },
-    { theme: 'a bicycle',   emoji: '🚲', parts: ['the front wheel','the back wheel','the frame','the handlebars','the seat','the pedals'] },
-    { theme: 'a castle',    emoji: '🏰', parts: ['the left tower','the right tower','the main gate','the walls','the battlements','the flag'] },
-    { theme: 'a penguin',   emoji: '🐧', parts: ['the head','the body','the wings','the feet','the beak','the belly'] },
-    { theme: 'a submarine', emoji: '🌊', parts: ['the hull','the conning tower','the propeller','the periscope','the portholes','the torpedo bay'] },
-    { theme: 'a cactus',    emoji: '🌵', parts: ['the main trunk','the left arm','the right arm','the spines','the flowers','the pot'] },
-    { theme: 'a snowman',   emoji: '⛄', parts: ['the bottom ball','the middle ball','the head','the hat','the scarf','the arms'] },
-    { theme: 'a burger',    emoji: '🍔', parts: ['the top bun','the bottom bun','the patty','the lettuce','the cheese','the tomato'] },
-];
 
 const MEMORIZE_SECONDS = 20;
 const DRAW_SECONDS = 75;
