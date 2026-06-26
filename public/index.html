@@ -122,6 +122,18 @@
         #framer-modal { display:none; width:300px; top:50%; transform:translate(-50%,-50%); z-index:65; }
 
         /* ── Stroke Off UI — mobile-first ── */
+        #so-memorize-screen { display:none; position:absolute; inset:0; z-index:55; background:#000; flex-direction:column; align-items:center; overflow:hidden; touch-action:none; }
+        #so-mem-header { width:100%; display:flex; align-items:center; gap:10px; padding:calc(8px + env(safe-area-inset-top)) 14px 8px; background:rgba(0,0,0,0.9); flex-shrink:0; flex-wrap:wrap; }
+        #so-mem-countdown { font-family:monospace; font-size:2.2em; font-weight:900; color:#ffeb3b; min-width:52px; text-shadow:0 0 12px rgba(255,235,59,0.6); }
+        #so-mem-info { flex:1; min-width:0; }
+        #so-mem-title { font-weight:bold; font-size:0.95em; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        #so-mem-artist { font-size:0.72em; color:#888; }
+        #so-mem-part { font-family:monospace; font-size:0.82em; color:#ffeb3b; background:rgba(255,235,59,0.1); border:1px solid rgba(255,235,59,0.3); border-radius:6px; padding:4px 12px; white-space:nowrap; flex-shrink:0; }
+        #so-mem-img-wrap { flex:1; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; }
+        #so-mem-img { max-width:100%; max-height:100%; object-fit:contain; pointer-events:none; user-select:none; -webkit-user-select:none; display:block; }
+        #so-mem-footer { width:100%; text-align:center; color:#555; font-size:0.75em; padding:6px; flex-shrink:0; }
+        .kick-btn { background:none !important; border:none !important; color:#e57373 !important; cursor:pointer; padding:0 4px !important; font-size:0.8em !important; font-weight:bold; flex-grow:0 !important; min-width:0 !important; opacity:0.7; }
+        .kick-btn:hover { opacity:1; }
         #so-screen { display:none; position:absolute; inset:0; z-index:45; background:#050508; overflow:hidden; }
         #so-canvas { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#111; touch-action:none; cursor:crosshair; }
         #so-hud-top { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; pointer-events:none; padding:0 12px; color:#fff; }
@@ -330,6 +342,22 @@
     </div>
 </div>
 
+<!-- ════════════════════ STROKE OFF MEMORIZE SCREEN ════════════════════ -->
+<div id="so-memorize-screen">
+    <div id="so-mem-header">
+        <div id="so-mem-countdown">20</div>
+        <div id="so-mem-info">
+            <div id="so-mem-title"></div>
+            <div id="so-mem-artist"></div>
+        </div>
+        <div id="so-mem-part">YOUR PART: ???</div>
+    </div>
+    <div id="so-mem-img-wrap">
+        <img id="so-mem-img" src="" alt="painting" draggable="false">
+    </div>
+    <div id="so-mem-footer">Memorize it — you won't see it again while drawing</div>
+</div>
+
 <!-- ════════════════════ STROKE OFF REVEAL SCREEN ════════════════════ -->
 <div id="so-reveal-screen">
     <canvas id="so-reveal-canvas" width="450" height="800"></canvas>
@@ -457,10 +485,24 @@ function rlStartGame() {
     else if (selectedGame === 'strokeoff') soPickFakeAndStart();
 }
 
+function kickPlayer(targetId) { socket.emit('kickPlayer', { targetId }); }
+
+socket.on('kicked', () => {
+    soCleanup();
+    hide('room-lobby');
+    document.getElementById('hub-screen').style.display = 'flex';
+    inRoom = false; isJoined = false;
+    showToast('You were removed from the room');
+});
+
 function renderRoomLobby() {
     const list = Object.values(otherPlayers);
     document.getElementById('rl-players').innerHTML = list.length
-        ? list.map(p => `<div class="lobby-chip">${playerBadge(p.token,p.name)} ${p.id === socket.id ? '⭐ ' : ''}${p.name}</div>`).join('')
+        ? list.map(p => {
+            const isMe = p.id === socket.id;
+            const kickBtn = (isRoomHost && !isMe) ? ` <button class="kick-btn" onclick="kickPlayer('${p.id}')" title="Remove player">✕</button>` : '';
+            return `<div class="lobby-chip">${playerBadge(p.token,p.name)} ${isMe ? '⭐ ' : ''}${p.name}${kickBtn}</div>`;
+          }).join('')
         : '<div class="lobby-chip" style="opacity:.6">No one here yet…</div>';
 
     const canHost = isRoomHost || !hostId;
@@ -965,6 +1007,44 @@ function soPickFakeAndStart() {
     socket.emit('soStartGame', { fakeId: fake.id });
 }
 
+let soMemTimer = null;
+
+socket.on('soShowPainting', ({ imageUrl, title, artist, yourPart, memorizeSeconds }) => {
+    hide('room-lobby');
+    const screen = document.getElementById('so-memorize-screen');
+    screen.style.display = 'flex';
+    document.getElementById('so-mem-img').src = imageUrl;
+    document.getElementById('so-mem-title').innerText = title || '';
+    document.getElementById('so-mem-artist').innerText = artist || '';
+    const isFakePart = yourPart === '???';
+    document.getElementById('so-mem-part').innerText = isFakePart
+        ? '??? — try to blend in!'
+        : `YOUR PART: ${yourPart}`;
+    document.getElementById('so-mem-part').style.color = isFakePart ? '#ef9a9a' : '#ffeb3b';
+    let t = memorizeSeconds || 20;
+    document.getElementById('so-mem-countdown').innerText = t;
+    clearInterval(soMemTimer);
+    soMemTimer = setInterval(() => {
+        t--;
+        document.getElementById('so-mem-countdown').innerText = t > 0 ? t : '⏳';
+        if (t <= 0) clearInterval(soMemTimer);
+    }, 1000);
+});
+
+socket.on('soBeginDrawing', ({ prompt, part }) => {
+    clearInterval(soMemTimer);
+    document.getElementById('so-memorize-screen').style.display = 'none';
+    document.getElementById('so-screen').style.display = 'block';
+    document.getElementById('so-theme-text').innerText = prompt || '???';
+    document.getElementById('so-theme-emoji').innerText = '🖼️';
+    document.getElementById('so-part-text').innerText = part || '???';
+    soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
+    soGestureId = 0;
+    soDrawing = true;
+    soResizeCanvas();
+});
+
+// Legacy compatibility shim (unused but keeps old clients from erroring)
 socket.on('strokeStart', ({ theme, emoji, part, isFake, duration }) => {
     hide('room-lobby');
     document.getElementById('so-screen').style.display = 'block';
@@ -1117,8 +1197,11 @@ function soVote(suspectId) {
 
 function soCleanup() {
     hide('so-vote-screen'); hide('so-reveal-screen'); hide('so-screen');
+    document.getElementById('so-memorize-screen').style.display = 'none';
+    clearInterval(soMemTimer); soMemTimer = null;
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
     soRevealHistory = null; soRevealPlayers = null;
+    soDrawing = false;
 }
 
 function soReturnToLobby() {

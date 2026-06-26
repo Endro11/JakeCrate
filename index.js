@@ -37,6 +37,7 @@ function makeRoom(code) {
         seekerPokesLeft: 0,
         gamePhase: 'LOBBY',   // LOBBY | HIDING | SEEKING | REVEAL
         selectedGame: null,   // 'tacostealth' | 'strokeoff'
+        strokePainting: null, // selected PAINTINGS entry
         timeLeft: 0,
         lastHideTime: 45,
         lastSeekTime: 120,
@@ -135,15 +136,68 @@ function ts_checkReveal(room) {
 
 // ─── Stroke Off game logic ────────────────────────────────────────────────────
 
-const SO_THEMES = [
-    { theme: 'a dog',       emoji: '🐕', parts: ['the head','the body','the front legs','the back legs','the tail','the ears'] },
-    { theme: 'a cat',       emoji: '🐈', parts: ['the head','the body','the paws','the tail','the ears','the face'] },
-    { theme: 'a house',     emoji: '🏠', parts: ['the roof','the front wall','the door','the windows','the chimney','the yard'] },
-    { theme: 'a rocket',    emoji: '🚀', parts: ['the nose cone','the body','the fins','the engine','the flames','the windows'] },
-    { theme: 'a pizza',     emoji: '🍕', parts: ['the crust','the sauce','the cheese','the pepperoni','the toppings','the box'] },
-    { theme: 'a tree',      emoji: '🌳', parts: ['the trunk','the roots','the left branches','the right branches','the leaves','the top'] },
-    { theme: 'a fish',      emoji: '🐟', parts: ['the body','the head','the tail fin','the top fin','the scales','the eye'] },
-    { theme: 'a car',       emoji: '🚗', parts: ['the body','the wheels','the windows','the headlights','the doors','the bumper'] },
+const PAINTINGS = [
+    {
+        title: 'Mona Lisa', artist: 'Leonardo da Vinci · c.1503',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg?width=900',
+        parts: ['her face and enigmatic smile','her hands folded in her lap','her hair, veil, and dark headband','her dress, neckline, and bodice','the winding road and arch (right background)','the river and bridge (left background)','the misty distant mountains','the shadowy ambience around her'],
+    },
+    {
+        title: 'The Starry Night', artist: 'Vincent van Gogh · 1889',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg?width=900',
+        parts: ['the swirling turbulent sky','the large moon and its glowing halo','the eleven bright spiral star clusters','the tall dark cypress tree','the quiet village rooftops below','the church steeple','the rolling dark blue hills','the horizon where sky meets hills'],
+    },
+    {
+        title: 'The Scream', artist: 'Edvard Munch · 1893',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73_cm%2C_National_Gallery_of_Norway.jpg?width=900',
+        parts: ['the screaming figure with oval head','the two dark figures walking behind','the blood-red and orange swirling sky','the dark undulating shoreline','the long wooden boardwalk','the dark fjord water below','the swirling wavy landscape lines','the distant ships on the water'],
+    },
+    {
+        title: 'Girl with a Pearl Earring', artist: 'Johannes Vermeer · c.1665',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/1665_Girl_with_a_Pearl_Earring.jpg?width=900',
+        parts: ['her face, skin and lips','the large teardrop pearl earring','the blue and yellow wrapped turban','her eyes and direct gaze','the jet-black background','her neck and draped cloth collar','the shadow falling across her face','her slightly open mouth and chin'],
+    },
+    {
+        title: 'The Great Wave off Kanagawa', artist: 'Katsushika Hokusai · c.1831',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Katsushika_Hokusai_-_Thirty-six_Views_of_Mount_Fuji-_The_Great_Wave_Off_the_Coast_of_Kanagawa_-_Google_Art_Project.jpg?width=900',
+        parts: ['the giant cresting wave (upper left)','the white foamy claw-like wave tips','the small snow-capped Mount Fuji','the three struggling fishing boats','the smaller background wave swells','the dark navy and indigo water trough','the spray and white seafoam','the pale grey sky above'],
+    },
+    {
+        title: 'The Birth of Venus', artist: 'Sandro Botticelli · c.1485',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg?width=900',
+        parts: ['Venus standing on the giant shell','her long flowing golden hair','the wind god Zephyr blowing (far left)','the flower-scattering nymph with cloth (right)','the stylized sea waves below','the falling rose petals','the trees and shore (far right)','the golden light and pale sky'],
+    },
+    {
+        title: 'Nighthawks', artist: 'Edward Hopper · 1942',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Nighthawks_by_Edward_Hopper_1942.jpg?width=900',
+        parts: ['the glowing diner interior','the couple sitting at the counter','the lone man with his back turned','the white-uniformed server behind the counter','the dark empty street outside','the large curved diner window','the green diner exterior trim','the coffee urns and counter items'],
+    },
+    {
+        title: 'American Gothic', artist: 'Grant Wood · 1930',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Grant_Wood_-_American_Gothic_-_Google_Art_Project.jpg?width=900',
+        parts: ['the stern man holding a pitchfork','the woman standing at his side','the house with the Gothic arched window','their stern facial expressions','the metal pitchfork itself','the red barn and trees behind them','the man\'s overalls and dark jacket','the woman\'s apron and brooch'],
+    },
+    {
+        title: 'A Sunday on La Grande Jatte', artist: 'Georges Seurat · 1886',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Georges_Seurat_-_A_Sunday_on_La_Grande_Jatte_--_1884_-_Google_Art_Project.jpg?width=900',
+        parts: ['the woman with parasol and monkey (right)','the couple strolling in the middle','the men lounging on the grass (left)','the river and sailboats in the distance','the group under the trees (left middle)','the dappled tree shadows on the grass','the small dog in the foreground','the crowd of figures in the middle-distance'],
+    },
+    {
+        title: 'Water Lilies', artist: 'Claude Monet · 1906',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Claude_Monet_-_Water_Lilies_-_1906%2C_Ryerson.jpg?width=900',
+        parts: ['the large pink water lily flowers','the round floating lily pad leaves','the sky reflected in the water (upper)','the weeping willow reflections (edges)','the dark murky water between the pads','the loose brushwork and reflections (center)','the lighter warm tones on the right','the heavy shadows and dark green patches'],
+    },
+    {
+        title: 'The Persistence of Memory', artist: 'Salvador Dalí · 1931',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/The_Persistence_of_Memory.jpg?width=900',
+        parts: ['the melting watch draped over the ledge','the melting watch draped over the creature','the open watch covered in ants','the solid closed pocket watch with flies','the rocky brown plateau and table','the distant cliffs and small bay','the strange soft central creature','the reflective water on the left'],
+    },
+    {
+        title: 'Las Meninas', artist: 'Diego Velázquez · 1656',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg?width=900',
+        parts: ['the Infanta Margarita (center)','the two ladies-in-waiting beside her','the large dog lying in the foreground','Velázquez at his easel (far left)','the mirror reflecting the king and queen','the open doorway with standing figure','the dwarfs and courtiers (right side)','the large dark paintings on the back wall'],
+    },
+];
     { theme: 'a robot',     emoji: '🤖', parts: ['the head','the torso','the arms','the legs','the control panel','the antenna'] },
     { theme: 'a dragon',    emoji: '🐉', parts: ['the head','the body','the wings','the tail','the claws','the fire breath'] },
     { theme: 'a bicycle',   emoji: '🚲', parts: ['the front wheel','the back wheel','the frame','the handlebars','the seat','the pedals'] },
@@ -155,35 +209,55 @@ const SO_THEMES = [
     { theme: 'a burger',    emoji: '🍔', parts: ['the top bun','the bottom bun','the patty','the lettuce','the cheese','the tomato'] },
 ];
 
+const MEMORIZE_SECONDS = 20;
+const DRAW_SECONDS = 75;
+
 function so_startDrawing(room, fakeId) {
-    const tObj = SO_THEMES[Math.random() * SO_THEMES.length | 0];
-    room.strokePrompt = tObj.theme;
-    room.strokeTheme = tObj;
+    const painting = PAINTINGS[Math.random() * PAINTINGS.length | 0];
+    room.strokePainting = painting;
+    room.strokePrompt = painting.title;
+    room.strokeTheme = { emoji: '🖼️', theme: painting.title };
     room.strokeFakeId = fakeId;
     room.strokeHistory = [];
     room.strokeVotes = {};
-    room.strokePhase = 'DRAWING';
-    room.timeLeft = 60;
-
-    // Distribute parts evenly across players
-    const playerIds = Object.keys(room.players);
-    const shuffled = [...tObj.parts].sort(() => Math.random() - 0.5);
+    room.strokePhase = 'MEMORIZE';
     room.strokePlayerParts = {};
-    playerIds.forEach((sid, i) => { room.strokePlayerParts[sid] = shuffled[i % shuffled.length]; });
 
+    // Assign one part per real player; wrap if more players than parts
+    let partIndex = 0;
     Object.keys(room.players).forEach(sid => {
-        const isFake = sid === fakeId;
-        io.to(sid).emit('strokeStart', {
-            theme: tObj.theme,
-            emoji: tObj.emoji,
-            part: isFake ? '???' : room.strokePlayerParts[sid],
-            isFake,
-            duration: 60,
+        if (sid === fakeId) { room.strokePlayerParts[sid] = '???'; }
+        else { room.strokePlayerParts[sid] = painting.parts[partIndex++ % painting.parts.length]; }
+    });
+
+    // Send painting + individual part to each player
+    Object.keys(room.players).forEach(sid => {
+        io.to(sid).emit('soShowPainting', {
+            imageUrl: painting.imageUrl,
+            title: painting.title,
+            artist: painting.artist,
+            yourPart: room.strokePlayerParts[sid],
+            memorizeSeconds: MEMORIZE_SECONDS,
         });
     });
 
-    broadcastRoom(room, 'strokePhaseChange', { phase: 'DRAWING', timeLeft: 60 });
+    // After memorize window, start the actual drawing phase
+    room.revealTimer = setTimeout(() => so_beginDrawing(room), MEMORIZE_SECONDS * 1000);
+}
 
+function so_beginDrawing(room) {
+    clearTimeout(room.revealTimer);
+    room.strokePhase = 'DRAWING';
+    room.timeLeft = DRAW_SECONDS;
+
+    Object.keys(room.players).forEach(sid => {
+        io.to(sid).emit('soBeginDrawing', {
+            prompt: room.strokePrompt,
+            part: room.strokePlayerParts[sid] || '???',
+        });
+    });
+
+    broadcastRoom(room, 'strokePhaseChange', { phase: 'DRAWING', timeLeft: DRAW_SECONDS });
     room.gameTimer = setInterval(() => {
         room.timeLeft--;
         broadcastRoom(room, 'strokePhaseChange', { phase: 'DRAWING', timeLeft: room.timeLeft });
@@ -278,6 +352,7 @@ function so_returnToLobby(room) {
     room.strokePrompt = null;
     room.strokeTheme = null;
     room.strokeFakeId = null;
+    room.strokePainting = null;
     room.strokeHistory = [];
     room.strokeVotes = {};
     room.strokePlayerParts = {};
@@ -308,8 +383,22 @@ io.on('connection', (socket) => {
         const room = getRoom(code);
         if (!room) { socket.emit('joinError', { message: 'Room not found.' }); return; }
 
-        socket.join(code);
         const token = playerData.token || socket.id;
+
+        // Evict any stale socket sharing this token (page refresh / duplicate tab)
+        const staleId = Object.keys(room.players).find(id => room.players[id].token === token && id !== socket.id);
+        if (staleId) {
+            const staleSock = io.sockets.sockets.get(staleId);
+            if (staleSock) { staleSock.leave(code); staleSock.emit('kicked', { reason: 'reconnected' }); }
+            delete room.players[staleId];
+            delete room.avatars[staleId];
+            delete room.lastReactionTimes[staleId];
+            if (room.hostSocketId === staleId) room.hostSocketId = socket.id;
+            if (room.seekerSocketId === staleId) room.seekerSocketId = socket.id;
+            console.log(`🔄 Evicted stale session for ${playerData.name} (${staleId})`);
+        }
+
+        socket.join(code);
         const restored = room.playerState[token] || { isDead: false };
 
         room.players[socket.id] = {
@@ -549,6 +638,21 @@ io.on('connection', (socket) => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
         so_returnToLobby(room);
+    });
+
+    socket.on('kickPlayer', ({ targetId }) => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        if (!room.players[targetId]) return;
+        const targetSock = io.sockets.sockets.get(targetId);
+        if (targetSock) { targetSock.leave(room.code); targetSock.emit('kicked', { reason: 'removed by host' }); }
+        delete room.players[targetId];
+        delete room.avatars[targetId];
+        delete room.lastReactionTimes[targetId];
+        if (room.seekerSocketId === targetId) room.seekerSocketId = null;
+        broadcastRoom(room, 'updatePlayers', room.players);
+        broadcastGameState(room);
+        console.log(`🦵 Host kicked ${targetId} from room ${room.code}`);
     });
 
     // ── Disconnect ────────────────────────────────────────────────────────────
