@@ -364,7 +364,7 @@
     <div id="so-timer">60</div>
     <button id="so-host-end-btn" onclick="soHostEnd()">⏹ END ROUND</button>
     <div id="so-ref-strip">
-        <img id="so-ref-img" src="" crossorigin="anonymous" alt="" onclick="soPickFromThumb(event)" onerror="this.parentElement.style.display='none';soResizeCanvas();">
+        <img id="so-ref-img" src="" alt="" onclick="soPickFromThumb(event)" onerror="this.parentElement.style.display='none';soResizeCanvas();">
         <div id="so-ref-part-label"></div>
     </div>
     <div id="so-toolbar">
@@ -416,7 +416,7 @@
         <div id="so-mem-part">YOUR PART: ???</div>
     </div>
     <div id="so-mem-img-wrap">
-        <img id="so-mem-img" src="" alt="painting" draggable="false" crossorigin="anonymous">
+        <img id="so-mem-img" src="" alt="painting" draggable="false">
     </div>
     <div id="so-mem-footer">Memorize it — you won't see it again while drawing</div>
 </div>
@@ -1246,24 +1246,33 @@ function soPickFromThumb(e) {
     const r = thumb.getBoundingClientRect();
     const nx = (e.clientX - r.left) / r.width;
     const ny = (e.clientY - r.top) / r.height;
-    try {
-        const tmp = document.createElement('canvas');
-        tmp.width = 1; tmp.height = 1;
-        const tCtx = tmp.getContext('2d');
-        tCtx.drawImage(thumb, -nx * thumb.naturalWidth, -ny * thumb.naturalHeight, thumb.naturalWidth, thumb.naturalHeight);
-        const px = tCtx.getImageData(0, 0, 1, 1).data;
-        let rv=px[0]/255,gv=px[1]/255,bv=px[2]/255,mx=Math.max(rv,gv,bv),mn=Math.min(rv,gv,bv),h=0,s=0,l=(mx+mn)/2;
-        if (mx !== mn) {
-            const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
-            if (mx===rv) h=(gv-bv)/d+(gv<bv?6:0);
-            else if (mx===gv) h=(bv-rv)/d+2;
-            else h=(rv-gv)/d+4;
-            h/=6;
-        }
-        cHue=Math.round(h*360); cSat=Math.round(s*100); cLight=Math.round(l*100);
-        applyColor();
-        showToast('🎨 Color picked!');
-    } catch(err) { showToast('Color pick unavailable — CORS'); }
+    // The displayed image has no crossOrigin attribute (so it displays reliably).
+    // For pixel access we need CORS, so load a fresh copy with crossOrigin=anonymous.
+    const corsImg = new Image();
+    corsImg.crossOrigin = 'anonymous';
+    corsImg.onload = () => {
+        try {
+            const tmp = document.createElement('canvas');
+            tmp.width = 1; tmp.height = 1;
+            const tCtx = tmp.getContext('2d');
+            tCtx.drawImage(corsImg, -nx * corsImg.naturalWidth, -ny * corsImg.naturalHeight, corsImg.naturalWidth, corsImg.naturalHeight);
+            const px = tCtx.getImageData(0, 0, 1, 1).data;
+            let rv=px[0]/255,gv=px[1]/255,bv=px[2]/255,mx=Math.max(rv,gv,bv),mn=Math.min(rv,gv,bv),h=0,s=0,l=(mx+mn)/2;
+            if (mx !== mn) {
+                const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+                if (mx===rv) h=(gv-bv)/d+(gv<bv?6:0);
+                else if (mx===gv) h=(bv-rv)/d+2;
+                else h=(rv-gv)/d+4;
+                h/=6;
+            }
+            cHue=Math.round(h*360); cSat=Math.round(s*100); cLight=Math.round(l*100);
+            applyColor();
+            showToast('🎨 Color picked!');
+        } catch(err) { showToast('Color pick unavailable'); }
+    };
+    corsImg.onerror = () => showToast('Color pick unavailable — CORS');
+    // Cache-bust so the browser doesn't serve a non-CORS cached copy
+    corsImg.src = thumb.src + (thumb.src.includes('?') ? '&' : '?') + '_c=1';
 }
 function soUndo() {
     if (soGestureId <= 0) return;
