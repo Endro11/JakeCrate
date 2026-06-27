@@ -98,6 +98,8 @@
         #react-row button { padding:7px 4px; font-size:1.25em; flex-grow:1; background:rgba(255,255,255,0.07); border:1px solid #333; }
         #volunteer-toast { display:none; position:absolute; top:calc(92px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:25; background:rgba(21,101,192,0.96); color:#fff; font-family:monospace; padding:10px 22px; border-radius:8px; font-size:0.9em; text-align:center; pointer-events:none; border:1px solid #5090ff; white-space:nowrap; animation:toast-in 0.25s ease-out; }
         @keyframes toast-in { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+        @keyframes btn-wiggle { 0%,88%,100%{transform:rotate(0deg)} 91%{transform:rotate(-3deg)} 95%{transform:rotate(3deg)} 98%{transform:rotate(-1deg)} }
+        #whistleBtn { animation: btn-wiggle 5s ease-in-out infinite; }
         #score-list { max-height:52vh; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#444 transparent; }
         #player-count { font-size:0.7em; color:#888; font-family:monospace; margin-left:4px; }
         #unified-scoreboard { background:rgba(15,15,22,0.97); border:1px solid #3a4a66; border-radius:12px; padding:14px 16px; display:none; flex-direction:column; gap:8px; width:min(420px,92%); font-family:monospace; color:white; box-shadow:0 4px 24px rgba(0,0,0,0.7); }
@@ -742,7 +744,7 @@ socket.on('gameState', (state) => {
                 clampPlayerToSpace();
                 // Re-init hand with current lobby colour each round
                 (function(){const c=handPaintCvs.getContext('2d');c.fillStyle=activeColor;c.fillRect(0,0,playerSize,playerSize);})();
-                handFlipped=false; handDirty=true;
+                handFlipped=false; handDirty=true; isPaint=false; isDrop=false;
                 const fb=document.getElementById('flipBtn');if(fb)fb.style.background='#333';
                 scheduleAvatarSync();
                 const snapCamera = () => {
@@ -804,7 +806,7 @@ function applyChromeVisibility() {
     document.getElementById('lobbyDoneBtn').style.display = editing ? 'block' : 'none';
     document.getElementById('seekerBadge').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'inline-block' : 'none';
     document.getElementById('poke-counter').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'block' : 'none';
-    document.getElementById('vp-points-hud').style.display = (!isSeeker && gamePhase === 'SEEKING' && isJoined) ? 'block' : 'none';
+    document.getElementById('vp-points-hud').style.display = 'none';
 }
 
 let tsScoreCache = {}, soScoreCache = {};
@@ -966,12 +968,13 @@ function rebuildHandCanvas() {
     // Clip painted colours to the emoji's exact alpha silhouette
     t.globalCompositeOperation = 'destination-in';
     t.drawImage(handMasks[currentHandIdx], 0, 0);
-    // 3-D depth pass: overlay the emoji's own rendering at low opacity so
-    // finger ridges, knuckle shadows and feature definition bleed through
-    // whatever paint colour the player applied
+    // 3-D depth pass: overlay emoji luminance only (grayscale strips the yellow
+    // skin-tone, leaving just the light/dark shading between fingers)
     t.globalCompositeOperation = 'source-over';
-    t.globalAlpha = 0.28;
+    t.filter = 'grayscale(1) brightness(1.4) contrast(0.85)';
+    t.globalAlpha = 0.38;
     t.drawImage(handMasks[currentHandIdx], 0, 0);
+    t.filter = 'none';
     t.globalAlpha = 1;
 
     // Step 2: write to handComposed, applying flip here so the baked-in
