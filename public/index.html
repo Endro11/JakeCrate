@@ -144,10 +144,10 @@
         #so-ref-strip { display:none; position:absolute; top:0; left:0; right:0; overflow:hidden; background:#080810; border-bottom:1px solid #1a2030; z-index:2; }
         #so-ref-img { width:100%; height:100%; object-fit:contain; display:block; cursor:crosshair; }
         #so-ref-part-label { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.88); color:#ffeb3b; font-size:0.72em; font-weight:bold; text-align:center; padding:3px 10px 4px; text-transform:uppercase; letter-spacing:0.5px; pointer-events:none; }
-        #so-hud-top { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; pointer-events:none; padding:0 12px; color:#fff; }
+        #so-hud-top { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:3; pointer-events:none; padding:0 12px; color:#fff; }
         .so-theme-box { background:rgba(5,5,10,0.85); border:1px solid #444; border-radius:8px; padding:6px 16px; font-size:1em; font-weight:bold; letter-spacing:1px; text-align:center; white-space:nowrap; max-width:90vw; overflow:hidden; text-overflow:ellipsis; }
         .so-part-box { background:rgba(255,235,59,0.1); border:1px solid rgba(255,235,59,0.35); border-radius:8px; padding:4px 14px; font-size:0.82em; color:#ffeb3b; font-family:monospace; letter-spacing:1px; text-align:center; }
-        #so-timer { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:calc(12px + env(safe-area-inset-right)); font-family:monospace; font-size:2em; font-weight:bold; color:#ffeb3b; text-shadow:0 0 12px rgba(255,235,59,0.7),2px 2px 2px #000; z-index:2; pointer-events:none; }
+        #so-timer { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:calc(12px + env(safe-area-inset-right)); font-family:monospace; font-size:2em; font-weight:bold; color:#ffeb3b; text-shadow:0 0 12px rgba(255,235,59,0.7),2px 2px 2px #000; z-index:3; pointer-events:none; }
         #so-toolbar { position:absolute; bottom:calc(12px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:10px; background:rgba(10,10,16,0.9); border:1px solid #333; border-radius:30px; padding:8px 18px; z-index:2; white-space:nowrap; }
         #so-brush-label { font-family:monospace; color:#aaa; font-size:0.8em; min-width:28px; text-align:right; }
         .so-tool-btn { background:rgba(255,255,255,0.07); border:2px solid #444; border-radius:8px; padding:7px 11px; color:#bbb; font-size:0.95em; cursor:pointer; line-height:1; flex-shrink:0; transition:all 0.12s; }
@@ -364,7 +364,7 @@
     <div id="so-timer">60</div>
     <button id="so-host-end-btn" onclick="soHostEnd()">⏹ END ROUND</button>
     <div id="so-ref-strip">
-        <img id="so-ref-img" src="" crossorigin="anonymous" alt="" onclick="soPickFromThumb(event)">
+        <img id="so-ref-img" src="" crossorigin="anonymous" alt="" onclick="soPickFromThumb(event)" onerror="this.parentElement.style.display='none';soResizeCanvas();">
         <div id="so-ref-part-label"></div>
     </div>
     <div id="so-toolbar">
@@ -416,7 +416,7 @@
         <div id="so-mem-part">YOUR PART: ???</div>
     </div>
     <div id="so-mem-img-wrap">
-        <img id="so-mem-img" src="" alt="painting" draggable="false">
+        <img id="so-mem-img" src="" alt="painting" draggable="false" crossorigin="anonymous">
     </div>
     <div id="so-mem-footer">Memorize it — you won't see it again while drawing</div>
 </div>
@@ -1095,28 +1095,31 @@ const SO_REF_H = 130; // height of painting reference strip (portrait)
 function soResizeCanvas() {
     const vw = window.innerWidth, vh = window.innerHeight;
     const strip = document.getElementById('so-ref-strip');
-    const stripOn = strip && strip.style.display !== 'none';
+    const stripOn = strip && strip.style.display === 'block';
     let dispW, dispH;
 
+    const hudEl = document.getElementById('so-hud-top');
     if (vw <= vh) {
         // Portrait — reserve top for painting reference strip
         const refH = stripOn ? SO_REF_H : 0;
-        const hudH = 62;   // so-hud-top height estimate
-        const tbH  = 68;   // toolbar + safe-area estimate
+        const hudH = 62;
+        const tbH  = 68;
         const avail = Math.max(200, vh - refH - hudH - tbH);
         dispW = Math.min(vw, Math.round(avail * 450 / 800));
         dispH = Math.round(dispW * 800 / 450);
         soCanvas.style.top = (refH + hudH) + 'px';
         soCanvas.style.transform = 'translateX(-50%)';
         if (strip) strip.style.height = refH + 'px';
+        // Move HUD into the gap between strip and canvas so it isn't hidden behind the strip
+        if (hudEl) hudEl.style.top = stripOn ? (refH + 4) + 'px' : '';
     } else {
         // Landscape / desktop — compact portrait canvas, centered
         dispH = Math.min(vh * 0.9, 700);
         dispW = Math.round(dispH * 450 / 800);
         soCanvas.style.top = '50%';
         soCanvas.style.transform = 'translate(-50%, -50%)';
-        // Strip sits above canvas on landscape too; keep it narrow so it clears the canvas top edge
         if (strip) strip.style.height = stripOn ? '90px' : '0';
+        if (hudEl) hudEl.style.top = '';
     }
     soCanvas.style.width  = dispW + 'px';
     soCanvas.style.height = dispH + 'px';
@@ -1381,8 +1384,10 @@ function soCleanup() {
     soSkipRules();
     const strip = document.getElementById('so-ref-strip');
     strip.style.display = 'none'; strip.style.height = '0';
-    // Reset canvas to centered for reveal screen next time
+    // Reset canvas and HUD to defaults for reveal screen / next round
     soCanvas.style.top = '50%'; soCanvas.style.transform = 'translate(-50%,-50%)';
+    const hudEl = document.getElementById('so-hud-top');
+    if (hudEl) hudEl.style.top = '';
     document.getElementById('so-host-end-btn').style.display = 'none';
     clearInterval(soMemTimer); soMemTimer = null;
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
