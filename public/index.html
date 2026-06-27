@@ -887,6 +887,9 @@ handPaintCvs.width = playerSize; handPaintCvs.height = playerSize;
 // Composed output = paint canvas clipped to emoji alpha shape
 const handComposed = document.createElement('canvas');
 handComposed.width = playerSize; handComposed.height = playerSize;
+// Scratch canvas for compositing before flip is applied
+const handTmp = document.createElement('canvas');
+handTmp.width = playerSize; handTmp.height = playerSize;
 // Pre-render each emoji to an offscreen canvas used as an alpha mask
 const handMasks = HAND_EMOJIS.map(emoji => {
     const cvs = document.createElement('canvas');
@@ -916,15 +919,30 @@ function scheduleAvatarSync() {
 }
 
 function rebuildHandCanvas() {
+    // Step 1: composite on scratch canvas (no flip yet)
+    const t = handTmp.getContext('2d');
+    t.clearRect(0, 0, playerSize, playerSize);
+    // Paint colours fill the full square
+    t.drawImage(handPaintCvs, 0, 0);
+    // Clip painted colours to the emoji's exact alpha silhouette
+    t.globalCompositeOperation = 'destination-in';
+    t.drawImage(handMasks[currentHandIdx], 0, 0);
+    // 3-D depth pass: overlay the emoji's own rendering at low opacity so
+    // finger ridges, knuckle shadows and feature definition bleed through
+    // whatever paint colour the player applied
+    t.globalCompositeOperation = 'source-over';
+    t.globalAlpha = 0.28;
+    t.drawImage(handMasks[currentHandIdx], 0, 0);
+    t.globalAlpha = 1;
+
+    // Step 2: write to handComposed, applying flip here so the baked-in
+    // avatar dataUrl that other players receive is already correctly mirrored
     const c = handComposed.getContext('2d');
     c.clearRect(0, 0, playerSize, playerSize);
     c.save();
     if (handFlipped) { c.translate(playerSize, 0); c.scale(-1, 1); }
-    c.drawImage(handPaintCvs, 0, 0);
-    c.globalCompositeOperation = 'destination-in';
-    c.drawImage(handMasks[currentHandIdx], 0, 0);
+    c.drawImage(handTmp, 0, 0);
     c.restore();
-    c.globalCompositeOperation = 'source-over';
     handDirty = false;
 }
 function buildHandMenu() {
@@ -1109,10 +1127,13 @@ function loop(){
     if(!hideSelf){
         if(handDirty)rebuildHandCanvas();
         ctx.save();ctx.translate(player.x+playerSize/2+selfSlide.x,player.y+playerSize/2+selfSlide.y);ctx.rotate(selfSlide.rot);ctx.scale(breath,breath);ctx.translate(-playerSize/2,-playerSize/2);
-        ctx.drawImage(handComposed,0,0);
-        if(!isDead&&!meSeeker()&&Date.now()<selfFlashUntil){const pulse=0.5+0.5*Math.sin(Date.now()/90);ctx.save();ctx.shadowColor='rgba(255,235,59,0.95)';ctx.shadowBlur=14+pulse*6;ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.strokeStyle=`rgba(255,235,59,${0.55+0.45*pulse})`;ctx.lineWidth=3+pulse*3;ctx.stroke();ctx.restore();ctx.fillStyle=`rgba(255,235,59,${0.7+0.3*pulse})`;ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('▼ YOU',playerSize/2,-8);}
-        if(gamePhase==='REVEAL'&&!isDead&&!meSeeker()){ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.stroke();}
-        if(whistlePulseStart>0&&!isDead){let el=Date.now()-whistlePulseStart;if(el<800){let pr=el/800;ctx.save();ctx.globalAlpha=Math.max(0,0.65*(1-pr));ctx.fillStyle='rgba(255,255,255,0.9)';ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.fill();ctx.restore();}else whistlePulseStart=0;}
+        {const _n=Date.now(),_fl=!isDead&&!meSeeker()&&_n<selfFlashUntil,_pu=_fl?0.5+0.5*Math.sin(_n/90):0,_rv=gamePhase==='REVEAL'&&!isDead&&!meSeeker(),_wEl=whistlePulseStart>0&&!isDead?_n-whistlePulseStart:-1,_wA=_wEl>=0&&_wEl<800;
+        if(_fl){ctx.filter=`drop-shadow(0 0 ${Math.round(5+_pu*10)}px rgba(255,235,59,${(0.7+0.3*_pu).toFixed(2)})) drop-shadow(0 0 ${Math.round(2+_pu*4)}px rgba(255,220,0,0.95))`;}
+        else if(_rv){ctx.filter='drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.5))';}
+        else if(_wA){const _pr=_wEl/800;ctx.filter=`drop-shadow(0 0 ${Math.round(16*(1-_pr))}px rgba(255,255,255,${(0.85*(1-_pr)).toFixed(2)}))`;}
+        ctx.drawImage(handComposed,0,0);ctx.filter='none';
+        if(_fl){ctx.fillStyle=`rgba(255,235,59,${(0.7+0.3*_pu).toFixed(2)})`;ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('▼ YOU',playerSize/2,-8);}
+        if(!_wA&&_wEl>=0)whistlePulseStart=0;}
         if(revealHead){const _rh=hashHue(myToken);ctx.save();ctx.beginPath();ctx.arc(playerSize/2,-20,11,0,Math.PI*2);ctx.fillStyle=`hsl(${_rh},62%,42%)`;ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((playerName||'?')[0].toUpperCase(),playerSize/2,-20);ctx.restore();}
         if(isDead){ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(27,10);ctx.lineTo(35,16);ctx.moveTo(35,10);ctx.lineTo(27,16);ctx.stroke();ctx.beginPath();ctx.moveTo(39,10);ctx.lineTo(47,16);ctx.moveTo(47,10);ctx.lineTo(39,16);ctx.stroke();ctx.beginPath();ctx.arc(37,22,5,Math.PI,0);ctx.stroke();ctx.fillStyle='rgba(0,0,0,0.8)';ctx.fillRect(-10,-20,95,18);ctx.fillStyle='#FFF';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(playerName,37.5,-7);}
         ctx.restore();
@@ -1125,8 +1146,9 @@ function loop(){
         if(op.isDead){if(!deadAnimAt[op.id])deadAnimAt[op.id]=Date.now();slide=deadSlide(Date.now()-deadAnimAt[op.id]);}else if(deadAnimAt[op.id])delete deadAnimAt[op.id];
         ctx.save();ctx.translate(px+playerSize/2+slide.x,py+playerSize/2+slide.y);ctx.rotate(slide.rot);ctx.translate(-playerSize/2,-playerSize/2);
         const av=otherAvatars[op.id];
+        if(gamePhase==='REVEAL'&&!op.isDead){ctx.filter='drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.5))';}
         if(av){ctx.drawImage(av,0,0);}else{ctx.font=Math.round(playerSize*0.88)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🖐️',playerSize/2,playerSize/2);}
-        if(gamePhase==='REVEAL'&&!op.isDead){ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.stroke();}
+        ctx.filter='none';
         if(revealHead){const _rh=hashHue(op.token||'');ctx.save();ctx.beginPath();ctx.arc(playerSize/2,-20,11,0,Math.PI*2);ctx.fillStyle=`hsl(${_rh},62%,42%)`;ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((op.name||'?')[0].toUpperCase(),playerSize/2,-20);ctx.restore();}
         if(op.isDead||gamePhase!=='SEEKING'){ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(-2,-18,playerSize+4,16);ctx.fillStyle='#FFF';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(op.name,playerSize/2,-5);}
         if(op.isDead){ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(27,10);ctx.lineTo(35,16);ctx.moveTo(35,10);ctx.lineTo(27,16);ctx.stroke();ctx.beginPath();ctx.moveTo(39,10);ctx.lineTo(47,16);ctx.moveTo(47,10);ctx.lineTo(39,16);ctx.stroke();}
