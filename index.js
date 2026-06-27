@@ -32,9 +32,14 @@ function makeRoom(code) {
         lastReactionTimes: {},
         hostSocketId: null,
         hostToken: null,
-        seekerSocketId: null,
+        seekerSocketId: null,   // initial seeker (compat)
         seekerToken: null,
-        seekerPokesLeft: 0,
+        seekerSocketIds: [],    // all current seekers (grows via snowball)
+        seekerPokes: {},        // socketId -> remaining pokes
+        seekerPokesLeft: 0,     // legacy field kept for compat
+        seekerCameras: {},      // socketId -> { x, y, scale, screenW, screenH, name, color }
+        viewportPoints: {},     // socketId -> accumulated points
+        viewportTick: null,
         gamePhase: 'LOBBY',   // LOBBY | HIDING | SEEKING | REVEAL
         selectedGame: null,   // 'tacostealth' | 'strokeoff'
         strokePainting: null, // selected PAINTINGS entry
@@ -74,6 +79,7 @@ function broadcastGameState(room) {
         phase: room.gamePhase,
         timeLeft: room.timeLeft,
         seekerSocketId: room.seekerSocketId,
+        seekerSocketIds: room.seekerSocketIds,
         hostSocketId: room.hostSocketId,
         pokesLeft: room.seekerPokesLeft,
         selectedGame: room.selectedGame,
@@ -105,7 +111,7 @@ function transferHostIfNeeded(room) {
 // ─── Taco Stealth game logic ──────────────────────────────────────────────────
 
 function ts_tallyScores(room) {
-    const hiders = Object.values(room.players).filter(p => p.id !== room.seekerSocketId);
+    const hiders = Object.values(room.players).filter(p => !room.seekerSocketIds.includes(p.id));
     hiders.filter(p => !p.isDead).forEach(p => {
         if (!room.scores[p.name]) room.scores[p.name] = { name: p.name, survivals: 0, catches: 0 };
         room.scores[p.name].survivals += 1;
@@ -115,6 +121,7 @@ function ts_tallyScores(room) {
 
 function ts_enterReveal(room) {
     clearInterval(room.gameTimer);
+    clearInterval(room.viewportTick); room.viewportTick = null;
     room.gamePhase = 'REVEAL';
     ts_tallyScores(room);
     room.timeLeft = 15;
@@ -128,11 +135,16 @@ function ts_enterReveal(room) {
 
 function ts_returnToLobby(room) {
     clearInterval(room.gameTimer);
+    clearInterval(room.viewportTick); room.viewportTick = null;
     room.gamePhase = 'LOBBY';
     room.timeLeft = 0;
     room.seekerSocketId = null;
     room.seekerToken = null;
+    room.seekerSocketIds = [];
+    room.seekerPokes = {};
     room.seekerPokesLeft = 0;
+    room.seekerCameras = {};
+    room.viewportPoints = {};
     Object.values(room.players).forEach(p => { p.isDead = false; });
     for (const t in room.playerState) delete room.playerState[t];
     broadcastRoom(room, 'updatePlayers', room.players);
@@ -140,8 +152,8 @@ function ts_returnToLobby(room) {
 }
 
 function ts_checkReveal(room) {
-    const hiders = Object.values(room.players).filter(p => p.id !== room.seekerSocketId);
-    if (hiders.length > 0 && hiders.every(p => p.isDead)) ts_enterReveal(room);
+    const hiders = Object.values(room.players).filter(p => !room.seekerSocketIds.includes(p.id));
+    if (hiders.length === 0 || hiders.every(p => p.isDead)) ts_enterReveal(room);
 }
 
 // ─── Stroke Off game logic ────────────────────────────────────────────────────
@@ -545,9 +557,14 @@ io.on('connection', (socket) => {
         clearInterval(room.gameTimer);
 
         const seeker = room.players[data.seekerId];
+        const pokeCount = data.pokeCount || 5;
         room.seekerSocketId = seeker ? seeker.id : null;
         room.seekerToken = seeker ? seeker.token : null;
-        room.seekerPokesLeft = data.pokeCount || 5;
+        room.seekerSocketIds = seeker ? [seeker.id] : [];
+        room.seekerPokes = seeker ? { [seeker.id]: pokeCount } : {};
+        room.seekerPokesLeft = pokeCount;
+        room.seekerCameras = {};
+        room.viewportPoints = {};
         room.lastHideTime = data.hideTime || 45;
         room.lastSeekTime = data.seekTime || 120;
 
@@ -566,6 +583,31 @@ io.on('connection', (socket) => {
                 room.gamePhase = 'SEEKING';
                 room.timeLeft = room.lastSeekTime;
                 broadcastGameState(room);
+
+                // Tick every 500ms: award viewport points to hiders inside a seeker's view
+                room.viewportTick = setInterval(() => {
+                    if (room.gamePhase !== 'SEEKING') { clearInterval(room.viewportTick); return; }
+                    const cams = Object.values(room.seekerCameras);
+                    if (!cams.length) return;
+                    Object.values(room.players).forEach(h => {
+                        if (room.seekerSocketIds.includes(h.id) || h.isDead) return;
+                        const cx = (h.x || 0) + 37, cy = (h.y || 0) + 37;
+                        let maxZoom = 0;
+                        cams.forEach(cam => {
+                            if (!cam.scale || !cam.screenW) return;
+                            const wx = -cam.x / cam.scale, wy = -cam.y / cam.scale;
+                            const ww = cam.screenW / cam.scale, wh = cam.screenH / cam.scale;
+                            if (cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh)
+                                maxZoom = Math.max(maxZoom, cam.scale);
+                        });
+                        if (maxZoom > 0) {
+                            if (!room.viewportPoints[h.id]) room.viewportPoints[h.id] = 0;
+                            room.viewportPoints[h.id] += Math.max(1, Math.round(maxZoom * 3));
+                        }
+                    });
+                    broadcastRoom(room, 'viewportPoints', room.viewportPoints);
+                }, 500);
+
                 room.gameTimer = setInterval(() => {
                     room.timeLeft--;
                     if (room.timeLeft <= 0) { ts_enterReveal(room); return; }
@@ -587,30 +629,39 @@ io.on('connection', (socket) => {
 
     socket.on('pokeAt', ({ targetId }) => {
         const room = socketRoom(socket);
-        if (!room || socket.id !== room.seekerSocketId || room.gamePhase !== 'SEEKING') return;
+        if (!room || !room.seekerSocketIds.includes(socket.id) || room.gamePhase !== 'SEEKING') return;
         const best = (targetId && room.players[targetId]) ? room.players[targetId] : null;
-        const validHit = best && best.id !== room.seekerSocketId && !best.isDead;
+        const validHit = best && !room.seekerSocketIds.includes(best.id) && !best.isDead;
+        const myPokes = room.seekerPokes[socket.id] ?? 0;
 
         if (validHit) {
-            best.isDead = true;
-            if (best.token) room.playerState[best.token] = { isDead: true };
-            const seeker = room.players[room.seekerSocketId];
-            if (seeker) {
-                if (!room.scores[seeker.name]) room.scores[seeker.name] = { name: seeker.name, survivals: 0, catches: 0 };
-                room.scores[seeker.name].catches += 1;
+            // Caught player becomes a seeker — no death, role swap
+            room.seekerSocketIds.push(best.id);
+            room.seekerPokes[best.id] = Math.max(1, Math.ceil(myPokes / 2));
+            const catcher = room.players[socket.id];
+            if (catcher) {
+                if (!room.scores[catcher.name]) room.scores[catcher.name] = { name: catcher.name, survivals: 0, catches: 0 };
+                room.scores[catcher.name].catches += 1;
             }
             broadcastRoom(room, 'updatePlayers', room.players);
-            io.to(best.id).emit('triggerPickleSlide');
-            io.to(room.seekerSocketId).emit('pokeResult', { hit: true, name: best.name, pokesLeft: room.seekerPokesLeft });
+            broadcastGameState(room); // sends updated seekerSocketIds
+            io.to(best.id).emit('nowSeeker', { pokesLeft: room.seekerPokes[best.id] });
+            io.to(socket.id).emit('pokeResult', { hit: true, name: best.name, pokesLeft: myPokes });
             broadcastScores(room);
-            broadcastGameState(room);
             ts_checkReveal(room);
         } else {
-            if (room.seekerPokesLeft <= 0) { io.to(room.seekerSocketId).emit('pokeResult', { hit: false, pokesLeft: 0, out: true }); return; }
-            room.seekerPokesLeft--;
-            io.to(room.seekerSocketId).emit('pokeResult', { hit: false, pokesLeft: room.seekerPokesLeft });
-            broadcastGameState(room);
+            if (myPokes <= 0) { io.to(socket.id).emit('pokeResult', { hit: false, pokesLeft: 0, out: true }); return; }
+            room.seekerPokes[socket.id] = myPokes - 1;
+            io.to(socket.id).emit('pokeResult', { hit: false, pokesLeft: myPokes - 1 });
         }
+    });
+
+    socket.on('seekerCamUpdate', (cam) => {
+        const room = socketRoom(socket);
+        if (!room || !room.seekerSocketIds.includes(socket.id) || room.gamePhase !== 'SEEKING') return;
+        const p = room.players[socket.id];
+        room.seekerCameras[socket.id] = { ...cam, name: p?.name || '?', color: p?.color || '#fff' };
+        broadcastRoom(room, 'viewportMap', room.seekerCameras);
     });
 
     // ── Stroke Off events ─────────────────────────────────────────────────────
@@ -675,6 +726,8 @@ io.on('connection', (socket) => {
         delete room.avatars[targetId];
         delete room.lastReactionTimes[targetId];
         if (room.seekerSocketId === targetId) room.seekerSocketId = null;
+        room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== targetId);
+        delete room.seekerPokes[targetId]; delete room.seekerCameras[targetId];
         broadcastRoom(room, 'updatePlayers', room.players);
         broadcastGameState(room);
         console.log(`🦵 Host kicked ${targetId} from room ${room.code}`);
@@ -689,6 +742,8 @@ io.on('connection', (socket) => {
         delete room.avatars[socket.id];
         delete room.lastReactionTimes[socket.id];
         if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
+        room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== socket.id);
+        delete room.seekerPokes[socket.id]; delete room.seekerCameras[socket.id];
         broadcastRoom(room, 'updatePlayers', room.players);
         if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
         transferHostIfNeeded(room);
@@ -725,6 +780,8 @@ io.on('connection', (socket) => {
             if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
         }
         if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
+        room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== socket.id);
+        delete room.seekerPokes[socket.id]; delete room.seekerCameras[socket.id];
         if (socket.id === room.hostSocketId) {
             room.hostSocketId = null;
             transferHostIfNeeded(room);

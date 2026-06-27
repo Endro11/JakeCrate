@@ -274,6 +274,7 @@
 </div>
 <div id="phase-hud" style="display:none;"><span id="phase-label"></span><span id="timer-hud"></span></div>
 <div id="poke-counter" style="display:none;position:absolute;top:calc(48px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));z-index:10;font-family:monospace;color:#ff4444;font-size:1em;font-weight:bold;text-shadow:0 0 8px rgba(255,60,60,0.6),1px 1px 2px #000;pointer-events:none;">❌ WRONG POKES LEFT: <span id="poke-count">5</span></div>
+<div id="vp-points-hud" style="display:none;position:absolute;top:calc(48px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));z-index:10;font-family:monospace;color:#ffeb3b;font-size:1em;font-weight:bold;text-shadow:0 0 8px rgba(255,200,0,0.7),1px 1px 2px #000;pointer-events:none;text-align:right;">👁 IN VIEW: <span id="vp-points-val">0</span> pts</div>
 <div id="volunteer-toast">🙋 <span id="volunteer-name">PLAYER</span> wants to be seeker!</div>
 <div id="seeker-overlay">
     <div class="boot-title">📷 BOOTING CAMERAS...</div>
@@ -476,6 +477,11 @@ let hostId = null;
 let otherPlayers = {};
 let gamePhase = 'LOBBY';
 let seekerSocketId = null;
+let seekerSocketIds = [];    // all current seekers (snowball)
+let viewportMap = {};        // socketId -> { x, y, scale, screenW, screenH, name, color }
+let selfViewportPoints = 0;
+let wasInViewport = false;
+let seekerCamLastEmit = 0;
 let isJoined = false, isPaint = true, isDrop = false, lobbyEditing = false;
 let playerName = 'NOBODY';
 
@@ -661,14 +667,46 @@ function flashScreen(color) {
 socket.on('hostStatus', ({ ok, host }) => { if (!ok) showToast('🔒 ' + host + ' is hosting'); });
 socket.on('seekerVolunteer', ({ name }) => { showToast('🙋 ' + name + ' wants to be seeker!'); });
 
+socket.on('nowSeeker', ({ pokesLeft } = {}) => {
+    if (!seekerSocketIds.includes(socket.id)) seekerSocketIds.push(socket.id);
+    wasInViewport = false; viewportMap = {}; selfViewportPoints = 0;
+    showToast('🫵 Caught! You\'re seeking now!');
+    const pcEl = document.getElementById('poke-count');
+    if (pcEl && pokesLeft !== undefined) pcEl.innerText = pokesLeft;
+    updateUI(); applyChromeVisibility();
+    setTimeout(() => { if (canvas.width > 0 && canvas.height > 0) focusWholeSpace(); }, 300);
+});
+
+socket.on('viewportMap', (map) => {
+    viewportMap = map || {};
+    if (meSeeker() || gamePhase !== 'SEEKING' || !isJoined || isDead) return;
+    const cx = player.x + 37, cy = player.y + 37;
+    let inVp = false;
+    Object.values(viewportMap).forEach(vp => {
+        if (!vp || !vp.scale || !vp.screenW) return;
+        const wx = -vp.x / vp.scale, wy = -vp.y / vp.scale;
+        const ww = vp.screenW / vp.scale, wh = vp.screenH / vp.scale;
+        if (cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh) inVp = true;
+    });
+    if (inVp && !wasInViewport && navigator.vibrate) navigator.vibrate([70, 80, 70]);
+    wasInViewport = inVp;
+});
+
+socket.on('viewportPoints', (pts) => {
+    selfViewportPoints = (pts && socket.id && pts[socket.id]) ? pts[socket.id] : 0;
+    const el = document.getElementById('vp-points-val');
+    if (el) el.innerText = selfViewportPoints;
+});
+
 socket.on('gameState', (state) => {
     const prevPhase = gamePhase;
     gamePhase = state.phase;
     seekerSocketId = state.seekerSocketId;
+    seekerSocketIds = state.seekerSocketIds || (state.seekerSocketId ? [state.seekerSocketId] : []);
     hostId = state.hostSocketId;
     isRoomHost = socket.id === state.hostSocketId;
     selectedGame = state.selectedGame || null;
-    const isSeeker = socket.id === state.seekerSocketId;
+    const isSeeker = meSeeker();
     const inLobby = state.phase === 'LOBBY';
 
     if (!isJoined) return;
@@ -727,6 +765,7 @@ socket.on('gameState', (state) => {
         if (state.phase === 'REVEAL' && prevPhase !== 'REVEAL' && isJoined && !isSeeker) focusWholeSpace();
         if (inLobby && !lobbyEditing) {
             const _hm2=document.getElementById('hand-menu');if(_hm2)_hm2.style.display='none';
+            viewportMap={}; selfViewportPoints=0; wasInViewport=false;
             show('room-lobby'); renderRoomLobby();
         }
     }
@@ -750,7 +789,7 @@ socket.on('gameState', (state) => {
 });
 
 function applyChromeVisibility() {
-    const isSeeker = socket.id === seekerSocketId;
+    const isSeeker = meSeeker();
     const inLobby = gamePhase === 'LOBBY';
     const inRoom = !inLobby;
     if (inRoom && isJoined) { document.getElementById('hub-screen').style.display='none'; document.getElementById('room-lobby').style.display='none'; }
@@ -765,6 +804,7 @@ function applyChromeVisibility() {
     document.getElementById('lobbyDoneBtn').style.display = editing ? 'block' : 'none';
     document.getElementById('seekerBadge').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'inline-block' : 'none';
     document.getElementById('poke-counter').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'block' : 'none';
+    document.getElementById('vp-points-hud').style.display = (!isSeeker && gamePhase === 'SEEKING' && isJoined) ? 'block' : 'none';
 }
 
 let tsScoreCache = {}, soScoreCache = {};
@@ -803,7 +843,7 @@ let bg = null, bgName = 'TACO BELL';
 function setBackground(img, name) {
     bg = img; if (name) bgName = name;
     if (img && img.width && img.height) { SPACE_W = 1600; SPACE_H = Math.round(SPACE_W * img.height / img.width); }
-    if (socket.id !== seekerSocketId && !(isJoined && (gamePhase === 'HIDING' || gamePhase === 'SEEKING'))) focusWholeSpace();
+    if (!meSeeker() && !(isJoined && (gamePhase === 'HIDING' || gamePhase === 'SEEKING'))) focusWholeSpace();
     else clampCamera();
     setCamTitle();
 }
@@ -845,15 +885,14 @@ function buildVignette() {
 function resize() {
     canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     buildVignette(); seekerReticle.x = canvas.width/2; seekerReticle.y = canvas.height/2;
-    const followMe = isJoined && socket.id !== seekerSocketId && (gamePhase === 'HIDING' || gamePhase === 'SEEKING');
-    if (!followMe && socket.id !== seekerSocketId) focusWholeSpace(); else clampCamera();
+    const followMe = isJoined && !meSeeker() && (gamePhase === 'HIDING' || gamePhase === 'SEEKING');
+    if (!followMe && !meSeeker()) focusWholeSpace(); else clampCamera();
     soResizeCanvas();
 }
 window.addEventListener('resize', resize);
 
 function setCamTitle() {
-    const isSeeker = socket.id === seekerSocketId;
-    let prefix = isSeeker && gamePhase === 'SEEKING' ? '👁️ SEEKING' : isJoined && (gamePhase === 'HIDING'||gamePhase === 'SEEKING') ? '🙈 HIDING' : '📷 CAM';
+    let prefix = meSeeker() && gamePhase === 'SEEKING' ? '👁️ SEEKING' : isJoined && (gamePhase === 'HIDING'||gamePhase === 'SEEKING') ? '🙈 HIDING' : '📷 CAM';
     document.getElementById('cam-title').innerText = prefix + ' — ' + bgName;
 }
 
@@ -1015,7 +1054,7 @@ function toggleLobbyEdit(on) {
 }
 
 function seekerPoke(sx, sy) {
-    if (gamePhase !== 'SEEKING' || socket.id !== seekerSocketId) return;
+    if (gamePhase !== 'SEEKING' || !meSeeker()) return;
     const now = Date.now();
     if (now < seekerReticle.pokeCooldownUntil) return;
     seekerReticle.pokeCooldownUntil = now+700;
@@ -1024,7 +1063,7 @@ function seekerPoke(sx, sy) {
     const w = screenToWorld(px, py);
     let best=null, bestDist=playerSize*0.95;
     Object.values(otherPlayers).forEach(op => {
-        if (op.id===socket.id||op.id===seekerSocketId||op.isDead) return;
+        if (op.id===socket.id||seekerSocketIds.includes(op.id)||op.isDead) return;
         const ox=(typeof op.x==='number')?op.x:SPACE_W/2, oy=(typeof op.y==='number')?op.y:SPACE_H/2;
         const d=Math.hypot(w.x-(ox+playerSize/2),w.y-(oy+playerSize/2));
         if(d<bestDist){bestDist=d;best=op;}
@@ -1060,8 +1099,8 @@ function pickColorAt(sx,sy){const px=ctx.getImageData(sx,sy,1,1).data;let r=px[0
 function moveStart(sx,sy){moveLast={x:sx,y:sy};}
 function moveTo(sx,sy){if(!moveLast){moveLast={x:sx,y:sy};return;}player.x+=(sx-moveLast.x)/camera.scale;player.y+=(sy-moveLast.y)/camera.scale;moveLast={x:sx,y:sy};clampPlayerToSpace();}
 function deadSlide(e){const t=Math.min(1,e/1200),ease=1-Math.pow(1-t,3),wob=Math.sin(e/80)*(1-Math.min(1,e/600))*8;return{x:wob,y:ease*1500,rot:ease*1.5};}
-function meSeeker(){return socket.id===seekerSocketId;}
-function findMe(){if(isJoined&&socket.id!==seekerSocketId){focusAvatar();selfFlashUntil=Date.now()+2000;}}
+function meSeeker(){return seekerSocketIds.includes(socket.id);}
+function findMe(){if(isJoined&&!meSeeker()){focusAvatar();selfFlashUntil=Date.now()+2000;}}
 function zoomWhole(){if(meSeeker())focusWholeSpace();}
 function updateUI(){if(!isDead){document.getElementById('modeBtn').innerText=isPaint?'🖌️ Paint':'✋ Move';document.getElementById('modeBtn').style.background=isPaint?'#e57373':'#333';document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';}}
 function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();handPaintCvs.getContext('2d').putImageData(snap,0,0);handDirty=true;scheduleAvatarSync();}
@@ -1112,6 +1151,8 @@ socket.on('emojiReaction',({emoji,name})=>{const el=document.createElement('div'
 // ── Main render loop ──────────────────────────────────────────────────────
 function loop(){
     if(isJoined&&gamePhase!=='LOBBY'&&Date.now()-lastEmitTime>50){lastEmitTime=Date.now();socket.emit('playerUpdate',{x:player.x,y:player.y,pose:currentHandIdx,color:activeColor});}
+    // Seekers broadcast their camera so hiders can see viewports
+    if(meSeeker()&&gamePhase==='SEEKING'&&isJoined&&Date.now()-seekerCamLastEmit>150){seekerCamLastEmit=Date.now();socket.emit('seekerCamUpdate',{x:camera.x,y:camera.y,scale:camera.scale,screenW:canvas.width,screenH:canvas.height});}
     if(dragFollowing&&isJoined&&!meSeeker()&&gamePhase!=='LOBBY')followPlayer(false);
     if(!camera.scale||isNaN(camera.scale)||camera.scale<=0)camera.scale=fitScale()||0.25;
 
@@ -1140,7 +1181,9 @@ function loop(){
     }
 
     Object.values(otherPlayers).forEach(op=>{
-        if(op.id===socket.id||op.id===seekerSocketId)return;
+        if(op.id===socket.id)return;
+        if(seekerSocketIds.includes(op.id))return; // seekers shown as viewport rectangles, not avatars
+        if(!meSeeker()&&gamePhase==='HIDING')return; // hiders invisible to each other during HIDING
         const px=(typeof op.x==='number')?op.x:SPACE_W/2,py=(typeof op.y==='number')?op.y:SPACE_H/2;
         let slide={x:0,y:0,rot:0};
         if(op.isDead){if(!deadAnimAt[op.id])deadAnimAt[op.id]=Date.now();slide=deadSlide(Date.now()-deadAnimAt[op.id]);}else if(deadAnimAt[op.id])delete deadAnimAt[op.id];
@@ -1154,6 +1197,37 @@ function loop(){
         if(op.isDead){ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(27,10);ctx.lineTo(35,16);ctx.moveTo(35,10);ctx.lineTo(27,16);ctx.stroke();ctx.beginPath();ctx.moveTo(39,10);ctx.lineTo(47,16);ctx.moveTo(47,10);ctx.lineTo(39,16);ctx.stroke();}
         ctx.restore();
     });
+    // ── Seeker viewport rectangles (visible to hiders during SEEKING) ──────────
+    if(!meSeeker()&&gamePhase==='SEEKING'&&Object.keys(viewportMap).length>0){
+        const vpVals=Object.values(viewportMap);
+        const lw=2.5/camera.scale;
+        vpVals.forEach(vp=>{
+            if(!vp||!vp.scale||!vp.screenW)return;
+            const wx=-vp.x/vp.scale,wy=-vp.y/vp.scale,ww=vp.screenW/vp.scale,wh=vp.screenH/vp.scale;
+            const col=vp.color||'#ff5252';
+            ctx.save();
+            ctx.strokeStyle=col;ctx.lineWidth=lw;
+            ctx.setLineDash([9/camera.scale,5/camera.scale]);
+            ctx.strokeRect(wx,wy,ww,wh);
+            ctx.setLineDash([]);
+            ctx.globalAlpha=0.06;ctx.fillStyle=col;ctx.fillRect(wx,wy,ww,wh);ctx.globalAlpha=1;
+            ctx.fillStyle=col;ctx.font=`bold ${Math.round(11/camera.scale)}px monospace`;
+            ctx.textAlign='left';ctx.textBaseline='top';
+            ctx.fillText('👁 '+(vp.name||''),wx+lw+2/camera.scale,wy+lw+2/camera.scale);
+            ctx.restore();
+        });
+        // Pulse glow on own hand when inside a viewport
+        if(wasInViewport&&!isDead){
+            const _gPulse=0.55+0.45*Math.sin(Date.now()/180);
+            ctx.save();
+            ctx.translate(player.x+playerSize/2,player.y+playerSize/2);
+            ctx.filter=`drop-shadow(0 0 ${Math.round(10+_gPulse*8)/camera.scale}px rgba(255,60,60,${(0.7+0.3*_gPulse).toFixed(2)}))`;
+            ctx.translate(-playerSize/2,-playerSize/2);
+            ctx.drawImage(handComposed,0,0);
+            ctx.filter='none';
+            ctx.restore();
+        }
+    }
     ctx.restore();
     drawNoSignalHud();
 
