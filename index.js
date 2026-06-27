@@ -606,27 +606,38 @@ const PP_SUBMIT_SECONDS = 60;
 const PP_VOTE_SECONDS   = 30;
 const PP_RESULT_SECONDS = 10;
 
+// Reliable picsum.photos images — seed keeps them consistent across sessions
 const PP_CURATED = [
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat_03.jpg/320px-Cat_03.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Collage_of_Nine_Dogs.jpg/320px-Collage_of_Nine_Dogs.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Sleeping_cat_on_her_back.jpg/320px-Sleeping_cat_on_her_back.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Culinary_fruits_front_view.jpg/320px-Culinary_fruits_front_view.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Hausziege_04.jpg/320px-Hausziege_04.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Stonehenge.jpg/320px-Stonehenge.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Camponotus_flavomarginatus_ant.jpg/320px-Camponotus_flavomarginatus_ant.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Good_Food_Display_-_NCI_Visuals_Online.jpg/320px-Good_Food_Display_-_NCI_Visuals_Online.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/320px-A_small_cup_of_coffee.JPG',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Biho_szczecin.jpg/320px-Biho_szczecin.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Gatto_europeo4.jpg/320px-Gatto_europeo4.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/320px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Wikispecies-logo.svg/240px-Wikispecies-logo.svg.png',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Big_Buck_Bunny_thumbnail_vlc.png/320px-Big_Buck_Bunny_thumbnail_vlc.png',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Image_created_with_a_mobile_phone.png/320px-Image_created_with_a_mobile_phone.png',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Felis_silvestris_silvestris_small_gradual_decrease.png/320px-Felis_silvestris_silvestris_small_gradual_decrease.png',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Simple_english_wiki.png/320px-Simple_english_wiki.png',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Cute_dog.jpg/320px-Cute_dog.jpg',
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/320px-No_image_available.svg.png',
+    'https://picsum.photos/seed/pp01/400/400',
+    'https://picsum.photos/seed/pp02/400/400',
+    'https://picsum.photos/seed/pp03/400/400',
+    'https://picsum.photos/seed/pp04/400/400',
+    'https://picsum.photos/seed/pp05/400/400',
+    'https://picsum.photos/seed/pp06/400/400',
+    'https://picsum.photos/seed/pp07/400/400',
+    'https://picsum.photos/seed/pp08/400/400',
+    'https://picsum.photos/seed/pp09/400/400',
+    'https://picsum.photos/seed/pp10/400/400',
+    'https://picsum.photos/seed/pp11/400/400',
+    'https://picsum.photos/seed/pp12/400/400',
+    'https://picsum.photos/seed/pp13/400/400',
+    'https://picsum.photos/seed/pp14/400/400',
+    'https://picsum.photos/seed/pp15/400/400',
+    'https://picsum.photos/seed/pp16/400/400',
+    'https://picsum.photos/seed/pp17/400/400',
+    'https://picsum.photos/seed/pp18/400/400',
+    'https://picsum.photos/seed/pp19/400/400',
+    'https://picsum.photos/seed/pp20/400/400',
+    'https://picsum.photos/seed/pp21/400/400',
+    'https://picsum.photos/seed/pp22/400/400',
+    'https://picsum.photos/seed/pp23/400/400',
+    'https://picsum.photos/seed/pp24/400/400',
+    'https://picsum.photos/seed/pp25/400/400',
+    'https://picsum.photos/seed/pp26/400/400',
+    'https://picsum.photos/seed/pp27/400/400',
+    'https://picsum.photos/seed/pp28/400/400',
+    'https://picsum.photos/seed/pp29/400/400',
+    'https://picsum.photos/seed/pp30/400/400',
 ];
 
 let ppCardCounter = 0;
@@ -658,9 +669,12 @@ function pp_broadcastUploadProgress(room) {
 }
 
 function pp_dealCards(room) {
+    const seenUrls = new Set();
     const pool = [];
     Object.entries(room.ppPlayerPhotos).forEach(([ownerId, photos]) => {
-        photos.forEach(photoUrl => pool.push({ cardId: ppMakeCardId(), photoUrl, ownerId }));
+        photos.forEach(photoUrl => {
+            if (!seenUrls.has(photoUrl)) { seenUrls.add(photoUrl); pool.push({ cardId: ppMakeCardId(), photoUrl, ownerId }); }
+        });
     });
     for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -1196,8 +1210,15 @@ io.on('connection', (socket) => {
     socket.on('ppUploadPhotos', ({ photos }) => {
         const room = socketRoom(socket);
         if (!room || room.ppPhase !== 'UPLOAD') return;
-        if (!Array.isArray(photos) || photos.length !== 7) return;
-        room.ppPlayerPhotos[socket.id] = photos;
+        if (!Array.isArray(photos) || photos.length === 0) {
+            io.to(socket.id).emit('ppUploadError', { msg: 'No photos received — try again.' });
+            return;
+        }
+        let finalPhotos = photos.slice(0, 7);
+        while (finalPhotos.length < 7) {
+            finalPhotos.push(PP_CURATED[Math.floor(Math.random() * PP_CURATED.length)]);
+        }
+        room.ppPlayerPhotos[socket.id] = finalPhotos;
         room.ppReady[socket.id] = true;
         pp_broadcastUploadProgress(room);
         const totalCount = Object.keys(room.players).length;

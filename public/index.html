@@ -233,7 +233,12 @@
         .pp-slot.filled { border:2px solid #1e5fa0; overflow:hidden; }
         .pp-slot-x { position:absolute; top:2px; right:3px; font-size:0.7em; color:#ef9a9a; font-weight:bold; line-height:1; }
         .pp-action-row { display:flex; gap:8px; width:min(340px,92%); flex-wrap:wrap; justify-content:center; }
-        .pp-btn { padding:12px 16px; font-weight:bold; font-size:0.85em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; text-align:center; flex:1; min-width:120px; user-select:none; -webkit-user-select:none; }
+        .pp-btn { padding:12px 20px; font-weight:bold; font-size:0.85em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; text-align:center; user-select:none; -webkit-user-select:none; display:inline-block; }
+        .pp-action-row .pp-btn { flex:1; min-width:120px; }
+        /* Lightbox */
+        #pp-lightbox { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.92); align-items:center; justify-content:center; }
+        #pp-lightbox img { max-width:92vw; max-height:88vh; border-radius:10px; object-fit:contain; }
+        #pp-lightbox.open { display:flex; }
         .pp-btn-blue { background:#1565c0; }
         .pp-btn-green { background:#2e7d32; }
         .pp-btn-yellow { background:#e65100; color:#fff; }
@@ -604,6 +609,9 @@
     <div id="pp-ready-list" class="pp-voter-row"></div>
     <button id="pp-host-deal-btn" class="pp-btn pp-btn-red" onclick="ppHostDeal()" style="display:none;width:min(320px,90%);">🚀 START WITH READY PLAYERS</button>
 </div>
+
+<!-- Lightbox -->
+<div id="pp-lightbox" onclick="ppCloseLightbox()"><img id="pp-lightbox-img" src=""></div>
 
 <!-- Selfie overlay -->
 <div id="pp-selfie-wrap">
@@ -1963,19 +1971,29 @@ function ppHandleFiles(files) {
     });
 }
 
+function ppLightbox(url) {
+    const lb = document.getElementById('pp-lightbox');
+    document.getElementById('pp-lightbox-img').src = url;
+    lb.classList.add('open');
+}
+function ppCloseLightbox() { document.getElementById('pp-lightbox').classList.remove('open'); }
+
 function ppRenderUploadGrid() {
     const grid = document.getElementById('pp-photo-grid'); if (!grid) return;
     const slots = [];
     for (let i = 0; i < 7; i++) {
         if (i < ppMyPhotos.length) {
-            slots.push(`<div class="pp-slot filled" onclick="ppRemovePhoto(${i})"><img src="${ppMyPhotos[i]}" style="width:100%;height:100%;object-fit:cover;border-radius:5px;"><div class="pp-slot-x">✕</div></div>`);
+            slots.push(`<div class="pp-slot filled">
+                <img src="${ppMyPhotos[i]}" style="width:100%;height:100%;object-fit:cover;border-radius:5px;" onclick="ppLightbox('${ppMyPhotos[i].replace(/'/g,"\\'")}')">
+                <div class="pp-slot-x" onclick="ppRemovePhoto(${i})">✕</div>
+            </div>`);
         } else {
             slots.push(`<div class="pp-slot empty"><span style="font-size:1.5em;opacity:.35">+</span></div>`);
         }
     }
     grid.innerHTML = slots.join('');
     const cnt = document.getElementById('pp-photo-count'); if (cnt) cnt.innerText = `${ppMyPhotos.length}/7 photos`;
-    const readyBtn = document.getElementById('pp-ready-btn'); if (readyBtn) readyBtn.style.display = ppMyPhotos.length === 7 ? 'block' : 'none';
+    const readyBtn = document.getElementById('pp-ready-btn'); if (readyBtn) readyBtn.style.display = ppMyPhotos.length >= 1 ? 'block' : 'none';
     const fillBtn = document.getElementById('pp-fill-btn'); if (fillBtn) fillBtn.style.display = ppMyPhotos.length < 7 ? 'block' : 'none';
 }
 
@@ -2026,18 +2044,24 @@ function ppCloseSelfie() {
 // ── Card rendering ──
 function ppRenderHand(containerId, cards, selectable) {
     const el = document.getElementById(containerId); if (!el) return;
-    el.innerHTML = cards.map(c =>
-        `<div class="pp-card${selectable ? ' selectable' : ''}" data-cid="${c.cardId}" onclick="${selectable ? `ppSelectCard('${c.cardId}')` : ''}">
+    el.innerHTML = cards.map(c => {
+        const url = c.photoUrl.replace(/'/g, "\\'");
+        return `<div class="pp-card${selectable ? ' selectable' : ''}" data-cid="${c.cardId}"
+            onclick="${selectable ? `ppSelectCard('${c.cardId}')` : `ppLightbox('${url}')`}">
             <img src="${c.photoUrl}" style="width:100%;height:100%;object-fit:cover;" draggable="false">
-        </div>`
-    ).join('');
+            ${!selectable ? `<div style="position:absolute;bottom:2px;right:3px;font-size:0.65em;opacity:.5;">🔍</div>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function ppSelectCard(cardId) {
-    ppSelectedCardId = cardId;
-    document.querySelectorAll('.pp-card.selectable').forEach(el => el.classList.toggle('selected', el.dataset.cid === cardId));
-    const cb = document.getElementById('pp-confirm-btn'); if (cb) cb.style.display = 'block';
-    const sb = document.getElementById('pp-swap-btn'); if (sb && !ppSubUsed) sb.style.display = 'block';
+    const alreadySelected = ppSelectedCardId === cardId;
+    ppSelectedCardId = alreadySelected ? null : cardId;
+    document.querySelectorAll('.pp-card.selectable').forEach(el => el.classList.toggle('selected', el.dataset.cid === ppSelectedCardId));
+    const cb = document.getElementById('pp-confirm-btn');
+    if (cb) cb.style.display = ppSelectedCardId ? 'block' : 'none';
+    const sb = document.getElementById('pp-swap-btn');
+    if (sb) sb.style.display = (ppSelectedCardId && !ppSubUsed) ? 'block' : 'none';
 }
 
 function ppSubmitClue() {
@@ -2065,11 +2089,25 @@ function ppSwapCard() {
     socket.emit('ppSwapCard', { cardId: ppSelectedCardId });
 }
 
+function ppVoteTap(cardId, url) {
+    const now = Date.now();
+    if (window._ppLastTap && window._ppLastTap.id === cardId && now - window._ppLastTap.t < 400) {
+        // double-tap = vote
+        window._ppLastTap = null;
+        ppVote(cardId);
+    } else {
+        // single tap = enlarge
+        window._ppLastTap = { id: cardId, t: now };
+        ppLightbox(url);
+    }
+}
+
 function ppVote(cardId) {
     socket.emit('ppVote', { cardId });
     document.querySelectorAll('#pp-vote-grid .pp-vote-img').forEach(el => { el.onclick = null; el.style.opacity = '0.5'; });
-    document.querySelector(`#pp-vote-grid [data-cid="${cardId}"] .pp-vote-img`)?.classList.add('pp-voted');
-    showToast('✅ Voted!');
+    const voted = document.querySelector(`#pp-vote-grid [data-cid="${cardId}"] .pp-vote-img`);
+    if (voted) { voted.classList.add('pp-voted'); voted.style.opacity = '1'; }
+    showToast('✅ Voted! (double-tap = vote)');
 }
 
 function ppReturnToLobby() {
@@ -2160,14 +2198,22 @@ socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
     document.getElementById('pp-vote-timer').innerText = timeLeft;
     document.getElementById('pp-vote-voters').innerHTML = '';
     const amST = socket.id === storytellerId;
-    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap the card you think is the storyteller\'s!';
+    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap to enlarge · Double-tap to vote!';
     const grid = document.getElementById('pp-vote-grid');
-    grid.innerHTML = cards.map(c =>
-        `<div class="pp-vote-card-wrap" data-cid="${c.cardId}">
-            <img src="${c.photoUrl}" class="pp-vote-img" ${amST ? 'style="opacity:.5;cursor:default;"' : `onclick="ppVote('${c.cardId}')"`}>
-        </div>`
-    ).join('');
+    grid.innerHTML = cards.map(c => {
+        const url = c.photoUrl.replace(/'/g, "\\'");
+        return `<div class="pp-vote-card-wrap" data-cid="${c.cardId}">
+            <img src="${c.photoUrl}" class="pp-vote-img"
+                ${amST
+                    ? `style="opacity:.5;cursor:default;" onclick="ppLightbox('${url}')"`
+                    : `onclick="ppVoteTap('${c.cardId}','${url}')" `}>
+        </div>`;
+    }).join('');
+    // reset tap state
+    window._ppLastTap = null;
 });
+
+socket.on('ppUploadError', ({ msg }) => { showToast('⚠️ ' + msg); });
 
 socket.on('ppVoterUpdate', ({ voterNames }) => {
     const el = document.getElementById('pp-vote-voters');
@@ -2195,7 +2241,8 @@ socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, vot
         const sub = players.find(p => p.id === c.submitterId);
         const voteCount = (votesPerCard[c.cardId] || []).length;
         const isST = c.cardId === storytellerCardId;
-        return `<div class="pp-result-card${isST ? ' pp-storyteller-card' : ''}">
+        const url = c.photoUrl.replace(/'/g, "\\'");
+        return `<div class="pp-result-card${isST ? ' pp-storyteller-card' : ''}" onclick="ppLightbox('${url}')">
             <img src="${c.photoUrl}">
             <div class="pp-result-label">${sub?.name||'?'}${isST?' 📖':''} · ${voteCount}v</div>
         </div>`;
