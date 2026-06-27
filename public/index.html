@@ -152,7 +152,7 @@
         #so-brush-label { font-family:monospace; color:#aaa; font-size:0.8em; min-width:28px; text-align:right; }
         .so-tool-btn { background:rgba(255,255,255,0.07); border:2px solid #444; border-radius:8px; padding:7px 11px; color:#bbb; font-size:0.95em; cursor:pointer; line-height:1; flex-shrink:0; transition:all 0.12s; }
         #so-pen-btn.active  { background:rgba(80,160,255,0.2); border-color:#4fa3ff; color:#7ec8ff; }
-        #so-erase-btn.active { background:rgba(255,160,40,0.2); border-color:#ffaa28; color:#ffcc66; }
+        #so-eyedrop-btn.active { background:rgba(80,220,120,0.2); border-color:#50dc78; color:#90ffb0; }
         .game-rules-overlay { display:none; position:absolute; inset:0; z-index:70; background:rgba(0,0,0,0.93); flex-direction:column; align-items:center; justify-content:center; }
         .game-rules-box { background:#0e1117; border:1px solid #2a2f3a; border-radius:16px; padding:28px 22px 22px; max-width:390px; width:92%; display:flex; flex-direction:column; gap:14px; }
         .rules-game-title { font-size:1.25em; font-weight:900; letter-spacing:3px; color:#ffeb3b; text-align:center; }
@@ -223,8 +223,8 @@
         <div class="game-card" id="gc-so" onclick="pickGame('strokeoff')">
             <div class="gc-icon">🖌️</div>
             <div class="gc-info">
-                <div class="gc-name">Stroke Off</div>
-                <div class="gc-desc">Everyone draws — one player doesn't know the prompt</div>
+                <div class="gc-name">MasterPieced</div>
+                <div class="gc-desc">Draw a famous painting from memory — one player is the fake</div>
                 <div class="gc-voters" id="gv-so"></div>
             </div>
         </div>
@@ -245,8 +245,8 @@
             <span style="flex:1;">PLAYER</span>
             <span class="sb-col" title="Paint or Poke — rounds survived">🫥</span>
             <span class="sb-col" title="Paint or Poke — players caught">👁️</span>
-            <span class="sb-col" title="Stroke Off — correctly ID'd fake">✅</span>
-            <span class="sb-col" title="Stroke Off — faked them out">🥷</span>
+            <span class="sb-col" title="MasterPieced — correctly ID'd fake">✅</span>
+            <span class="sb-col" title="MasterPieced — faked them out">🥷</span>
         </div>
         <div id="unified-score-list"><div class="sb-empty" style="color:#444;font-size:0.8em;text-align:center;padding:6px 0;">Play a round to see standings</div></div>
     </div>
@@ -324,7 +324,6 @@
     <div class="ui-row">
         <button id="poseBtn">🧍 Stand</button>
         <button id="modeBtn">🖌️ Paint</button>
-        <button id="eraseBtn" onclick="toggleErase()">◌ ERASE</button>
         <button id="undoBtn" onclick="tsUndo()">↩ UNDO</button>
     </div>
     <div class="ui-row">
@@ -357,6 +356,7 @@
 <!-- ════════════════════ STROKE OFF DRAW SCREEN ════════════════════ -->
 <div id="so-screen">
     <canvas id="so-canvas" width="450" height="800"></canvas>
+    <canvas id="so-loupe-canvas" style="position:absolute;left:50%;pointer-events:none;z-index:4;"></canvas>
     <div id="so-hud-top">
         <div class="so-theme-box">🖌️ DRAW: <span id="so-theme-text">???</span> <span id="so-theme-emoji"></span></div>
         <div class="so-part-box">YOUR PART: <span id="so-part-text">???</span></div>
@@ -369,7 +369,7 @@
     </div>
     <div id="so-toolbar">
         <button class="so-tool-btn active" id="so-pen-btn" onclick="soSetTool('pen')">✏️ PEN</button>
-        <button class="so-tool-btn" id="so-erase-btn" onclick="soSetTool('erase')">◻ ERASE</button>
+        <button class="so-tool-btn" id="so-eyedrop-btn" onclick="soSetTool('eyedrop')">💧 PICK</button>
         <button class="so-tool-btn" onclick="soUndo()">↩</button>
         <input type="range" id="so-brush-size" min="1" max="20" value="3" style="width:80px;">
         <span id="so-brush-label">3px</span>
@@ -379,7 +379,7 @@
 <!-- ════════════════════ GAME RULES OVERLAYS ════════════════════ -->
 <div class="game-rules-overlay" id="so-rules-overlay">
     <div class="game-rules-box">
-        <div class="rules-game-title">🖌️ STROKE OFF</div>
+        <div class="rules-game-title">🎨 MASTERPIECED</div>
         <ul class="rules-list">
             <li>A famous painting is revealed — everyone has a few seconds to study it</li>
             <li>Each player is assigned a specific <strong style="color:#ffeb3b;">part</strong> to draw from memory</li>
@@ -546,7 +546,7 @@ function rlStartGame() {
     if (!isRoomHost || !selectedGame) return;
     const pCount = Object.keys(otherPlayers).length;
     if (selectedGame === 'tacostealth' && pCount < 1) { showToast('Need at least 2 players to start'); return; }
-    if (selectedGame === 'strokeoff' && pCount < 2) { showToast('Need at least 3 players for Stroke Off'); return; }
+    if (selectedGame === 'strokeoff' && pCount < 2) { showToast('Need at least 3 players for MasterPieced'); return; }
     if (selectedGame === 'tacostealth') toggleSettingsModal(true);
     else if (selectedGame === 'strokeoff') soPickFakeAndStart();
 }
@@ -944,7 +944,7 @@ socket.on('pokeResult',({hit,name,pokesLeft,out})=>{
 socket.on('triggerPickleSlide',()=>{ isDead=true; deadAt=Date.now(); document.getElementById('modeBtn').innerText='💀 DEAD'; document.getElementById('modeBtn').style.background='#000'; updateUI(); });
 socket.on('loadMap',({dataUrl,name})=>{ const img=new Image(); img.onload=()=>setBackground(img,name); img.src=dataUrl; });
 
-function hiderDown(sx,sy){if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if((isPaint||tsEraseMode)&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=poses[currentIdx].cvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&!tsEraseMode&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
+function hiderDown(sx,sy){if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if(isPaint&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=poses[currentIdx].cvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
 function hiderMove(sx,sy){if(dragMode==='paint')paintAt(sx,sy);else if(dragMode==='blob')moveTo(sx,sy);else if(dragMode==='drop')dropTarget={x:sx,y:sy};else if(dragMode==='pan'){camera.x+=sx-panLast.x;camera.y+=sy-panLast.y;panLast={x:sx,y:sy};clampCamera();}}
 function hiderUp(){if(dragMode==='drop'&&dropTarget&&!isDead){pickColorAt(dropTarget.x,dropTarget.y);isPaint=true;isDrop=false;updateUI();}dragMode=null;dragFollowing=false;moveLast=null;paintLast=null;tsPaintingThisGesture=false;}
 
@@ -959,8 +959,8 @@ canvas.ontouchstart=(e)=>{if(e.touches.length===2){isPinch=true;dragMode=null;dr
 canvas.ontouchmove=(e)=>{if(isPinch&&e.touches.length===2){let t1=e.touches[0],t2=e.touches[1],dist=Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY),cx=(t1.clientX+t2.clientX)/2,cy=(t1.clientY+t2.clientY)/2,minS=fitScale(),maxS=Math.max(minS*8,2.5),s=Math.max(minS,Math.min(maxS,initialScale*(dist/initialDist))),sd=s/camera.scale;camera.x=cx-(cx-camera.x)*sd+(cx-lastPan.x);camera.y=cy-(cy-camera.y)*sd+(cy-lastPan.y);camera.scale=s;lastPan={x:cx,y:cy};clampCamera();return;}const t=e.touches[0];if(isDead)return;if(gamePhase==='SEEKING'&&meSeeker()){e.preventDefault();if(!seekerDown)return;if(!seekerDown.moved&&Math.hypot(t.clientX-seekerDown.x,t.clientY-seekerDown.y)>8)seekerDown.moved=true;if(seekerDown.moved){camera.x+=t.clientX-panLast.x;camera.y+=t.clientY-panLast.y;panLast={x:t.clientX,y:t.clientY};clampCamera();}}else if(isJoined){e.preventDefault();hiderMove(t.clientX,t.clientY);}};
 canvas.ontouchend=(e)=>{if(isPinch){if(e.touches.length<2)isPinch=false;return;}if(seekerDown){if(!seekerDown.moved)seekerPoke(seekerDown.x,seekerDown.y);seekerDown=null;}else if(isJoined)hiderUp();};
 
-let paintLast=null, tsEraseMode=false, tsUndoStack=[], tsPaintingThisGesture=false;
-function paintAt(sx,sy){const w=screenToWorld(sx,sy);const lx=w.x-player.x,ly=w.y-player.y;if(lx<0||ly<0||lx>playerSize||ly>playerSize){paintLast=null;return;}const p=poses[currentIdx].cvs.getContext('2d');const r=parseFloat(document.getElementById('brushSize').value);if(tsEraseMode){p.globalCompositeOperation='destination-out';p.strokeStyle='rgba(0,0,0,1)';p.fillStyle='rgba(0,0,0,1)';}else{p.globalCompositeOperation='source-over';p.fillStyle=activeColor;p.strokeStyle=activeColor;}p.lineWidth=r*2;p.lineCap='round';p.lineJoin='round';if(paintLast){p.beginPath();p.moveTo(paintLast.x,paintLast.y);p.lineTo(lx,ly);p.stroke();}p.beginPath();p.arc(lx,ly,r,0,7);p.fill();p.globalCompositeOperation='source-over';paintLast={x:lx,y:ly};scheduleAvatarSync();}
+let paintLast=null, tsUndoStack=[], tsPaintingThisGesture=false;
+function paintAt(sx,sy){const w=screenToWorld(sx,sy);const lx=w.x-player.x,ly=w.y-player.y;if(lx<0||ly<0||lx>playerSize||ly>playerSize){paintLast=null;return;}const p=poses[currentIdx].cvs.getContext('2d');const r=parseFloat(document.getElementById('brushSize').value);p.globalCompositeOperation='source-over';p.fillStyle=activeColor;p.strokeStyle=activeColor;p.lineWidth=r*2;p.lineCap='round';p.lineJoin='round';if(paintLast){p.beginPath();p.moveTo(paintLast.x,paintLast.y);p.lineTo(lx,ly);p.stroke();}p.beginPath();p.arc(lx,ly,r,0,7);p.fill();p.globalCompositeOperation='source-over';paintLast={x:lx,y:ly};scheduleAvatarSync();}
 function pickColorAt(sx,sy){const px=ctx.getImageData(sx,sy,1,1).data;let r=px[0]/255,g=px[1]/255,b=px[2]/255,max=Math.max(r,g,b),min=Math.min(r,g,b),h=0,s=0,l=(max+min)/2;if(max!==min){let d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);if(max===r)h=(g-b)/d+(g<b?6:0);else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h/=6;}cHue=Math.round(h*360);cSat=Math.round(s*100);cLight=Math.round(l*100);document.getElementById('brightnessSlider').value=cLight;applyColor();}
 function moveStart(sx,sy){moveLast={x:sx,y:sy};}
 function moveTo(sx,sy){if(!moveLast){moveLast={x:sx,y:sy};return;}player.x+=(sx-moveLast.x)/camera.scale;player.y+=(sy-moveLast.y)/camera.scale;moveLast={x:sx,y:sy};clampPlayerToSpace();}
@@ -968,8 +968,7 @@ function deadSlide(e){const t=Math.min(1,e/1200),ease=1-Math.pow(1-t,3),wob=Math
 function meSeeker(){return socket.id===seekerSocketId;}
 function findMe(){if(isJoined&&socket.id!==seekerSocketId){focusAvatar();selfFlashUntil=Date.now()+2000;}}
 function zoomWhole(){if(meSeeker())focusWholeSpace();}
-function updateUI(){if(!isDead){document.getElementById('modeBtn').innerText=isPaint?'🖌️ Paint':'✋ Move';document.getElementById('modeBtn').style.background=isPaint?'#e57373':'#333';document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';document.getElementById('eraseBtn').style.background=tsEraseMode?'#5c4300':'#333';document.getElementById('eraseBtn').style.color=tsEraseMode?'#ffc107':'#fff';}}
-function toggleErase(){if(isDead)return;tsEraseMode=!tsEraseMode;if(tsEraseMode){isPaint=true;isDrop=false;}updateUI();}
+function updateUI(){if(!isDead){document.getElementById('modeBtn').innerText=isPaint?'🖌️ Paint':'✋ Move';document.getElementById('modeBtn').style.background=isPaint?'#e57373':'#333';document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';}}
 function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();poses[currentIdx].cvs.getContext('2d').putImageData(snap,0,0);scheduleAvatarSync();}
 function drawNoSignal(){ctx.fillStyle='#0b0b14';ctx.fillRect(0,0,SPACE_W,SPACE_H);ctx.fillStyle='rgba(255,255,255,0.05)';for(let gx=0;gx<SPACE_W;gx+=40)ctx.fillRect(gx,0,1,SPACE_H);}
 function drawNoSignalHud(){if(bg)return;const cx=canvas.width/2,cy=canvas.height/2;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='rgba(255,255,255,0.55)';ctx.font='bold 48px monospace';ctx.fillText('NO SIGNAL',cx,cy-20);ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='18px monospace';ctx.fillText('Host: load a room photo in ⚙️ HOST',cx,cy+28);ctx.textBaseline='alphabetic';ctx.restore();}
@@ -1083,12 +1082,13 @@ let soDrawing = false, soLastPt = null;
 let soRevealHistory = null, soRevealPlayers = null, soRevealAnimInterval = null;
 
 // Canvas input — wired at init so they work regardless of which server event starts the round
-soCanvas.ontouchstart = (e) => { e.preventDefault(); soGestureId++; const pt = soPoint(e.touches[0]); soLastPt = pt; soEmitStroke(pt, pt); };
-soCanvas.ontouchmove  = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); if (soLastPt) soEmitStroke(soLastPt, pt); soLastPt = pt; };
-soCanvas.ontouchend   = () => { soLastPt = null; };
-soCanvas.onmousedown  = (e) => { soGestureId++; soLastPt = soPoint(e); soEmitStroke(soLastPt, soLastPt); };
-soCanvas.onmousemove  = (e) => { if (e.buttons !== 1 || !soLastPt) return; const pt = soPoint(e); soEmitStroke(soLastPt, pt); soLastPt = pt; };
-soCanvas.onmouseup    = () => { soLastPt = null; };
+soCanvas.ontouchstart = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); if (soEyedropMode) { soLoupeLastPt = pt; drawSOLoupe(pt); return; } soGestureId++; soLastPt = pt; soEmitStroke(pt, pt); };
+soCanvas.ontouchmove  = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); if (soEyedropMode) { soLoupeLastPt = pt; drawSOLoupe(pt); return; } if (soLastPt) soEmitStroke(soLastPt, pt); soLastPt = pt; };
+soCanvas.ontouchend   = () => { if (soEyedropMode) { if (soLoupeLastPt) { soPickColorFromCanvas(soLoupeLastPt); clearSOLoupe(); } soLoupeLastPt = null; soSetTool('pen'); return; } soLastPt = null; };
+soCanvas.onmousedown  = (e) => { const pt = soPoint(e); if (soEyedropMode) { soPickColorFromCanvas(pt); clearSOLoupe(); soLoupeLastPt = null; soSetTool('pen'); return; } soGestureId++; soLastPt = pt; soEmitStroke(soLastPt, soLastPt); };
+soCanvas.onmousemove  = (e) => { const pt = soPoint(e); if (soEyedropMode) { soLoupeLastPt = pt; drawSOLoupe(pt); return; } if (e.buttons !== 1 || !soLastPt) return; soEmitStroke(soLastPt, pt); soLastPt = pt; };
+soCanvas.onmouseup    = () => { if (!soEyedropMode) soLastPt = null; };
+soCanvas.onmouseleave = () => { if (soEyedropMode) clearSOLoupe(); };
 
 const SO_REF_H = 130; // height of painting reference strip (portrait)
 
@@ -1097,24 +1097,22 @@ function soResizeCanvas() {
     const strip = document.getElementById('so-ref-strip');
     const stripOn = strip && strip.style.display === 'block';
     let dispW, dispH;
-
     const hudEl = document.getElementById('so-hud-top');
+
     if (vw <= vh) {
-        // Portrait — reserve top for painting reference strip
+        // Portrait — canvas fills all space below the reference strip; HUD + toolbar overlay the canvas
         const refH = stripOn ? SO_REF_H : 0;
-        const hudH = 62;
-        const tbH  = 68;
-        const avail = Math.max(200, vh - refH - hudH - tbH);
-        dispW = Math.min(vw, Math.round(avail * 450 / 800));
-        dispH = Math.round(dispW * 800 / 450);
-        soCanvas.style.top = (refH + hudH) + 'px';
+        const avail = Math.max(200, vh - refH);
+        dispH = avail;
+        dispW = Math.round(dispH * 450 / 800);
+        if (dispW > vw) { dispW = vw; dispH = Math.round(dispW * 800 / 450); }
+        soCanvas.style.top = refH + 'px';
         soCanvas.style.transform = 'translateX(-50%)';
         if (strip) strip.style.height = refH + 'px';
-        // Move HUD into the gap between strip and canvas so it isn't hidden behind the strip
         if (hudEl) hudEl.style.top = stripOn ? (refH + 4) + 'px' : '';
     } else {
-        // Landscape / desktop — compact portrait canvas, centered
-        dispH = Math.min(vh * 0.9, 700);
+        // Landscape / desktop — tall portrait canvas centered
+        dispH = Math.min(vh * 0.95, 750);
         dispW = Math.round(dispH * 450 / 800);
         soCanvas.style.top = '50%';
         soCanvas.style.transform = 'translate(-50%, -50%)';
@@ -1125,12 +1123,57 @@ function soResizeCanvas() {
     soCanvas.style.height = dispH + 'px';
     soRevealCanvas.style.width  = dispW + 'px';
     soRevealCanvas.style.height = dispH + 'px';
+    // Sync loupe canvas position and size
+    const loupeEl = document.getElementById('so-loupe-canvas');
+    if (loupeEl) {
+        loupeEl.style.top = soCanvas.style.top;
+        loupeEl.style.transform = soCanvas.style.transform;
+        loupeEl.style.width  = dispW + 'px';
+        loupeEl.style.height = dispH + 'px';
+        loupeEl.width  = dispW;
+        loupeEl.height = dispH;
+    }
 }
 
 function soGetBrushSize() { return parseFloat(document.getElementById('so-brush-size').value) || 3; }
 document.getElementById('so-brush-size').addEventListener('input', (e) => {
     document.getElementById('so-brush-label').innerText = e.target.value + 'px';
 });
+
+function drawSOLoupe(canvasPt) {
+    const lc = document.getElementById('so-loupe-canvas');
+    if (!lc || !lc.width) return;
+    const lCtx = lc.getContext('2d');
+    lCtx.clearRect(0, 0, lc.width, lc.height);
+    const scX = lc.width / soCanvas.width, scY = lc.height / soCanvas.height;
+    const cx = canvasPt.x * scX, cy = canvasPt.y * scY;
+    const R = 55, srcR = 18;
+    const lx = Math.max(R + 4, Math.min(lc.width - R - 4, cx));
+    const ly = Math.max(R + 10, cy - R - 24);
+    lCtx.save(); lCtx.beginPath(); lCtx.arc(lx, ly, R, 0, 7); lCtx.clip();
+    lCtx.drawImage(soCanvas, canvasPt.x - srcR, canvasPt.y - srcR, srcR * 2, srcR * 2, lx - R, ly - R, R * 2, R * 2);
+    lCtx.restore();
+    lCtx.strokeStyle = '#fff'; lCtx.lineWidth = 2.5;
+    lCtx.beginPath(); lCtx.arc(lx, ly, R, 0, 7); lCtx.stroke();
+    lCtx.strokeStyle = 'rgba(255,60,60,0.9)'; lCtx.lineWidth = 1.5;
+    lCtx.beginPath(); lCtx.moveTo(lx - 9, ly); lCtx.lineTo(lx + 9, ly); lCtx.moveTo(lx, ly - 9); lCtx.lineTo(lx, ly + 9); lCtx.stroke();
+    lCtx.strokeStyle = 'rgba(255,255,255,0.35)'; lCtx.lineWidth = 1; lCtx.setLineDash([3, 3]);
+    lCtx.beginPath(); lCtx.moveTo(lx, ly + R); lCtx.lineTo(cx, cy); lCtx.stroke();
+    lCtx.setLineDash([]);
+}
+function clearSOLoupe() {
+    const lc = document.getElementById('so-loupe-canvas');
+    if (lc) lc.getContext('2d').clearRect(0, 0, lc.width, lc.height);
+}
+function soPickColorFromCanvas(pt) {
+    try {
+        const px = soCtx.getImageData(Math.round(pt.x), Math.round(pt.y), 1, 1).data;
+        let rv=px[0]/255,gv=px[1]/255,bv=px[2]/255,mx=Math.max(rv,gv,bv),mn=Math.min(rv,gv,bv),h=0,s=0,l=(mx+mn)/2;
+        if (mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);if(mx===rv)h=(gv-bv)/d+(gv<bv?6:0);else if(mx===gv)h=(bv-rv)/d+2;else h=(rv-gv)/d+4;h/=6;}
+        cHue=Math.round(h*360);cSat=Math.round(s*100);cLight=Math.round(l*100);
+        applyColor(); showToast('🎨 Color picked!');
+    } catch(e) { showToast('Could not pick color'); }
+}
 
 function soPickFakeAndStart() {
     const players = Object.values(otherPlayers);
@@ -1226,12 +1269,13 @@ function soPoint(e) {
     return { x: (e.clientX - r.left) * soCanvas.width / r.width, y: (e.clientY - r.top) * soCanvas.height / r.height };
 }
 
-let soEraseMode = false, soGestureId = 0;
+let soEyedropMode = false, soLoupeLastPt = null, soGestureId = 0;
 
 function soSetTool(tool) {
-    soEraseMode = (tool === 'erase');
-    document.getElementById('so-pen-btn').classList.toggle('active', !soEraseMode);
-    document.getElementById('so-erase-btn').classList.toggle('active', soEraseMode);
+    soEyedropMode = (tool === 'eyedrop');
+    document.getElementById('so-pen-btn').classList.toggle('active', !soEyedropMode);
+    const dropBtn = document.getElementById('so-eyedrop-btn'); if (dropBtn) dropBtn.classList.toggle('active', soEyedropMode);
+    if (!soEyedropMode) clearSOLoupe();
 }
 
 function soHostEnd() {
@@ -1283,9 +1327,8 @@ function soUndo() {
 function soEmitStroke(from, to) {
     if (!soDrawing) return;
     const size = soGetBrushSize();
-    const strokeColor = soEraseMode ? '#111' : activeColor;
-    soDrawLine(soCtx, from.x, from.y, to.x, to.y, strokeColor, size);
-    socket.emit('soStroke', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, color: strokeColor, size, gid: soGestureId });
+    soDrawLine(soCtx, from.x, from.y, to.x, to.y, activeColor, size);
+    socket.emit('soStroke', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, color: activeColor, size, gid: soGestureId });
 }
 
 function soDrawLine(c, x1, y1, x2, y2, color, size) {
@@ -1351,7 +1394,8 @@ socket.on('soVoteOpen', ({ players, prompt, emoji, timeLeft }) => {
 });
 
 socket.on('strokePhaseChange', ({ phase, timeLeft }) => {
-    if (phase === 'VOTE') { const el = document.getElementById('so-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+    if (phase === 'DRAWING') { const el = document.getElementById('so-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+    else if (phase === 'VOTE') { const el = document.getElementById('so-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
 });
 
 socket.on('soVoterUpdate', ({ voterNames }) => {
@@ -1402,6 +1446,9 @@ function soCleanup() {
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
     soRevealHistory = null; soRevealPlayers = null;
     soDrawing = false;
+    soEyedropMode = false; soLoupeLastPt = null; clearSOLoupe();
+    const dropBtn = document.getElementById('so-eyedrop-btn'); if (dropBtn) dropBtn.classList.remove('active');
+    const penBtn = document.getElementById('so-pen-btn'); if (penBtn) penBtn.classList.add('active');
 }
 
 function soReturnToLobby() {

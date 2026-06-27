@@ -207,6 +207,31 @@ const PAINTINGS = [
         imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg?width=900',
         parts: ['the Infanta Margarita (center)','the two ladies-in-waiting beside her','the large dog lying in the foreground','Velázquez at his easel (far left)','the mirror reflecting the king and queen','the open doorway with standing figure','the dwarfs and courtiers (right side)','the large dark paintings on the back wall'],
     },
+    {
+        title: 'The Last Supper', artist: 'Leonardo da Vinci · c.1495',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/The_Last_Supper_-_Leonardo_Da_Vinci_-_High_Resolution_32x16.jpg?width=900',
+        parts: ['Jesus at the center of the table','the three disciples at the far left','disciples leaning in left of center','Judas reaching for the bread (center-left)','the bread rolls and overturned salt cellar','disciples gesturing right of center','the three disciples at the far right','the arched ceiling and tapestried walls'],
+    },
+    {
+        title: 'The Creation of Adam', artist: 'Michelangelo · c.1512',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Michelangelo_-_Creation_of_Adam_(cropped).jpg?width=900',
+        parts: ['God\'s outstretched right arm','Adam\'s reaching left hand','the gap between the two fingers','God\'s flowing red cloak and wind','the cluster of angels surrounding God','Adam\'s reclining body','the barren rocky ledge Adam rests on','the swirling cloud silhouette around God'],
+    },
+    {
+        title: 'Impression, Sunrise', artist: 'Claude Monet · 1872',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Claude_Monet,_Impression,_soleil_levant.jpg?width=900',
+        parts: ['the bright orange sun on the horizon','the orange rippling reflection on water','the small rowboat in the foreground','the silhouetted figures in the boat','the industrial cranes and smokestacks','the misty blue-grey harbor sky','the hazy ghost ships in the background','the dark choppy foreground water'],
+    },
+    {
+        title: 'The Hay Wain', artist: 'John Constable · 1821',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/John_Constable_-_The_Hay_Wain_(National_Gallery_London).jpg?width=900',
+        parts: ['the hay wagon fording the river','the white farmhouse on the left bank','the small dog in the shallow water','the river and its calm reflections','the distant haymakers in the sunlit field','the large oak trees on the far left','the billowing white clouds and blue sky','the far-right trees and open pasture'],
+    },
+    {
+        title: 'The Milkmaid', artist: 'Johannes Vermeer · c.1658',
+        imageUrl: 'https://commons.wikimedia.org/wiki/Special:FilePath/Johannes_Vermeer_-_Het_melkmeisje_-_Rijksmuseum_Amsterdam_(cropped).jpg?width=900',
+        parts: ['her face and white linen cap','her hands and the pouring milk stream','the wicker basket and crusty bread loaves','her deep blue apron','her yellow bodice and rolled sleeves','the bare white plaster wall behind her','the window and its warm morning light','the foot warmer and blue-tile floor'],
+    },
 ];
 
 const MEMORIZE_SECONDS = 20;
