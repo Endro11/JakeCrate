@@ -92,6 +92,16 @@ function isHost(room, socket) {
     return socket.id === room.hostSocketId;
 }
 
+function transferHostIfNeeded(room) {
+    if (room.hostSocketId) return; // still has a host
+    const next = Object.keys(room.players)[0];
+    if (!next) return;
+    room.hostSocketId = next;
+    room.hostToken = room.players[next]?.token || next;
+    broadcastRoom(room, 'hostChanged', { hostSocketId: next });
+    console.log(`👑 Host transferred to ${room.players[next]?.name} in room ${room.code}`);
+}
+
 // ─── Taco Stealth game logic ──────────────────────────────────────────────────
 
 function ts_tallyScores(room) {
@@ -645,6 +655,39 @@ io.on('connection', (socket) => {
         console.log(`🦵 Host kicked ${targetId} from room ${room.code}`);
     });
 
+    socket.on('leaveRoom', () => {
+        const room = socketRoom(socket);
+        if (!room) return;
+        const name = room.players[socket.id]?.name || 'Someone';
+        socket.leave(room.code);
+        delete room.players[socket.id];
+        delete room.avatars[socket.id];
+        delete room.lastReactionTimes[socket.id];
+        if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
+        broadcastRoom(room, 'updatePlayers', room.players);
+        if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
+        transferHostIfNeeded(room);
+        broadcastGameState(room);
+        console.log(`👋 ${name} left room ${room.code}`);
+        if (Object.keys(room.players).length === 0) {
+            clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
+            delete rooms[room.code];
+        }
+    });
+
+    socket.on('closeRoom', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        broadcastRoom(room, 'roomClosed', {});
+        clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
+        Object.keys(room.players).forEach(id => {
+            const s = io.sockets.sockets.get(id);
+            if (s) s.leave(room.code);
+        });
+        delete rooms[room.code];
+        console.log(`🚪 Room ${room.code} closed by host`);
+    });
+
     // ── Disconnect ────────────────────────────────────────────────────────────
 
     socket.on('disconnect', () => {
@@ -657,12 +700,14 @@ io.on('connection', (socket) => {
             if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
         }
         if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
-        if (socket.id === room.hostSocketId) room.hostSocketId = null;
+        if (socket.id === room.hostSocketId) {
+            room.hostSocketId = null;
+            transferHostIfNeeded(room);
+        }
         delete room.lastReactionTimes[socket.id];
         delete room.avatars[socket.id];
         broadcastGameState(room);
 
-        // Clean up empty rooms
         if (Object.keys(room.players).length === 0) {
             clearInterval(room.gameTimer);
             clearTimeout(room.revealTimer);

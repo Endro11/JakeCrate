@@ -44,6 +44,11 @@
         #rl-start-btn { padding:10px 28px; font-weight:bold; font-size:0.9em; border:none; border-radius:20px; background:#c62828; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; display:none; }
         #rl-wait { font-family:monospace; color:#556; font-size:0.9em; text-align:center; }
         #rl-volunteer { background:#37474f; border:none; border-radius:10px; padding:12px 24px; color:#fff; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size:0.9em; }
+        #rl-room-actions { display:flex; gap:10px; justify-content:center; margin-top:4px; }
+        #rl-leave-btn { background:transparent; border:1px solid #2a3a55; border-radius:10px; padding:9px 18px; color:#556; font-size:0.82em; font-weight:bold; cursor:pointer; letter-spacing:1px; text-transform:uppercase; }
+        #rl-leave-btn:active { background:rgba(255,255,255,0.05); }
+        #rl-close-btn { background:transparent; border:1px solid #5a1a1a; border-radius:10px; padding:9px 18px; color:#c62828; font-size:0.82em; font-weight:bold; cursor:pointer; letter-spacing:1px; text-transform:uppercase; }
+        #rl-close-btn:active { background:rgba(198,40,40,0.1); }
 
         /* ── Shared game HUD ── */
         #monitor-hud { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:calc(12px + env(safe-area-inset-left)); display:flex; align-items:center; gap:8px; pointer-events:none; z-index:10; font-family:monospace; color:#fff; font-size:1em; text-shadow:2px 2px 2px #000; max-width:46vw; }
@@ -226,6 +231,10 @@
     <button id="rl-start-btn" onclick="rlStartGame()">🚀 START GAME</button>
     <div id="rl-wait">Waiting for the host to start…</div>
     <button id="rl-volunteer" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
+    <div id="rl-room-actions">
+        <button id="rl-leave-btn" onclick="leaveRoom()">← LEAVE ROOM</button>
+        <button id="rl-close-btn" onclick="closeRoom()" style="display:none;">✕ CLOSE ROOM</button>
+    </div>
     <div id="scoreboard" style="display:none;"><div id="score-list"></div></div>
     <div id="so-scoreboard" style="display:none;"><div id="so-score-list"></div></div>
     <div id="unified-scoreboard">
@@ -531,11 +540,46 @@ function pickGame(gameId) {
 
 function rlStartGame() {
     if (!isRoomHost || !selectedGame) return;
+    const pCount = Object.keys(otherPlayers).length;
+    if (selectedGame === 'tacostealth' && pCount < 1) { showToast('Need at least 2 players to start'); return; }
+    if (selectedGame === 'strokeoff' && pCount < 2) { showToast('Need at least 3 players for Stroke Off'); return; }
     if (selectedGame === 'tacostealth') toggleSettingsModal(true);
     else if (selectedGame === 'strokeoff') soPickFakeAndStart();
 }
 
 function kickPlayer(targetId) { socket.emit('kickPlayer', { targetId }); }
+
+function leaveRoom() {
+    socket.emit('leaveRoom');
+    soCleanup(); tsSkipRules();
+    hide('room-lobby');
+    document.getElementById('hub-screen').style.display = 'flex';
+    inRoom = false; isJoined = false; isRoomHost = false;
+    otherPlayers = {}; selectedGame = null;
+}
+
+function closeRoom() {
+    if (!isRoomHost) return;
+    if (!confirm('Close the room for everyone?')) return;
+    socket.emit('closeRoom');
+    leaveRoom();
+}
+
+socket.on('roomClosed', () => {
+    soCleanup(); tsSkipRules();
+    hide('room-lobby');
+    document.getElementById('hub-screen').style.display = 'flex';
+    inRoom = false; isJoined = false; isRoomHost = false;
+    otherPlayers = {}; selectedGame = null;
+    showToast('The host closed the room');
+});
+
+socket.on('hostChanged', ({ hostSocketId }) => {
+    const wasHost = isRoomHost;
+    isRoomHost = (hostSocketId === socket.id);
+    if (!wasHost && isRoomHost) showToast('👑 You are now the host');
+    renderRoomLobby();
+});
 
 socket.on('kicked', () => {
     soCleanup();
@@ -560,6 +604,7 @@ function renderRoomLobby() {
     document.getElementById('rl-wait').style.display = (canHost && selectedGame) ? 'none' : (canHost ? 'block' : 'block');
     document.getElementById('rl-wait').innerText = canHost ? (selectedGame ? '' : 'Pick a game above to start') : 'Waiting for the host to start…';
     document.getElementById('rl-volunteer').style.display = (isRoomHost || selectedGame !== 'tacostealth') ? 'none' : 'block';
+    document.getElementById('rl-close-btn').style.display = isRoomHost ? 'block' : 'none';
 
     document.querySelectorAll('.game-card:not(.soon)').forEach(el => el.classList.remove('selected'));
     if (selectedGame) {
@@ -915,7 +960,7 @@ function paintAt(sx,sy){const w=screenToWorld(sx,sy);const lx=w.x-player.x,ly=w.
 function pickColorAt(sx,sy){const px=ctx.getImageData(sx,sy,1,1).data;let r=px[0]/255,g=px[1]/255,b=px[2]/255,max=Math.max(r,g,b),min=Math.min(r,g,b),h=0,s=0,l=(max+min)/2;if(max!==min){let d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);if(max===r)h=(g-b)/d+(g<b?6:0);else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h/=6;}cHue=Math.round(h*360);cSat=Math.round(s*100);cLight=Math.round(l*100);document.getElementById('brightnessSlider').value=cLight;applyColor();}
 function moveStart(sx,sy){moveLast={x:sx,y:sy};}
 function moveTo(sx,sy){if(!moveLast){moveLast={x:sx,y:sy};return;}player.x+=(sx-moveLast.x)/camera.scale;player.y+=(sy-moveLast.y)/camera.scale;moveLast={x:sx,y:sy};clampPlayerToSpace();}
-function deadSlide(e){const t=Math.min(1,e/650),ease=1-Math.pow(1-t,3),wob=Math.sin(e/80)*(1-t)*5;return{x:wob,y:ease*48,rot:ease*0.5};}
+function deadSlide(e){const t=Math.min(1,e/1200),ease=1-Math.pow(1-t,3),wob=Math.sin(e/80)*(1-Math.min(1,e/600))*8;return{x:wob,y:ease*1500,rot:ease*1.5};}
 function meSeeker(){return socket.id===seekerSocketId;}
 function findMe(){if(isJoined&&socket.id!==seekerSocketId){focusAvatar();selfFlashUntil=Date.now()+2000;}}
 function zoomWhole(){if(meSeeker())focusWholeSpace();}
@@ -980,7 +1025,7 @@ function loop(){
     const active=poses[currentIdx],breath=isDead?1:1+Math.sin(Date.now()/1000)*0.004;
     const selfSlide=isDead?deadSlide(Date.now()-deadAt):{x:0,y:0,rot:0};
     const revealHead=gamePhase==='REVEAL';
-    const hideSelf=meSeeker()&&gamePhase==='SEEKING';
+    const hideSelf=meSeeker()&&(gamePhase==='HIDING'||gamePhase==='SEEKING');
 
     if(!hideSelf){
         ctx.save();ctx.translate(player.x+playerSize/2+selfSlide.x,player.y+playerSize/2+selfSlide.y);ctx.rotate(selfSlide.rot);ctx.scale(breath,breath);ctx.translate(-playerSize/2,-playerSize/2);
