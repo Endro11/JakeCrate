@@ -332,6 +332,7 @@
     <button id="rl-start-btn" onclick="rlStartGame()">🚀 START GAME</button>
     <div id="rl-wait">Waiting for the host to start…</div>
     <button id="rl-volunteer" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
+    <button id="rl-share-btn" onclick="shareRoom()" style="background:#1565c0;border:none;border-radius:10px;padding:11px 22px;color:#fff;font-size:0.88em;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;width:min(280px,88%);">📤 SHARE ROOM LINK</button>
     <div id="rl-room-actions">
         <button id="rl-leave-btn" onclick="leaveRoom()">← LEAVE ROOM</button>
         <button id="rl-close-btn" onclick="closeRoom()" style="display:none;">✕ CLOSE ROOM</button>
@@ -780,6 +781,20 @@ function rlStartGame() {
     else if (selectedGame === 'strokeoff') soPickFakeAndStart();
     else if (selectedGame === 'squiggle') socket.emit('sqStartGame');
     else if (selectedGame === 'pikpic') socket.emit('ppStartGame');
+}
+
+function shareRoom() {
+    const code = currentRoomCode;
+    if (!code) return;
+    const url = window.location.origin;
+    const text = `Join my JakeCrate room!\nRoom code: ${code}\n${url}`;
+    if (navigator.share) {
+        navigator.share({ title: 'JakeCrate', text }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(text).then(() => showToast('📋 Link copied — paste it in a text!')).catch(() => {
+            prompt('Copy this and send it:', text);
+        });
+    }
 }
 
 function kickPlayer(targetId) { socket.emit('kickPlayer', { targetId }); }
