@@ -413,6 +413,7 @@
         <div id="so-ref-part-label"></div>
     </div>
     <div id="so-toolbar">
+        <div id="so-color-swatch" onclick="toggleColorModal(true)" style="display:none;width:32px;height:28px;border:2px solid #fff;border-radius:6px;background:#ff0000;cursor:pointer;flex-shrink:0;box-shadow:0 0 5px rgba(0,0,0,0.5);"></div>
         <button class="so-tool-btn active" id="so-pen-btn" onclick="soSetTool('pen')">✏️ PEN</button>
         <button class="so-tool-btn" id="so-eyedrop-btn" onclick="soSetTool('eyedrop')">💧 PICK</button>
         <button class="so-tool-btn" onclick="soUndo()">↩</button>
@@ -1199,7 +1200,7 @@ wheelCvs.ontouchstart=(e)=>{e.preventDefault();updateColorFromMath(e.touches[0].
 wheelCvs.onmousedown=(e)=>{updateColorFromMath(e.clientX,e.clientY);};
 wheelCvs.onmousemove=(e)=>{if(e.buttons===1)updateColorFromMath(e.clientX,e.clientY);};
 document.getElementById('brightnessSlider').addEventListener('input',(e)=>{cLight=e.target.value;applyColor();drawWheel();});
-function applyColor(){activeColor=`hsl(${cHue},${cSat}%,${cLight}%)`;document.getElementById('colorSwatch').style.background=activeColor;}
+function applyColor(){activeColor=`hsl(${cHue},${cSat}%,${cLight}%)`;document.getElementById('colorSwatch').style.background=activeColor;const sc=document.getElementById('so-color-swatch');if(sc)sc.style.background=activeColor;}
 document.getElementById('brushSize').addEventListener('input',(e)=>{document.getElementById('brushLabel').innerText=e.target.value+'px';showBrushPreview=true;clearTimeout(brushPreviewTimeout);brushPreviewTimeout=setTimeout(()=>showBrushPreview=false,800);});
 document.getElementById('modeBtn').onclick=()=>{if(isDead)return;isPaint=!isPaint;isDrop=false;updateUI();};
 document.getElementById('eyedropperBtn').onclick=()=>{if(isDead)return;isDrop=true;isPaint=false;updateUI();};
@@ -1466,6 +1467,9 @@ socket.on('soBeginDrawing', ({ prompt, part }) => {
     document.getElementById('so-theme-text').innerText = prompt || '???';
     document.getElementById('so-theme-emoji').innerText = '🖼️';
     document.getElementById('so-part-text').innerText = part || '???';
+    document.getElementById('so-eyedrop-btn').style.display = '';
+    document.getElementById('so-color-swatch').style.display = 'none';
+    document.querySelector('.so-theme-box').style.whiteSpace = '';
     soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
     soGestureId = 0; soDrawing = true;
     soSetTool('pen');
@@ -1770,9 +1774,12 @@ socket.on('sqBeginDraw', ({ round, prompt, squiggle, timeLeft, byeThisRound }) =
     document.getElementById('so-screen').style.display = 'block';
     document.getElementById('so-ref-strip').style.display = 'none';
     document.getElementById('so-theme-text').innerText = prompt || '???';
-    document.getElementById('so-theme-emoji').innerText = '✏️';
+    document.getElementById('so-theme-emoji').innerText = '';
     document.getElementById('so-part-text').innerText = byeThisRound ? '👻 BYE this round!' : 'Work the squiggle in!';
     document.getElementById('so-host-end-btn').style.display = 'none';
+    document.getElementById('so-eyedrop-btn').style.display = 'none';
+    document.getElementById('so-color-swatch').style.display = 'block';
+    document.querySelector('.so-theme-box').style.whiteSpace = 'normal';
     soResizeCanvas();
     soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
     sqDrawSquiggle(soCtx, squiggle, soCanvas.width, soCanvas.height);
