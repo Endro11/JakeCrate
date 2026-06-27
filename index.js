@@ -58,6 +58,18 @@ function makeRoom(code) {
         strokePhase: 'LOBBY',
         soScores: {},           // name -> { name, correct, fakeWins }
         revealTimer: null,
+        // Stroke Off (squiggle) state
+        sqRound: 0,
+        sqPhase: 'LOBBY',
+        sqSquiggles: {},        // socketId -> [{x,y}×4]
+        sqMatchups: [],         // [{p1Id,p2Id,prompt,pointValue,winner,p1Votes,p2Votes}]
+        sqCurrentMatchup: 0,
+        sqHistories: {},        // socketId -> stroke array
+        sqScores: {},           // socketId -> accumulated points
+        sqVotes: {},            // socketId -> 'p1'|'p2'
+        sqByeId: null,
+        sqTimer: null,
+        sqTimeLeft: 0,
     };
 }
 
@@ -400,6 +412,177 @@ function so_returnToLobby(room) {
     }
 }
 
+// ─── Stroke Off (squiggle) game logic ─────────────────────────────────────────
+
+const SQ_DRAW_SECONDS = 75;
+
+const SQ_PROMPTS = [
+    "The world's worst pet",
+    "Something you'd find under a couch",
+    "A vehicle that should not exist",
+    "What aliens think humans do for fun",
+    "The worst superhero power",
+    "Something that woke you up at 3am",
+    "Your spirit animal (but ugly)",
+    "A food that sounds fake but isn't",
+    "The most suspicious cloud",
+    "Something you'd regret ordering online",
+    "A creature from the deep sea (make one up)",
+    "The worst possible birthday cake",
+    "Something you'd find in grandma's attic",
+    "A sport that deserves to be banned",
+    "The saddest thing at a carnival",
+    "A machine that solves a problem nobody has",
+    "What's inside a piñata from the dollar store",
+    "The last thing you'd want to find in your shoe",
+    "A logo for a business that will definitely fail",
+    "Something that would terrify a medieval peasant",
+    "The world's worst warning label",
+    "A pet that is technically legal but shouldn't be",
+    "Something you'd find in a wizard's trash can",
+    "The most dangerous fruit",
+    "What ghosts do when nobody's watching",
+];
+
+function generateSquiggle() {
+    const pts = [];
+    for (let i = 0; i < 4; i++) {
+        pts.push({ x: i * 0.28 + 0.08 + Math.random() * 0.08, y: 0.28 + Math.random() * 0.44 });
+    }
+    return pts;
+}
+
+function sq_seedMatchups(room) {
+    const pids = Object.keys(room.players).sort(() => Math.random() - 0.5);
+    const matchups = [];
+    for (let i = 0; i + 1 < pids.length; i += 2)
+        matchups.push({ p1Id: pids[i], p2Id: pids[i+1], winner: null, p1Votes: 0, p2Votes: 0 });
+    return { matchups, byeId: pids.length % 2 === 1 ? pids[pids.length-1] : null };
+}
+
+function sq_startRound(room, round) {
+    room.sqRound = round;
+    room.sqHistories = {};
+    room.sqVotes = {};
+    room.sqCurrentMatchup = 0;
+    room.sqPhase = 'DRAW';
+    room.sqSquiggles = {};
+    const { matchups, byeId } = sq_seedMatchups(room);
+    room.sqByeId = byeId;
+    const pointValue = round;
+
+    if (round === 1) {
+        const prompt = SQ_PROMPTS[Math.floor(Math.random() * SQ_PROMPTS.length)];
+        Object.keys(room.players).forEach(id => { room.sqSquiggles[id] = generateSquiggle(); });
+        room.sqMatchups = matchups.map(m => ({ ...m, prompt, pointValue }));
+        Object.keys(room.players).forEach(id => {
+            io.to(id).emit('sqBeginDraw', { round, prompt, squiggle: room.sqSquiggles[id], timeLeft: SQ_DRAW_SECONDS, byeThisRound: id === byeId });
+        });
+    } else if (round === 2) {
+        const usedPrompts = new Set();
+        room.sqMatchups = matchups.map(m => {
+            let prompt;
+            do { prompt = SQ_PROMPTS[Math.floor(Math.random() * SQ_PROMPTS.length)]; }
+            while (usedPrompts.has(prompt) && usedPrompts.size < SQ_PROMPTS.length);
+            usedPrompts.add(prompt);
+            const sq = generateSquiggle();
+            room.sqSquiggles[m.p1Id] = sq;
+            room.sqSquiggles[m.p2Id] = sq;
+            return { ...m, prompt, pointValue };
+        });
+        if (byeId) room.sqSquiggles[byeId] = generateSquiggle();
+        Object.keys(room.players).forEach(id => {
+            const m = room.sqMatchups.find(m => m.p1Id === id || m.p2Id === id);
+            io.to(id).emit('sqBeginDraw', { round, prompt: m ? m.prompt : SQ_PROMPTS[0], squiggle: room.sqSquiggles[id], timeLeft: SQ_DRAW_SECONDS, byeThisRound: id === byeId });
+        });
+    } else {
+        const prompt = SQ_PROMPTS[Math.floor(Math.random() * SQ_PROMPTS.length)];
+        const sq = generateSquiggle();
+        Object.keys(room.players).forEach(id => { room.sqSquiggles[id] = sq; });
+        room.sqMatchups = matchups.map(m => ({ ...m, prompt, pointValue }));
+        broadcastRoom(room, 'sqBeginDraw', { round, prompt, squiggle: sq, timeLeft: SQ_DRAW_SECONDS, byeThisRound: false });
+    }
+
+    if (byeId) room.sqScores[byeId] = (room.sqScores[byeId] || 0) + pointValue;
+
+    room.sqTimeLeft = SQ_DRAW_SECONDS;
+    room.sqTimer = setInterval(() => {
+        room.sqTimeLeft--;
+        broadcastRoom(room, 'sqTimer', { timeLeft: room.sqTimeLeft, phase: 'DRAW' });
+        if (room.sqTimeLeft <= 0) { clearInterval(room.sqTimer); sq_beginBattle(room); }
+    }, 1000);
+}
+
+function sq_beginBattle(room) {
+    room.sqPhase = 'BATTLE';
+    room.sqCurrentMatchup = 0;
+    sq_nextMatchup(room);
+}
+
+function sq_nextMatchup(room) {
+    if (room.sqCurrentMatchup >= room.sqMatchups.length) { sq_endRound(room); return; }
+    const m = room.sqMatchups[room.sqCurrentMatchup];
+    const p1 = room.players[m.p1Id], p2 = room.players[m.p2Id];
+    broadcastRoom(room, 'sqBattleBegin', {
+        matchupIdx: room.sqCurrentMatchup,
+        round: room.sqRound,
+        pointValue: m.pointValue,
+        prompt: m.prompt,
+        total: room.sqMatchups.length,
+        p1: { id: m.p1Id, name: p1 ? p1.name : '?', color: p1 ? p1.color : '#fff', history: room.sqHistories[m.p1Id] || [], squiggle: room.sqSquiggles[m.p1Id] },
+        p2: { id: m.p2Id, name: p2 ? p2.name : '?', color: p2 ? p2.color : '#fff', history: room.sqHistories[m.p2Id] || [], squiggle: room.sqSquiggles[m.p2Id] },
+    });
+    room.sqTimer = setTimeout(() => sq_openVoting(room), 10000);
+}
+
+function sq_openVoting(room) {
+    room.sqVotes = {};
+    let t = 8;
+    broadcastRoom(room, 'sqVoteOpen', { timeLeft: t });
+    room.sqTimer = setInterval(() => {
+        t--;
+        broadcastRoom(room, 'sqTimer', { timeLeft: t, phase: 'VOTE' });
+        if (t <= 0) { clearInterval(room.sqTimer); sq_resolveMatchup(room); }
+    }, 1000);
+}
+
+function sq_resolveMatchup(room) {
+    clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
+    const m = room.sqMatchups[room.sqCurrentMatchup];
+    let p1Votes = 0, p2Votes = 0;
+    Object.values(room.sqVotes).forEach(v => { if (v === 'p1') p1Votes++; else if (v === 'p2') p2Votes++; });
+    m.p1Votes = p1Votes; m.p2Votes = p2Votes;
+    let winnerId = null;
+    if (p1Votes > p2Votes) { winnerId = m.p1Id; m.winner = 'p1'; }
+    else if (p2Votes > p1Votes) { winnerId = m.p2Id; m.winner = 'p2'; }
+    if (winnerId) room.sqScores[winnerId] = (room.sqScores[winnerId] || 0) + m.pointValue;
+    broadcastRoom(room, 'sqMatchupResult', { matchupIdx: room.sqCurrentMatchup, winnerId, p1Votes, p2Votes, pointValue: m.pointValue, scores: room.sqScores });
+    room.sqCurrentMatchup++;
+    room.sqTimer = setTimeout(() => sq_nextMatchup(room), 3000);
+}
+
+function sq_endRound(room) {
+    room.sqPhase = 'ROUND_END';
+    const isLast = room.sqRound >= 3;
+    const playerMap = {};
+    Object.values(room.players).forEach(p => { playerMap[p.id] = { name: p.name, color: p.color }; });
+    broadcastRoom(room, 'sqRoundEnd', { round: room.sqRound, scores: room.sqScores, players: playerMap, final: isLast });
+    if (isLast) {
+        room.sqTimer = setTimeout(() => sq_returnToLobby(room), 12000);
+    } else {
+        room.sqTimer = setTimeout(() => sq_startRound(room, room.sqRound + 1), 6000);
+    }
+}
+
+function sq_returnToLobby(room) {
+    clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
+    room.sqPhase = 'LOBBY'; room.sqRound = 0; room.sqSquiggles = {};
+    room.sqMatchups = []; room.sqHistories = {}; room.sqVotes = {};
+    room.sqCurrentMatchup = 0; room.sqByeId = null; room.sqTimeLeft = 0;
+    room.gamePhase = 'LOBBY';
+    broadcastGameState(room);
+}
+
 // ─── Socket connections ────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
@@ -716,6 +899,51 @@ io.on('connection', (socket) => {
         so_returnToLobby(room);
     });
 
+    // ── Stroke Off (squiggle) events ──────────────────────────────────────────
+
+    socket.on('sqStartGame', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        room.selectedGame = 'squiggle';
+        room.gamePhase = 'PLAYING';
+        room.gameVotes = {};
+        room.sqScores = {};
+        sq_startRound(room, 1);
+    });
+
+    socket.on('sqStroke', (stroke) => {
+        const room = socketRoom(socket);
+        if (!room || room.sqPhase !== 'DRAW') return;
+        if (!room.sqHistories[socket.id]) room.sqHistories[socket.id] = [];
+        const s = { socketId: socket.id, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2, color: stroke.color, size: stroke.size, t: Date.now(), gid: stroke.gid || 0 };
+        room.sqHistories[socket.id].push(s);
+    });
+
+    socket.on('sqUndo', ({ gid }) => {
+        const room = socketRoom(socket);
+        if (!room || room.sqPhase !== 'DRAW' || !room.sqHistories[socket.id]) return;
+        room.sqHistories[socket.id] = room.sqHistories[socket.id].filter(s => s.gid !== gid);
+        io.to(socket.id).emit('sqRedraw', { history: room.sqHistories[socket.id], squiggle: room.sqSquiggles[socket.id] });
+    });
+
+    socket.on('sqVote', ({ matchupIdx, choice }) => {
+        const room = socketRoom(socket);
+        if (!room || room.sqPhase !== 'BATTLE' || room.sqVotes[socket.id]) return;
+        if (matchupIdx !== room.sqCurrentMatchup) return;
+        if (choice !== 'p1' && choice !== 'p2') return;
+        room.sqVotes[socket.id] = choice;
+        if (Object.keys(room.sqVotes).length >= Object.keys(room.players).length) {
+            clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
+            sq_resolveMatchup(room);
+        }
+    });
+
+    socket.on('sqReturnToLobby', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        sq_returnToLobby(room);
+    });
+
     socket.on('kickPlayer', ({ targetId }) => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
@@ -751,6 +979,7 @@ io.on('connection', (socket) => {
         console.log(`👋 ${name} left room ${room.code}`);
         if (Object.keys(room.players).length === 0) {
             clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
+            clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
             delete rooms[room.code];
         }
     });
@@ -793,6 +1022,7 @@ io.on('connection', (socket) => {
         if (Object.keys(room.players).length === 0) {
             clearInterval(room.gameTimer);
             clearTimeout(room.revealTimer);
+            clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
             delete rooms[room.code];
             console.log(`🗑️  Room ${room.code} removed (empty)`);
         }
