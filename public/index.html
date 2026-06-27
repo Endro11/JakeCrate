@@ -140,7 +140,10 @@
         .kick-btn { background:none !important; border:none !important; color:#e57373 !important; cursor:pointer; padding:0 4px !important; font-size:0.8em !important; font-weight:bold; flex-grow:0 !important; min-width:0 !important; opacity:0.7; }
         .kick-btn:hover { opacity:1; }
         #so-screen { display:none; position:absolute; inset:0; z-index:45; background:#050508; overflow:hidden; }
-        #so-canvas { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#111; touch-action:none; cursor:crosshair; }
+        #so-canvas { position:absolute; left:50%; background:#111; touch-action:none; cursor:crosshair; }
+        #so-ref-strip { display:none; position:absolute; top:0; left:0; right:0; overflow:hidden; background:#080810; border-bottom:1px solid #1a2030; z-index:2; }
+        #so-ref-img { width:100%; height:100%; object-fit:contain; display:block; cursor:crosshair; }
+        #so-ref-part-label { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.88); color:#ffeb3b; font-size:0.72em; font-weight:bold; text-align:center; padding:3px 10px 4px; text-transform:uppercase; letter-spacing:0.5px; pointer-events:none; }
         #so-hud-top { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; pointer-events:none; padding:0 12px; color:#fff; }
         .so-theme-box { background:rgba(5,5,10,0.85); border:1px solid #444; border-radius:8px; padding:6px 16px; font-size:1em; font-weight:bold; letter-spacing:1px; text-align:center; white-space:nowrap; max-width:90vw; overflow:hidden; text-overflow:ellipsis; }
         .so-part-box { background:rgba(255,235,59,0.1); border:1px solid rgba(255,235,59,0.35); border-radius:8px; padding:4px 14px; font-size:0.82em; color:#ffeb3b; font-family:monospace; letter-spacing:1px; text-align:center; }
@@ -158,8 +161,6 @@
         .rules-list li::before { content:'▸'; position:absolute; left:0; color:#5a8fcf; }
         .rules-skip-btn { background:#1e5fa0; color:#fff; border:none; border-radius:10px; padding:13px; font-size:0.95em; font-weight:bold; letter-spacing:1px; cursor:pointer; text-transform:uppercase; }
         .rules-skip-btn:active { background:#1565c0; }
-        #so-draw-thumb { position:absolute; bottom:calc(78px + env(safe-area-inset-bottom)); right:calc(8px + env(safe-area-inset-right)); width:72px; border-radius:6px; border:2px solid #333; cursor:crosshair; z-index:3; display:none; box-shadow:0 2px 10px rgba(0,0,0,0.7); touch-action:none; }
-        #so-draw-thumb:active { border-color:#4fa3ff; }
         #so-host-end-btn { display:none; position:absolute; top:calc(10px + env(safe-area-inset-top)); left:calc(10px + env(safe-area-inset-left)); background:rgba(120,20,20,0.85); border:1px solid #c62828; border-radius:8px; color:#ff8a80; font-size:0.78em; font-weight:bold; padding:6px 12px; letter-spacing:1px; cursor:pointer; z-index:4; text-transform:uppercase; }
         #ts-rules-overlay { position:fixed; z-index:90; }
         @media (min-width: 600px) {
@@ -362,7 +363,10 @@
     </div>
     <div id="so-timer">60</div>
     <button id="so-host-end-btn" onclick="soHostEnd()">⏹ END ROUND</button>
-    <img id="so-draw-thumb" src="" crossorigin="anonymous" alt="" onclick="soPickFromThumb(event)">
+    <div id="so-ref-strip">
+        <img id="so-ref-img" src="" crossorigin="anonymous" alt="" onclick="soPickFromThumb(event)">
+        <div id="so-ref-part-label"></div>
+    </div>
     <div id="so-toolbar">
         <button class="so-tool-btn active" id="so-pen-btn" onclick="soSetTool('pen')">✏️ PEN</button>
         <button class="so-tool-btn" id="so-erase-btn" onclick="soSetTool('erase')">◻ ERASE</button>
@@ -1086,19 +1090,38 @@ soCanvas.onmousedown  = (e) => { soGestureId++; soLastPt = soPoint(e); soEmitStr
 soCanvas.onmousemove  = (e) => { if (e.buttons !== 1 || !soLastPt) return; const pt = soPoint(e); soEmitStroke(soLastPt, pt); soLastPt = pt; };
 soCanvas.onmouseup    = () => { soLastPt = null; };
 
+const SO_REF_H = 130; // height of painting reference strip (portrait)
+
 function soResizeCanvas() {
     const vw = window.innerWidth, vh = window.innerHeight;
+    const strip = document.getElementById('so-ref-strip');
+    const stripOn = strip && strip.style.display !== 'none';
     let dispW, dispH;
+
     if (vw <= vh) {
-        // Portrait — canvas fills the full screen; HUD overlays on top
-        dispW = vw; dispH = vh;
+        // Portrait — reserve top for painting reference strip
+        const refH = stripOn ? SO_REF_H : 0;
+        const hudH = 62;   // so-hud-top height estimate
+        const tbH  = 68;   // toolbar + safe-area estimate
+        const avail = Math.max(200, vh - refH - hudH - tbH);
+        dispW = Math.min(vw, Math.round(avail * 450 / 800));
+        dispH = Math.round(dispW * 800 / 450);
+        soCanvas.style.top = (refH + hudH) + 'px';
+        soCanvas.style.transform = 'translateX(-50%)';
+        if (strip) strip.style.height = refH + 'px';
     } else {
-        // Landscape / desktop — compact portrait canvas, height-constrained
+        // Landscape / desktop — compact portrait canvas, centered
         dispH = Math.min(vh * 0.9, 700);
         dispW = Math.round(dispH * 450 / 800);
+        soCanvas.style.top = '50%';
+        soCanvas.style.transform = 'translate(-50%, -50%)';
+        // Strip sits above canvas on landscape too; keep it narrow so it clears the canvas top edge
+        if (strip) strip.style.height = stripOn ? '90px' : '0';
     }
-    soCanvas.style.width = dispW + 'px'; soCanvas.style.height = dispH + 'px';
-    soRevealCanvas.style.width = dispW + 'px'; soRevealCanvas.style.height = dispH + 'px';
+    soCanvas.style.width  = dispW + 'px';
+    soCanvas.style.height = dispH + 'px';
+    soRevealCanvas.style.width  = dispW + 'px';
+    soRevealCanvas.style.height = dispH + 'px';
 }
 
 function soGetBrushSize() { return parseFloat(document.getElementById('so-brush-size').value) || 3; }
@@ -1160,11 +1183,17 @@ socket.on('soBeginDrawing', ({ prompt, part }) => {
     soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
     soGestureId = 0; soDrawing = true;
     soSetTool('pen');
+    // Painting reference strip
+    if (soCurrentPaintingUrl) {
+        const strip = document.getElementById('so-ref-strip');
+        document.getElementById('so-ref-img').src = soCurrentPaintingUrl;
+        const isFake = part === '???';
+        document.getElementById('so-ref-part-label').innerText = isFake
+            ? '??? — you are THE FAKE — blend in!'
+            : `your part: ${part}`;
+        strip.style.display = 'block';
+    }
     soResizeCanvas();
-    // Thumbnail
-    const thumb = document.getElementById('so-draw-thumb');
-    if (soCurrentPaintingUrl) { thumb.src = soCurrentPaintingUrl; thumb.style.display = 'block'; }
-    // Host end-round button
     if (isRoomHost) document.getElementById('so-host-end-btn').style.display = 'block';
 });
 
@@ -1210,7 +1239,7 @@ function soHostEnd() {
 }
 
 function soPickFromThumb(e) {
-    const thumb = document.getElementById('so-draw-thumb');
+    const thumb = e.currentTarget;
     const r = thumb.getBoundingClientRect();
     const nx = (e.clientX - r.left) / r.width;
     const ny = (e.clientY - r.top) / r.height;
@@ -1350,7 +1379,10 @@ function soCleanup() {
     hide('so-vote-screen'); hide('so-reveal-screen'); hide('so-screen');
     document.getElementById('so-memorize-screen').style.display = 'none';
     soSkipRules();
-    document.getElementById('so-draw-thumb').style.display = 'none';
+    const strip = document.getElementById('so-ref-strip');
+    strip.style.display = 'none'; strip.style.height = '0';
+    // Reset canvas to centered for reveal screen next time
+    soCanvas.style.top = '50%'; soCanvas.style.transform = 'translate(-50%,-50%)';
     document.getElementById('so-host-end-btn').style.display = 'none';
     clearInterval(soMemTimer); soMemTimer = null;
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
