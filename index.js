@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 1e7 });
+const io = new Server(server, { maxHttpBufferSize: 5e7 }); // 50MB for photo uploads
 
 app.use(express.static('public'));
 
@@ -70,6 +70,22 @@ function makeRoom(code) {
         sqByeId: null,
         sqTimer: null,
         sqTimeLeft: 0,
+        // PikPic state
+        ppPhase: 'LOBBY',
+        ppPlayerPhotos: {},
+        ppReady: {},
+        ppDeck: [],
+        ppHands: {},
+        ppRound: 0,
+        ppStorytellerId: null,
+        ppStorytellerIds: [],
+        ppClue: null,
+        ppTable: [],
+        ppVotes: {},
+        ppSubUsed: {},
+        ppScores: {},
+        ppTimer: null,
+        ppTimeLeft: 0,
     };
 }
 
@@ -583,6 +599,230 @@ function sq_returnToLobby(room) {
     broadcastGameState(room);
 }
 
+// ─── PikPic game logic ────────────────────────────────────────────────────────────
+
+const PP_CLUE_SECONDS   = 60;
+const PP_SUBMIT_SECONDS = 60;
+const PP_VOTE_SECONDS   = 30;
+const PP_RESULT_SECONDS = 10;
+
+const PP_CURATED = [
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat_03.jpg/320px-Cat_03.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Collage_of_Nine_Dogs.jpg/320px-Collage_of_Nine_Dogs.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Sleeping_cat_on_her_back.jpg/320px-Sleeping_cat_on_her_back.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Culinary_fruits_front_view.jpg/320px-Culinary_fruits_front_view.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Hausziege_04.jpg/320px-Hausziege_04.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Stonehenge.jpg/320px-Stonehenge.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Camponotus_flavomarginatus_ant.jpg/320px-Camponotus_flavomarginatus_ant.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Good_Food_Display_-_NCI_Visuals_Online.jpg/320px-Good_Food_Display_-_NCI_Visuals_Online.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/320px-A_small_cup_of_coffee.JPG',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Biho_szczecin.jpg/320px-Biho_szczecin.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Gatto_europeo4.jpg/320px-Gatto_europeo4.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/320px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Wikispecies-logo.svg/240px-Wikispecies-logo.svg.png',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Big_Buck_Bunny_thumbnail_vlc.png/320px-Big_Buck_Bunny_thumbnail_vlc.png',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Image_created_with_a_mobile_phone.png/320px-Image_created_with_a_mobile_phone.png',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Felis_silvestris_silvestris_small_gradual_decrease.png/320px-Felis_silvestris_silvestris_small_gradual_decrease.png',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Simple_english_wiki.png/320px-Simple_english_wiki.png',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Cute_dog.jpg/320px-Cute_dog.jpg',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/320px-No_image_available.svg.png',
+];
+
+let ppCardCounter = 0;
+function ppMakeCardId() { return 'pp' + (++ppCardCounter) + '_' + Date.now(); }
+
+function pp_startGame(room) {
+    room.ppPhase = 'UPLOAD';
+    room.ppPlayerPhotos = {}; room.ppReady = {}; room.ppDeck = []; room.ppHands = {};
+    room.ppRound = 0; room.ppStorytellerIds = []; room.ppStorytellerId = null;
+    room.ppClue = null; room.ppTable = []; room.ppVotes = {};
+    room.ppSubUsed = {}; room.ppScores = {};
+    room.gamePhase = 'PLAYING'; room.gameVotes = {};
+    Object.keys(room.players).forEach(id => {
+        room.ppPlayerPhotos[id] = []; room.ppReady[id] = false; room.ppSubUsed[id] = false;
+    });
+    broadcastRoom(room, 'ppUploadPhase', {
+        players: Object.values(room.players).map(p => ({ id: p.id, name: p.name })),
+        curatedPhotos: PP_CURATED,
+    });
+}
+
+function pp_broadcastUploadProgress(room) {
+    const readyIds = Object.keys(room.ppReady).filter(id => room.ppReady[id]);
+    broadcastRoom(room, 'ppUploadProgress', {
+        readyCount: readyIds.length,
+        totalCount: Object.keys(room.players).length,
+        readyPlayers: readyIds.map(id => room.players[id]?.name).filter(Boolean),
+    });
+}
+
+function pp_dealCards(room) {
+    const pool = [];
+    Object.entries(room.ppPlayerPhotos).forEach(([ownerId, photos]) => {
+        photos.forEach(photoUrl => pool.push({ cardId: ppMakeCardId(), photoUrl, ownerId }));
+    });
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const playerIds = Object.keys(room.players);
+    room.ppHands = {};
+    playerIds.forEach(id => { room.ppHands[id] = []; });
+    let idx = 0;
+    for (let card = 0; card < 4; card++) {
+        playerIds.forEach(id => { if (idx < pool.length) room.ppHands[id].push(pool[idx++]); });
+    }
+    room.ppDeck = pool.slice(idx);
+    const shuffled = [...playerIds].sort(() => Math.random() - 0.5);
+    room.ppStorytellerIds = [0, 1, 2].map(i => shuffled[i % shuffled.length]);
+    pp_startRound(room, 1);
+}
+
+function pp_startRound(room, round) {
+    room.ppRound = round; room.ppPhase = 'CLUE';
+    room.ppStorytellerId = room.ppStorytellerIds[round - 1];
+    room.ppClue = null; room.ppTable = []; room.ppVotes = {};
+    clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
+    Object.keys(room.players).forEach(id => {
+        io.to(id).emit('ppRoundStart', {
+            round, totalRounds: 3,
+            storytellerId: room.ppStorytellerId,
+            storytellerName: room.players[room.ppStorytellerId]?.name || '?',
+            hand: room.ppHands[id] || [],
+            ppScores: room.ppScores,
+            players: Object.values(room.players).map(p => ({ id: p.id, name: p.name })),
+            subUsed: room.ppSubUsed[id] || false,
+            timeLeft: PP_CLUE_SECONDS,
+        });
+    });
+    room.ppTimeLeft = PP_CLUE_SECONDS;
+    room.ppTimer = setInterval(() => {
+        room.ppTimeLeft--;
+        broadcastRoom(room, 'ppTimer', { timeLeft: room.ppTimeLeft, phase: 'CLUE' });
+        if (room.ppTimeLeft <= 0) {
+            clearInterval(room.ppTimer);
+            const hand = room.ppHands[room.ppStorytellerId] || [];
+            if (!room.ppClue && hand.length > 0) pp_receiveClue(room, room.ppStorytellerId, hand[0].cardId, '...');
+        }
+    }, 1000);
+}
+
+function pp_receiveClue(room, socketId, cardId, clue) {
+    clearInterval(room.ppTimer);
+    room.ppClue = clue;
+    const hand = room.ppHands[socketId] || [];
+    const cardIdx = hand.findIndex(c => c.cardId === cardId);
+    if (cardIdx === -1) return;
+    const card = hand.splice(cardIdx, 1)[0];
+    room.ppTable.push({ ...card, submitterId: socketId });
+    room.ppPhase = 'SUBMIT';
+    broadcastRoom(room, 'ppClueSet', {
+        clue, storytellerId: room.ppStorytellerId,
+        storytellerName: room.players[room.ppStorytellerId]?.name || '?',
+    });
+    room.ppTimeLeft = PP_SUBMIT_SECONDS;
+    room.ppTimer = setInterval(() => {
+        room.ppTimeLeft--;
+        broadcastRoom(room, 'ppTimer', { timeLeft: room.ppTimeLeft, phase: 'SUBMIT' });
+        if (room.ppTimeLeft <= 0) { clearInterval(room.ppTimer); pp_openVoting(room); }
+    }, 1000);
+}
+
+function pp_submitCard(room, socketId, cardId) {
+    if (socketId === room.ppStorytellerId) return;
+    if (room.ppTable.some(c => c.submitterId === socketId)) return;
+    const hand = room.ppHands[socketId] || [];
+    const cardIdx = hand.findIndex(c => c.cardId === cardId);
+    if (cardIdx === -1) return;
+    const card = hand.splice(cardIdx, 1)[0];
+    room.ppTable.push({ ...card, submitterId: socketId });
+    const total = Object.keys(room.players).length;
+    broadcastRoom(room, 'ppSubmissionCount', { submitted: room.ppTable.length, total });
+    if (room.ppTable.length >= total) { clearInterval(room.ppTimer); pp_openVoting(room); }
+}
+
+function pp_openVoting(room) {
+    clearInterval(room.ppTimer);
+    room.ppPhase = 'VOTE'; room.ppVotes = {};
+    const shuffled = [...room.ppTable].sort(() => Math.random() - 0.5);
+    broadcastRoom(room, 'ppVotePhase', {
+        clue: room.ppClue,
+        cards: shuffled.map(c => ({ cardId: c.cardId, photoUrl: c.photoUrl })),
+        storytellerId: room.ppStorytellerId,
+        timeLeft: PP_VOTE_SECONDS,
+    });
+    room.ppTimeLeft = PP_VOTE_SECONDS;
+    room.ppTimer = setInterval(() => {
+        room.ppTimeLeft--;
+        broadcastRoom(room, 'ppTimer', { timeLeft: room.ppTimeLeft, phase: 'VOTE' });
+        if (room.ppTimeLeft <= 0) { clearInterval(room.ppTimer); pp_resolveVotes(room); }
+    }, 1000);
+}
+
+function pp_resolveVotes(room) {
+    clearInterval(room.ppTimer);
+    room.ppPhase = 'RESULT';
+    const storytellerCard = room.ppTable.find(c => c.submitterId === room.ppStorytellerId);
+    const votesPerCard = {};
+    Object.entries(room.ppVotes).forEach(([vid, cid]) => {
+        if (!votesPerCard[cid]) votesPerCard[cid] = [];
+        votesPerCard[cid].push(vid);
+    });
+    const correctVoters = votesPerCard[storytellerCard?.cardId] || [];
+    const nonStorytellers = Object.keys(room.players).filter(id => id !== room.ppStorytellerId);
+    const allGuessed = correctVoters.length === nonStorytellers.length;
+    const noneGuessed = correctVoters.length === 0;
+
+    const roundScores = {};
+    Object.keys(room.players).forEach(id => { roundScores[id] = 0; });
+    if (allGuessed || noneGuessed) {
+        nonStorytellers.forEach(id => { roundScores[id] = (roundScores[id] || 0) + 2; });
+    } else {
+        roundScores[room.ppStorytellerId] = (roundScores[room.ppStorytellerId] || 0) + 3;
+        correctVoters.forEach(vid => { roundScores[vid] = (roundScores[vid] || 0) + 3; });
+    }
+    Object.entries(votesPerCard).forEach(([cid, voters]) => {
+        if (cid === storytellerCard?.cardId) return;
+        const card = room.ppTable.find(c => c.cardId === cid);
+        if (card) roundScores[card.submitterId] = (roundScores[card.submitterId] || 0) + voters.length;
+    });
+    Object.entries(roundScores).forEach(([id, pts]) => {
+        const name = room.players[id]?.name; if (!name) return;
+        if (!room.ppScores[name]) room.ppScores[name] = 0;
+        room.ppScores[name] += pts;
+    });
+    Object.keys(room.players).forEach(id => {
+        if (room.ppDeck.length > 0) {
+            if (!room.ppHands[id]) room.ppHands[id] = [];
+            room.ppHands[id].push(room.ppDeck.shift());
+        }
+    });
+    const isLastRound = room.ppRound >= 3;
+    broadcastRoom(room, 'ppRoundResult', {
+        storytellerId: room.ppStorytellerId,
+        storytellerCardId: storytellerCard?.cardId,
+        clue: room.ppClue, cards: room.ppTable,
+        votesPerCard, roundScores, ppScores: room.ppScores,
+        players: Object.values(room.players).map(p => ({ id: p.id, name: p.name })),
+        allGuessed, noneGuessed, isLastRound,
+    });
+    if (isLastRound) {
+        room.ppTimer = setTimeout(() => pp_returnToLobby(room), 15000);
+    } else {
+        room.ppTimer = setTimeout(() => pp_startRound(room, room.ppRound + 1), PP_RESULT_SECONDS * 1000);
+    }
+}
+
+function pp_returnToLobby(room) {
+    clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
+    room.ppPhase = 'LOBBY'; room.ppDeck = []; room.ppHands = {}; room.ppRound = 0;
+    room.ppStorytellerId = null; room.ppStorytellerIds = [];
+    room.ppClue = null; room.ppTable = []; room.ppVotes = {};
+    room.ppPlayerPhotos = {}; room.ppReady = {}; room.ppSubUsed = {};
+    room.gamePhase = 'LOBBY';
+    broadcastGameState(room);
+}
+
 // ─── Socket connections ────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
@@ -944,6 +1184,94 @@ io.on('connection', (socket) => {
         sq_returnToLobby(room);
     });
 
+    // ── PikPic events ─────────────────────────────────────────────────────────
+
+    socket.on('ppStartGame', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        room.selectedGame = 'pikpic';
+        pp_startGame(room);
+    });
+
+    socket.on('ppUploadPhotos', ({ photos }) => {
+        const room = socketRoom(socket);
+        if (!room || room.ppPhase !== 'UPLOAD') return;
+        if (!Array.isArray(photos) || photos.length !== 7) return;
+        room.ppPlayerPhotos[socket.id] = photos;
+        room.ppReady[socket.id] = true;
+        pp_broadcastUploadProgress(room);
+        const totalCount = Object.keys(room.players).length;
+        const readyCount = Object.values(room.ppReady).filter(Boolean).length;
+        if (readyCount >= totalCount) pp_dealCards(room);
+    });
+
+    socket.on('ppHostDeal', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket) || room.ppPhase !== 'UPLOAD') return;
+        Object.keys(room.players).forEach(id => {
+            if (!room.ppReady[id]) {
+                const needed = 7 - (room.ppPlayerPhotos[id]?.length || 0);
+                if (!room.ppPlayerPhotos[id]) room.ppPlayerPhotos[id] = [];
+                for (let i = 0; i < needed; i++) {
+                    room.ppPlayerPhotos[id].push(PP_CURATED[Math.floor(Math.random() * PP_CURATED.length)]);
+                }
+                room.ppReady[id] = true;
+            }
+        });
+        pp_dealCards(room);
+    });
+
+    socket.on('ppSetClue', ({ cardId, clue }) => {
+        const room = socketRoom(socket);
+        if (!room || room.ppPhase !== 'CLUE' || socket.id !== room.ppStorytellerId) return;
+        if (!clue || !clue.trim()) return;
+        pp_receiveClue(room, socket.id, cardId, clue.trim().slice(0, 120));
+    });
+
+    socket.on('ppSubmitCard', ({ cardId }) => {
+        const room = socketRoom(socket);
+        if (!room || room.ppPhase !== 'SUBMIT') return;
+        pp_submitCard(room, socket.id, cardId);
+    });
+
+    socket.on('ppSwapCard', ({ cardId }) => {
+        const room = socketRoom(socket);
+        if (!room || room.ppPhase !== 'SUBMIT' || room.ppSubUsed[socket.id]) return;
+        if (socket.id === room.ppStorytellerId || room.ppDeck.length === 0) return;
+        const hand = room.ppHands[socket.id] || [];
+        const cardIdx = hand.findIndex(c => c.cardId === cardId);
+        if (cardIdx === -1) return;
+        const [removed] = hand.splice(cardIdx, 1);
+        room.ppDeck.push(removed);
+        hand.push(room.ppDeck.shift());
+        room.ppSubUsed[socket.id] = true;
+        room.ppHands[socket.id] = hand;
+        io.to(socket.id).emit('ppHandUpdate', { hand, subUsed: true });
+    });
+
+    socket.on('ppVote', ({ cardId }) => {
+        const room = socketRoom(socket);
+        if (!room || room.ppPhase !== 'VOTE') return;
+        if (socket.id === room.ppStorytellerId || room.ppVotes[socket.id]) return;
+        const ownCard = room.ppTable.find(c => c.submitterId === socket.id);
+        if (ownCard && ownCard.cardId === cardId) return;
+        room.ppVotes[socket.id] = cardId;
+        const voterNames = Object.keys(room.ppVotes).map(id => room.players[id]?.name).filter(Boolean);
+        broadcastRoom(room, 'ppVoterUpdate', { voterNames });
+        const nonStorytellers = Object.keys(room.players).filter(id => id !== room.ppStorytellerId);
+        if (Object.keys(room.ppVotes).length >= nonStorytellers.length) {
+            clearInterval(room.ppTimer); pp_resolveVotes(room);
+        }
+    });
+
+    socket.on('ppReturnToLobby', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        pp_returnToLobby(room);
+    });
+
+    // ── Kick / leave ──────────────────────────────────────────────────────────
+
     socket.on('kickPlayer', ({ targetId }) => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
@@ -980,6 +1308,7 @@ io.on('connection', (socket) => {
         if (Object.keys(room.players).length === 0) {
             clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
             clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
+            clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
             delete rooms[room.code];
         }
     });
@@ -1023,6 +1352,7 @@ io.on('connection', (socket) => {
             clearInterval(room.gameTimer);
             clearTimeout(room.revealTimer);
             clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
+            clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
             delete rooms[room.code];
             console.log(`🗑️  Room ${room.code} removed (empty)`);
         }

@@ -217,6 +217,57 @@
         .hand-emoji-btn { position:absolute; font-size:24px; width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:rgba(15,15,20,0.92); border:2px solid #444; cursor:pointer; user-select:none; -webkit-user-select:none; transition:border-color .1s,background .1s; }
         .hand-emoji-btn.selected { border-color:#ffeb3b; background:rgba(255,235,59,0.18); }
         .hand-emoji-btn:active { transform:scale(0.85); }
+
+        /* ── PikPic ── */
+        #pp-upload-screen,#pp-clue-screen,#pp-wait-screen,#pp-submit-screen,#pp-vote-screen,#pp-result-screen {
+            display:none; position:absolute; inset:0; z-index:55; background:radial-gradient(circle at 50% 20%,#0d1525,#050508 70%);
+            flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+14px) 14px calc(env(safe-area-inset-bottom)+16px); gap:12px;
+        }
+        .pp-title { font-size:1.4em; font-weight:900; letter-spacing:3px; color:#ffeb3b; text-align:center; }
+        .pp-sub { font-family:monospace; font-size:0.78em; color:#556; letter-spacing:2px; text-align:center; }
+        .pp-timer-big { font-family:monospace; font-size:2.5em; font-weight:bold; color:#ffeb3b; text-shadow:0 0 16px rgba(255,235,59,0.6); min-height:1.2em; text-align:center; }
+        /* Photo upload grid */
+        #pp-photo-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; width:min(340px,92%); }
+        .pp-slot { aspect-ratio:1; border-radius:8px; display:flex; align-items:center; justify-content:center; position:relative; cursor:pointer; user-select:none; -webkit-user-select:none; }
+        .pp-slot.empty { border:2px dashed #2a3a55; background:rgba(255,255,255,0.03); }
+        .pp-slot.filled { border:2px solid #1e5fa0; overflow:hidden; }
+        .pp-slot-x { position:absolute; top:2px; right:3px; font-size:0.7em; color:#ef9a9a; font-weight:bold; line-height:1; }
+        .pp-action-row { display:flex; gap:8px; width:min(340px,92%); flex-wrap:wrap; justify-content:center; }
+        .pp-btn { padding:12px 16px; font-weight:bold; font-size:0.85em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; text-align:center; flex:1; min-width:120px; user-select:none; -webkit-user-select:none; }
+        .pp-btn-blue { background:#1565c0; }
+        .pp-btn-green { background:#2e7d32; }
+        .pp-btn-yellow { background:#e65100; color:#fff; }
+        .pp-btn-red { background:#c62828; }
+        .pp-btn:disabled { opacity:.5; cursor:default; }
+        /* Selfie */
+        #pp-selfie-wrap { display:none; position:fixed; inset:0; z-index:70; background:#000; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
+        #pp-selfie-video { width:min(320px,90vw); border-radius:10px; }
+        /* Hand of cards */
+        .pp-hand { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width:420px; }
+        .pp-card { width:90px; height:90px; border-radius:8px; overflow:hidden; border:3px solid #2a3450; cursor:default; flex-shrink:0; transition:border-color .12s,transform .12s; position:relative; }
+        .pp-card.selectable { cursor:pointer; }
+        .pp-card.selectable:hover { border-color:#7a9fcc; transform:translateY(-3px); }
+        .pp-card.selected { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); transform:translateY(-6px); }
+        /* Vote grid */
+        #pp-vote-grid { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:420px; }
+        .pp-vote-card-wrap { position:relative; }
+        .pp-vote-img { width:100px; height:100px; object-fit:cover; border-radius:8px; border:3px solid #2a3450; cursor:pointer; transition:border-color .12s,transform .12s; display:block; }
+        .pp-vote-img:hover { border-color:#ffeb3b; transform:scale(1.06); }
+        .pp-vote-img.pp-voted { border-color:#2e7d32; box-shadow:0 0 14px rgba(46,125,50,0.6); }
+        /* Result grid */
+        #pp-result-grid { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:440px; }
+        .pp-result-card { width:100px; border-radius:8px; overflow:hidden; border:3px solid #2a3450; position:relative; }
+        .pp-result-card img { width:100%; height:100px; object-fit:cover; display:block; }
+        .pp-result-card.pp-storyteller-card { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); }
+        .pp-result-label { font-family:monospace; font-size:0.6em; color:#ccc; background:rgba(0,0,0,0.85); padding:3px 4px; text-align:center; }
+        /* Score rows */
+        .pp-score-row { display:flex; justify-content:space-between; padding:5px 2px; font-family:monospace; font-size:0.85em; border-bottom:1px solid #1a2030; width:min(320px,90%); }
+        /* Clue input */
+        #pp-clue-input { width:min(320px,90%); padding:13px; font-size:1em; text-align:center; border-radius:8px; border:2px solid #2a3a66; background:#0d1525; color:#fff; outline:none; font-weight:bold; }
+        #pp-clue-input:focus { border-color:#ffeb3b; }
+        .pp-clue-display { font-size:1.3em; font-weight:bold; color:#ffeb3b; text-align:center; font-style:italic; padding:8px 16px; background:rgba(255,235,59,0.08); border:1px solid rgba(255,235,59,0.25); border-radius:10px; max-width:340px; }
+        .pp-voter-row { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
+        .pp-outcome-box { font-size:0.9em; text-align:center; color:#ccc; background:rgba(255,255,255,0.05); border:1px solid #2a3a55; border-radius:8px; padding:10px 14px; max-width:340px; }
     </style>
 </head>
 <body>
@@ -267,6 +318,14 @@
                 <div class="gc-name">Stroke Off</div>
                 <div class="gc-desc">Turn a squiggle into art — 3 rounds, 1v1 battles, crowd votes</div>
                 <div class="gc-voters" id="gv-sq"></div>
+            </div>
+        </div>
+        <div class="game-card" id="gc-pp" onclick="pickGame('pikpic')">
+            <div class="gc-icon">📸</div>
+            <div class="gc-info">
+                <div class="gc-name">PikPic</div>
+                <div class="gc-desc">Upload your photos, deal a deck, give clues — Dixit with your camera roll</div>
+                <div class="gc-voters" id="gv-pp"></div>
             </div>
         </div>
     </div>
@@ -523,6 +582,96 @@
     <div id="sq-results-list"></div>
 </div>
 
+<!-- ════════════════════ PIKPIC SCREENS ════════════════════ -->
+
+<!-- Upload -->
+<div id="pp-upload-screen">
+    <div class="pp-title">📸 PIKPIC</div>
+    <div class="pp-sub">UPLOAD YOUR 7 PHOTOS</div>
+    <div id="pp-photo-count" style="font-family:monospace;color:#7a9fcc;font-size:0.85em;">0/7 photos</div>
+    <div id="pp-photo-grid"></div>
+    <div class="pp-action-row">
+        <label class="pp-btn pp-btn-blue" style="display:flex;align-items:center;justify-content:center;">
+            📁 ADD PHOTOS
+            <input id="pp-file-input" type="file" accept="image/*" multiple style="display:none;" onchange="ppHandleFiles(this.files)">
+        </label>
+        <button class="pp-btn pp-btn-blue" onclick="ppOpenSelfie()">🤳 SELFIE</button>
+    </div>
+    <button id="pp-fill-btn" class="pp-btn pp-btn-yellow" onclick="ppFillFromCurated()" style="display:none;width:min(320px,90%);">🎲 FILL REMAINING FROM STOCKPILE</button>
+    <button id="pp-ready-btn" class="pp-btn pp-btn-green" onclick="ppSubmitReady()" style="display:none;width:min(320px,90%);">✅ READY!</button>
+    <div id="pp-upload-status" style="font-family:monospace;color:#556;font-size:0.82em;text-align:center;">Waiting for players…</div>
+    <div id="pp-ready-list" class="pp-voter-row"></div>
+    <button id="pp-host-deal-btn" class="pp-btn pp-btn-red" onclick="ppHostDeal()" style="display:none;width:min(320px,90%);">🚀 START WITH READY PLAYERS</button>
+</div>
+
+<!-- Selfie overlay -->
+<div id="pp-selfie-wrap">
+    <div style="color:#fff;font-weight:bold;font-size:1.1em;letter-spacing:2px;">📸 SELFIE</div>
+    <video id="pp-selfie-video" autoplay playsinline muted></video>
+    <div style="display:flex;gap:12px;">
+        <button class="pp-btn pp-btn-green" onclick="ppCaptureSelfie()" style="flex:1;">📸 SNAP</button>
+        <button class="pp-btn pp-btn-red" onclick="ppCloseSelfie()" style="flex:1;">✕ CANCEL</button>
+    </div>
+</div>
+
+<!-- Clue screen (storyteller) -->
+<div id="pp-clue-screen">
+    <div class="pp-title">📖 YOU'RE THE STORYTELLER</div>
+    <div id="pp-clue-round" class="pp-sub">Round 1 of 3</div>
+    <div class="pp-sub" style="color:#ccc;">Pick a card, then write a clue that hints at it — but not too obviously!</div>
+    <div id="pp-clue-hand" class="pp-hand"></div>
+    <input id="pp-clue-input" type="text" placeholder="Your clue…" maxlength="120" autocomplete="off">
+    <button id="pp-submit-clue-btn" class="pp-btn pp-btn-green" onclick="ppSubmitClue()" style="width:min(320px,90%);">📤 SEND CLUE</button>
+    <div id="pp-confirm-btn" style="display:none;"></div>
+</div>
+
+<!-- Wait screen -->
+<div id="pp-wait-screen">
+    <div class="pp-title">⏳ WAIT</div>
+    <div id="pp-wait-label" class="pp-sub" style="font-size:0.95em;color:#ccc;text-align:center;max-width:320px;line-height:1.5;"></div>
+    <div id="pp-wait-timer" class="pp-timer-big"></div>
+    <div id="pp-wait-sub" style="font-family:monospace;color:#556;font-size:0.78em;text-align:center;"></div>
+</div>
+
+<!-- Submit screen (other players pick their card) -->
+<div id="pp-submit-screen">
+    <div class="pp-title">🃏 PICK A CARD</div>
+    <div id="pp-submit-round-label" class="pp-sub">Storyteller's clue:</div>
+    <div id="pp-submit-clue-display" class="pp-clue-display">"…"</div>
+    <div class="pp-sub">Pick the card that best fits the clue</div>
+    <div id="pp-submit-hand" class="pp-hand"></div>
+    <div style="display:flex;gap:8px;width:min(320px,90%);">
+        <button id="pp-confirm-btn" class="pp-btn pp-btn-green" onclick="ppConfirmCard()" style="display:none;flex:1;">✅ SUBMIT CARD</button>
+        <button id="pp-swap-btn" class="pp-btn pp-btn-yellow" onclick="ppSwapCard()" style="display:none;flex:0 0 auto;">🔄 SWAP</button>
+    </div>
+    <div id="pp-submit-timer" class="pp-timer-big" style="font-size:1.6em;"></div>
+    <div id="pp-submit-count" style="font-family:monospace;color:#556;font-size:0.82em;"></div>
+</div>
+
+<!-- Vote screen -->
+<div id="pp-vote-screen">
+    <div class="pp-title">🗳️ VOTE</div>
+    <div class="pp-sub">Which card did the storyteller play?</div>
+    <div id="pp-vote-clue" class="pp-clue-display">"…"</div>
+    <div id="pp-vote-hint" class="pp-sub" style="color:#ccc;"></div>
+    <div id="pp-vote-grid"></div>
+    <div id="pp-vote-voters" class="pp-voter-row"></div>
+    <div id="pp-vote-timer" class="pp-timer-big" style="font-size:1.6em;"></div>
+</div>
+
+<!-- Result screen -->
+<div id="pp-result-screen">
+    <div class="pp-title">🎉 ROUND RESULT</div>
+    <div id="pp-result-clue" class="pp-clue-display" style="font-size:1em;">"…"</div>
+    <div id="pp-result-outcome" class="pp-outcome-box"></div>
+    <div class="pp-sub" style="color:#9fb0c8;">Cards on the table:</div>
+    <div id="pp-result-grid"></div>
+    <div class="pp-sub" style="color:#9fb0c8;margin-top:4px;">SCORES THIS ROUND:</div>
+    <div id="pp-result-scores" style="width:min(320px,90%);"></div>
+    <div id="pp-result-next" style="font-family:monospace;color:#556;font-size:0.78em;text-align:center;"></div>
+    <button id="pp-lobby-btn" class="pp-btn pp-btn-red" onclick="ppReturnToLobby()" style="display:none;width:min(280px,88%);">🏠 BACK TO LOBBY</button>
+</div>
+
 <script>
 const socket = io();
 
@@ -630,13 +779,14 @@ function rlStartGame() {
     if (selectedGame === 'tacostealth') toggleSettingsModal(true);
     else if (selectedGame === 'strokeoff') soPickFakeAndStart();
     else if (selectedGame === 'squiggle') socket.emit('sqStartGame');
+    else if (selectedGame === 'pikpic') socket.emit('ppStartGame');
 }
 
 function kickPlayer(targetId) { socket.emit('kickPlayer', { targetId }); }
 
 function leaveRoom() {
     socket.emit('leaveRoom');
-    soCleanup(); tsSkipRules();
+    soCleanup(); tsSkipRules(); ppCleanup();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     inRoom = false; isJoined = false; isRoomHost = false;
@@ -651,7 +801,7 @@ function closeRoom() {
 }
 
 socket.on('roomClosed', () => {
-    soCleanup(); tsSkipRules();
+    soCleanup(); tsSkipRules(); ppCleanup();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     inRoom = false; isJoined = false; isRoomHost = false;
@@ -842,6 +992,12 @@ socket.on('gameState', (state) => {
         show('room-lobby'); renderRoomLobby();
     }
 
+    const ppActive = selectedGame === 'pikpic';
+    if (ppActive && inLobby && ppPhase !== 'LOBBY') {
+        ppCleanup();
+        show('room-lobby'); renderRoomLobby();
+    }
+
     applyChromeVisibility();
     const phaseLabels = { LOBBY:'', HIDING:'🙈 HIDING', SEEKING:'👁️ SEEKING', REVEAL:'🎉 REVEAL!' };
     document.getElementById('phase-label').innerText = phaseLabels[state.phase] || '';
@@ -895,6 +1051,8 @@ socket.on('gameVotes', ({ votes, players }) => {
     if (tsEl) tsEl.innerHTML = (byGame['tacostealth'] || []).join('');
     if (soEl) soEl.innerHTML = (byGame['strokeoff'] || []).join('');
     if (sqEl) sqEl.innerHTML = (byGame['squiggle'] || []).join('');
+    const ppEl = document.getElementById('gv-pp');
+    if (ppEl) ppEl.innerHTML = (byGame['pikpic'] || []).join('');
 });
 
 // ── Taco Stealth ──────────────────────────────────────────────────────────
@@ -1742,6 +1900,302 @@ socket.on('updateSoScores', (scoreData) => {
 applyColor();
 loop();
 soResizeCanvas();
+
+// ── PikPic ──────────────────────────────────────────────────────────────────
+
+let ppMyPhotos = [], ppCuratedPhotos = [], ppMyHand = [], ppSubUsed = false;
+let ppStorytellerId = null, ppSelectedCardId = null, ppCameraStream = null, ppPhase = 'LOBBY';
+
+const PP_SCREENS = ['pp-upload-screen','pp-clue-screen','pp-wait-screen','pp-submit-screen','pp-vote-screen','pp-result-screen'];
+
+function ppCleanup() {
+    PP_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    const sw = document.getElementById('pp-selfie-wrap'); if (sw) sw.style.display = 'none';
+    if (ppCameraStream) { ppCameraStream.getTracks().forEach(t => t.stop()); ppCameraStream = null; }
+    ppMyPhotos = []; ppMyHand = []; ppSubUsed = false;
+    ppStorytellerId = null; ppSelectedCardId = null; ppPhase = 'LOBBY';
+}
+
+function ppShow(id) { PP_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; }); const t = document.getElementById(id); if (t) t.style.display = 'flex'; }
+
+// ── Photo resize helper ──
+function ppResizeToDataUrl(file, cb) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+            const MAX = 600; let w = img.width, h = img.height;
+            if (w > MAX || h > MAX) { const s = Math.min(MAX/w, MAX/h); w = Math.round(w*s); h = Math.round(h*s); }
+            const c = document.createElement('canvas'); c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            cb(c.toDataURL('image/jpeg', 0.82));
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function ppHandleFiles(files) {
+    const needed = 7 - ppMyPhotos.length;
+    const toProcess = Array.from(files).slice(0, needed);
+    let done = 0;
+    toProcess.forEach(file => {
+        ppResizeToDataUrl(file, dataUrl => {
+            if (ppMyPhotos.length < 7) ppMyPhotos.push(dataUrl);
+            done++;
+            if (done === toProcess.length) ppRenderUploadGrid();
+        });
+    });
+}
+
+function ppRenderUploadGrid() {
+    const grid = document.getElementById('pp-photo-grid'); if (!grid) return;
+    const slots = [];
+    for (let i = 0; i < 7; i++) {
+        if (i < ppMyPhotos.length) {
+            slots.push(`<div class="pp-slot filled" onclick="ppRemovePhoto(${i})"><img src="${ppMyPhotos[i]}" style="width:100%;height:100%;object-fit:cover;border-radius:5px;"><div class="pp-slot-x">✕</div></div>`);
+        } else {
+            slots.push(`<div class="pp-slot empty"><span style="font-size:1.5em;opacity:.35">+</span></div>`);
+        }
+    }
+    grid.innerHTML = slots.join('');
+    const cnt = document.getElementById('pp-photo-count'); if (cnt) cnt.innerText = `${ppMyPhotos.length}/7 photos`;
+    const readyBtn = document.getElementById('pp-ready-btn'); if (readyBtn) readyBtn.style.display = ppMyPhotos.length === 7 ? 'block' : 'none';
+    const fillBtn = document.getElementById('pp-fill-btn'); if (fillBtn) fillBtn.style.display = ppMyPhotos.length < 7 ? 'block' : 'none';
+}
+
+function ppRemovePhoto(idx) { ppMyPhotos.splice(idx, 1); ppRenderUploadGrid(); }
+
+function ppFillFromCurated() {
+    if (!ppCuratedPhotos.length) return;
+    const needed = 7 - ppMyPhotos.length;
+    const shuffled = [...ppCuratedPhotos].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < needed && i < shuffled.length; i++) ppMyPhotos.push(shuffled[i]);
+    ppRenderUploadGrid();
+}
+
+function ppSubmitReady() {
+    if (ppMyPhotos.length !== 7) { showToast('Add 7 photos first!'); return; }
+    socket.emit('ppUploadPhotos', { photos: ppMyPhotos });
+    const btn = document.getElementById('pp-ready-btn');
+    if (btn) { btn.disabled = true; btn.innerText = '✓ Submitted!'; }
+}
+
+function ppHostDeal() { socket.emit('ppHostDeal'); }
+
+async function ppOpenSelfie() {
+    if (ppMyPhotos.length >= 7) { showToast('Already have 7 photos!'); return; }
+    try {
+        const video = document.getElementById('pp-selfie-video');
+        ppCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+        video.srcObject = ppCameraStream;
+        document.getElementById('pp-selfie-wrap').style.display = 'flex';
+    } catch(e) { showToast('Camera not available'); }
+}
+
+function ppCaptureSelfie() {
+    const video = document.getElementById('pp-selfie-video');
+    const c = document.createElement('canvas');
+    c.width = 480; c.height = video.videoHeight ? Math.round(480 * video.videoHeight / video.videoWidth) : 480;
+    c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+    ppMyPhotos.push(c.toDataURL('image/jpeg', 0.85));
+    ppRenderUploadGrid();
+    ppCloseSelfie();
+}
+
+function ppCloseSelfie() {
+    if (ppCameraStream) { ppCameraStream.getTracks().forEach(t => t.stop()); ppCameraStream = null; }
+    document.getElementById('pp-selfie-wrap').style.display = 'none';
+}
+
+// ── Card rendering ──
+function ppRenderHand(containerId, cards, selectable) {
+    const el = document.getElementById(containerId); if (!el) return;
+    el.innerHTML = cards.map(c =>
+        `<div class="pp-card${selectable ? ' selectable' : ''}" data-cid="${c.cardId}" onclick="${selectable ? `ppSelectCard('${c.cardId}')` : ''}">
+            <img src="${c.photoUrl}" style="width:100%;height:100%;object-fit:cover;" draggable="false">
+        </div>`
+    ).join('');
+}
+
+function ppSelectCard(cardId) {
+    ppSelectedCardId = cardId;
+    document.querySelectorAll('.pp-card.selectable').forEach(el => el.classList.toggle('selected', el.dataset.cid === cardId));
+    const cb = document.getElementById('pp-confirm-btn'); if (cb) cb.style.display = 'block';
+    const sb = document.getElementById('pp-swap-btn'); if (sb && !ppSubUsed) sb.style.display = 'block';
+}
+
+function ppSubmitClue() {
+    const clue = document.getElementById('pp-clue-input').value.trim();
+    if (!clue) { showToast('Type a clue first!'); return; }
+    if (!ppSelectedCardId) { showToast('Pick a card first!'); return; }
+    socket.emit('ppSetClue', { cardId: ppSelectedCardId, clue });
+    document.getElementById('pp-clue-input').disabled = true;
+    document.getElementById('pp-submit-clue-btn').disabled = true;
+    showToast('Clue sent — waiting for others…');
+}
+
+function ppConfirmCard() {
+    if (!ppSelectedCardId) return;
+    socket.emit('ppSubmitCard', { cardId: ppSelectedCardId });
+    ppSelectedCardId = null;
+    document.getElementById('pp-confirm-btn').style.display = 'none';
+    document.getElementById('pp-swap-btn').style.display = 'none';
+    document.querySelectorAll('#pp-submit-hand .pp-card').forEach(el => { el.classList.remove('selectable','selected'); el.onclick = null; });
+    showToast('Card submitted!');
+}
+
+function ppSwapCard() {
+    if (!ppSelectedCardId || ppSubUsed) return;
+    socket.emit('ppSwapCard', { cardId: ppSelectedCardId });
+}
+
+function ppVote(cardId) {
+    socket.emit('ppVote', { cardId });
+    document.querySelectorAll('#pp-vote-grid .pp-vote-img').forEach(el => { el.onclick = null; el.style.opacity = '0.5'; });
+    document.querySelector(`#pp-vote-grid [data-cid="${cardId}"] .pp-vote-img`)?.classList.add('pp-voted');
+    showToast('✅ Voted!');
+}
+
+function ppReturnToLobby() {
+    socket.emit('ppReturnToLobby');
+    ppCleanup();
+    show('room-lobby'); renderRoomLobby();
+}
+
+// ── Socket events ──
+socket.on('ppUploadPhase', ({ players, curatedPhotos }) => {
+    ppPhase = 'UPLOAD'; ppCuratedPhotos = curatedPhotos || []; ppMyPhotos = [];
+    hide('room-lobby');
+    ppRenderUploadGrid();
+    const btn = document.getElementById('pp-ready-btn'); if (btn) { btn.disabled = false; btn.innerText = '✅ READY!'; }
+    document.getElementById('pp-upload-status').innerText = '0/' + players.length + ' players ready';
+    document.getElementById('pp-ready-list').innerHTML = '';
+    document.getElementById('pp-host-deal-btn').style.display = 'none';
+    ppShow('pp-upload-screen');
+});
+
+socket.on('ppUploadProgress', ({ readyCount, totalCount, readyPlayers }) => {
+    const el = document.getElementById('pp-upload-status'); if (el) el.innerText = `${readyCount}/${totalCount} players ready`;
+    const rl = document.getElementById('pp-ready-list'); if (rl) rl.innerHTML = (readyPlayers||[]).map(n => `<span class="so-voter-chip">✓ ${n}</span>`).join('');
+    const hd = document.getElementById('pp-host-deal-btn'); if (hd) hd.style.display = (isRoomHost && readyCount > 0) ? 'block' : 'none';
+});
+
+socket.on('ppRoundStart', ({ round, totalRounds, storytellerId, storytellerName, hand, ppScores, players, subUsed, timeLeft }) => {
+    ppPhase = 'CLUE'; ppMyHand = hand; ppStorytellerId = storytellerId; ppSubUsed = subUsed; ppSelectedCardId = null;
+    document.getElementById('pp-result-screen').style.display = 'none';
+    document.getElementById('pp-upload-screen').style.display = 'none';
+    document.getElementById('pp-lobby-btn').style.display = 'none';
+    const amST = socket.id === storytellerId;
+    if (amST) {
+        ppShow('pp-clue-screen');
+        document.getElementById('pp-clue-round').innerText = `Round ${round} of ${totalRounds} — You're the storyteller!`;
+        document.getElementById('pp-clue-input').value = ''; document.getElementById('pp-clue-input').disabled = false;
+        document.getElementById('pp-submit-clue-btn').disabled = false;
+        document.getElementById('pp-confirm-btn').style.display = 'none';
+        ppRenderHand('pp-clue-hand', hand, true);
+    } else {
+        ppShow('pp-wait-screen');
+        document.getElementById('pp-wait-label').innerText = `Round ${round} of ${totalRounds} — ${storytellerName} is choosing a clue…`;
+        document.getElementById('pp-wait-timer').innerText = timeLeft;
+        document.getElementById('pp-wait-sub').innerText = '';
+    }
+});
+
+socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
+    ppPhase = 'SUBMIT';
+    const amST = socket.id === storytellerId;
+    if (amST) {
+        ppShow('pp-wait-screen');
+        document.getElementById('pp-wait-label').innerText = `Your clue: "${clue}" — waiting for others…`;
+        document.getElementById('pp-wait-timer').innerText = '';
+        document.getElementById('pp-wait-sub').innerText = '';
+    } else {
+        ppShow('pp-submit-screen');
+        document.getElementById('pp-submit-round-label').innerText = `${storytellerName}'s clue:`;
+        document.getElementById('pp-submit-clue-display').innerText = `"${clue}"`;
+        document.getElementById('pp-confirm-btn').style.display = 'none';
+        document.getElementById('pp-swap-btn').style.display = ppSubUsed ? 'none' : 'none'; // shown after card selected
+        document.getElementById('pp-submit-timer').innerText = '';
+        document.getElementById('pp-submit-count').innerText = '';
+        ppSelectedCardId = null;
+        ppRenderHand('pp-submit-hand', ppMyHand, true);
+    }
+});
+
+socket.on('ppSubmissionCount', ({ submitted, total }) => {
+    const el = document.getElementById('pp-wait-label');
+    if (el && ppPhase === 'SUBMIT') el.innerText = `Waiting for cards… (${submitted}/${total} submitted)`;
+    const sc = document.getElementById('pp-submit-count');
+    if (sc) sc.innerText = `${submitted}/${total} submitted`;
+});
+
+socket.on('ppHandUpdate', ({ hand, subUsed }) => {
+    ppMyHand = hand; ppSubUsed = subUsed; ppSelectedCardId = null;
+    ppRenderHand('pp-submit-hand', hand, true);
+    document.getElementById('pp-confirm-btn').style.display = 'none';
+    document.getElementById('pp-swap-btn').style.display = 'none';
+    showToast('🔄 Card swapped!');
+});
+
+socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
+    ppPhase = 'VOTE'; ppStorytellerId = storytellerId;
+    ppShow('pp-vote-screen');
+    document.getElementById('pp-vote-clue').innerText = `"${clue}"`;
+    document.getElementById('pp-vote-timer').innerText = timeLeft;
+    document.getElementById('pp-vote-voters').innerHTML = '';
+    const amST = socket.id === storytellerId;
+    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap the card you think is the storyteller\'s!';
+    const grid = document.getElementById('pp-vote-grid');
+    grid.innerHTML = cards.map(c =>
+        `<div class="pp-vote-card-wrap" data-cid="${c.cardId}">
+            <img src="${c.photoUrl}" class="pp-vote-img" ${amST ? 'style="opacity:.5;cursor:default;"' : `onclick="ppVote('${c.cardId}')"`}>
+        </div>`
+    ).join('');
+});
+
+socket.on('ppVoterUpdate', ({ voterNames }) => {
+    const el = document.getElementById('pp-vote-voters');
+    if (el) el.innerHTML = (voterNames||[]).map(n => `<span class="so-voter-chip">✓ ${n}</span>`).join('');
+});
+
+socket.on('ppTimer', ({ timeLeft, phase }) => {
+    if (phase === 'CLUE') { const el = document.getElementById('pp-wait-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+    else if (phase === 'SUBMIT') { const el = document.getElementById('pp-submit-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+    else if (phase === 'VOTE') { const el = document.getElementById('pp-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+});
+
+socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, votesPerCard, roundScores, ppScores, players, allGuessed, noneGuessed, isLastRound }) => {
+    ppPhase = 'RESULT';
+    ppShow('pp-result-screen');
+    document.getElementById('pp-result-clue').innerText = `"${clue}"`;
+    let outcome = '';
+    if (allGuessed) outcome = '🤦 Too obvious! Everyone guessed right — storyteller gets 0, all others +2.';
+    else if (noneGuessed) outcome = '😈 Too cryptic! Nobody guessed — storyteller gets 0, all others +2.';
+    else outcome = '🎯 Good clue! Storyteller + correct guessers each get 3 pts.';
+    document.getElementById('pp-result-outcome').innerText = outcome;
+
+    const grid = document.getElementById('pp-result-grid');
+    grid.innerHTML = cards.map(c => {
+        const sub = players.find(p => p.id === c.submitterId);
+        const voteCount = (votesPerCard[c.cardId] || []).length;
+        const isST = c.cardId === storytellerCardId;
+        return `<div class="pp-result-card${isST ? ' pp-storyteller-card' : ''}">
+            <img src="${c.photoUrl}">
+            <div class="pp-result-label">${sub?.name||'?'}${isST?' 📖':''} · ${voteCount}v</div>
+        </div>`;
+    }).join('');
+
+    const scoreEl = document.getElementById('pp-result-scores');
+    scoreEl.innerHTML = players.map(p => {
+        const delta = roundScores[p.id] || 0;
+        const total = ppScores[p.name] || 0;
+        return `<div class="pp-score-row"><span>${p.name}</span><span style="color:#ffeb3b;">+${delta} → ${total} pts</span></div>`;
+    }).join('');
+
+    document.getElementById('pp-result-next').innerText = isLastRound ? '🏆 Game over! Final scores above.' : `Next round starting in ${10}s…`;
+    if (isLastRound && isRoomHost) document.getElementById('pp-lobby-btn').style.display = 'block';
+});
 
 // ─── Stroke Off (squiggle) client ────────────────────────────────────────────
 
