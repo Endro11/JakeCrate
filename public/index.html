@@ -68,7 +68,7 @@
         .btn-custom { background:#2e7d32; }
         .cam-load { flex:1; background:#37474f; color:#fff; padding:8px 4px; font-size:0.72em; font-weight:bold; text-align:center; border-radius:6px; cursor:pointer; }
         .cam-load:active { background:#455a64; }
-        #poseBtn { background:#f9a825; color:black; }
+        #handBtn { background:#f9a825; color:black; }
         #colorSwatch { width:45px; height:35px; border:2px solid #fff; border-radius:6px; background:#ff0000; cursor:pointer; box-shadow:0 0 5px rgba(0,0,0,0.5); flex-shrink:0; }
         .slider-container { display:flex; align-items:center; flex-grow:1; gap:8px; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:6px; }
         #brushLabel { color:#fff; font-size:15px; font-weight:bold; font-family:monospace; background:#222; padding:4px 6px; border-radius:4px; min-width:38px; text-align:center; flex-shrink:0; }
@@ -184,6 +184,11 @@
         .so-vote-btn:disabled { opacity:0.5; cursor:default; }
         #so-voters-status { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
         .so-voter-chip { background:rgba(46,125,50,0.25); border:1px solid #2e7d32; border-radius:12px; padding:3px 10px; color:#81c784; }
+        /* ── Sleight of Hands radial menu ── */
+        #hand-menu { position:absolute; z-index:15; display:none; pointer-events:auto; }
+        .hand-emoji-btn { position:absolute; font-size:24px; width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:50%; background:rgba(15,15,20,0.92); border:2px solid #444; cursor:pointer; user-select:none; -webkit-user-select:none; transition:border-color .1s,background .1s; }
+        .hand-emoji-btn.selected { border-color:#ffeb3b; background:rgba(255,235,59,0.18); }
+        .hand-emoji-btn:active { transform:scale(0.85); }
     </style>
 </head>
 <body>
@@ -215,8 +220,8 @@
         <div class="game-card" id="gc-ts" onclick="pickGame('tacostealth')">
             <div class="gc-icon">🎨</div>
             <div class="gc-info">
-                <div class="gc-name">Paint or Poke</div>
-                <div class="gc-desc">Paint your disguise and hide from the seeker</div>
+                <div class="gc-name">Sleight of Hands</div>
+                <div class="gc-desc">Paint your hand to blend in — the seeker pokes to find you</div>
                 <div class="gc-voters" id="gv-ts"></div>
             </div>
         </div>
@@ -322,7 +327,8 @@
 
 <div id="ui-bar" style="display:none;">
     <div class="ui-row">
-        <button id="poseBtn">🧍 Stand</button>
+        <button id="handBtn" onclick="toggleHandMenu()">🖐️ HAND</button>
+        <button id="flipBtn" onclick="flipHand()">↔ FLIP</button>
         <button id="modeBtn">🖌️ Paint</button>
         <button id="undoBtn" onclick="tsUndo()">↩ UNDO</button>
     </div>
@@ -344,6 +350,8 @@
         <button onclick="sendReaction('🤡')">🤡</button>
     </div>
 </div>
+
+<div id="hand-menu"></div>
 
 <div id="onboarding">
     <div class="ob-card">
@@ -393,13 +401,13 @@
 
 <div class="game-rules-overlay" id="ts-rules-overlay">
     <div class="game-rules-box">
-        <div class="rules-game-title">🫥 PAINT OR POKE</div>
+        <div class="rules-game-title">🖐️ SLEIGHT OF HANDS</div>
         <ul class="rules-list">
-            <li>Paint your character to <strong style="color:#ffeb3b;">blend into the room photo</strong> while the seeker waits</li>
-            <li>Move your blob anywhere and pick any color from the background</li>
-            <li>When seeking starts, the seeker pokes suspicious players</li>
+            <li>Pick a <strong style="color:#ffeb3b;">hand emoji</strong> and paint it to blend into the room photo</li>
+            <li>Move your hand anywhere — use eyedropper to match background colors</li>
+            <li>When seeking starts, the seeker pokes suspicious hands</li>
             <li>Get poked = eliminated · Survive all pokes to win!</li>
-            <li>Seeker: you can drag to look around — poke anything that moves!</li>
+            <li>Seeker: drag to look around — poke any hand that looks suspicious!</li>
         </ul>
         <button class="rules-skip-btn" onclick="tsSkipRules()">GOT IT — LET'S GO ✓</button>
     </div>
@@ -503,7 +511,7 @@ function doJoinRoom(code) {
     currentRoomCode = code;
     localStorage.setItem('jc_room', code);
     isJoined = true;
-    socket.emit('joinRoom', { code, playerData: { name: playerName, x: SPACE_W/2 - 37, y: SPACE_H/2 - 37, color: activeColor, pose: currentIdx, token: myToken } });
+    socket.emit('joinRoom', { code, playerData: { name: playerName, x: SPACE_W/2 - 37, y: SPACE_H/2 - 37, color: activeColor, pose: currentHandIdx, token: myToken } });
 }
 
 socket.on('roomCreated', ({ code }) => {
@@ -511,7 +519,7 @@ socket.on('roomCreated', ({ code }) => {
     localStorage.setItem('jc_room', code);
     isJoined = true;
     localStorage.setItem('jc_name', playerName);
-    socket.emit('joinRoom', { code, playerData: { name: playerName, x: SPACE_W/2 - 37, y: SPACE_H/2 - 37, color: activeColor, pose: currentIdx, token: myToken } });
+    socket.emit('joinRoom', { code, playerData: { name: playerName, x: SPACE_W/2 - 37, y: SPACE_H/2 - 37, color: activeColor, pose: currentHandIdx, token: myToken } });
 });
 
 socket.on('joinError', ({ message }) => { alert(message); });
@@ -525,7 +533,7 @@ socket.on('connect', () => {
         doJoinRoom(savedCode);
     }
     if (isJoined && currentRoomCode) {
-        socket.emit('joinRoom', { code: currentRoomCode, playerData: { name: playerName, x: player.x, y: player.y, color: activeColor, pose: currentIdx, token: myToken } });
+        socket.emit('joinRoom', { code: currentRoomCode, playerData: { name: playerName, x: player.x, y: player.y, color: activeColor, pose: currentHandIdx, token: myToken } });
         scheduleAvatarSync();
     }
 });
@@ -694,6 +702,11 @@ socket.on('gameState', (state) => {
                 player.x = SPACE_W * (0.15 + Math.random() * 0.7) - playerSize/2;
                 player.y = SPACE_H * (0.18 + Math.random() * 0.64) - playerSize/2;
                 clampPlayerToSpace();
+                // Re-init hand with current lobby colour each round
+                (function(){const c=handPaintCvs.getContext('2d');c.fillStyle=activeColor;c.fillRect(0,0,playerSize,playerSize);})();
+                handFlipped=false; handDirty=true;
+                const fb=document.getElementById('flipBtn');if(fb)fb.style.background='#333';
+                scheduleAvatarSync();
                 const snapCamera = () => {
                     if (canvas.width <= 0 || canvas.height <= 0) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
                     followPlayer(true);
@@ -701,7 +714,7 @@ socket.on('gameState', (state) => {
                 snapCamera();
                 setTimeout(snapCamera, 200);
                 selfFlashUntil = Date.now() + 10000;
-                showToast('🙈 Hide! Drag blob to move • drag bg to pan • pinch to zoom • 🖌️ paint');
+                showToast('🙈 Hide! Drag hand to move • drag bg to pan • 🖐️ pick hand • 🎨 paint color');
             } else if (isSeeker) { setTimeout(() => { if(canvas.width<=0||canvas.height<=0){canvas.width=window.innerWidth;canvas.height=window.innerHeight;} focusWholeSpace(); }, 200); focusWholeSpace(); }
             setCamTitle();
         }
@@ -713,6 +726,7 @@ socket.on('gameState', (state) => {
         }
         if (state.phase === 'REVEAL' && prevPhase !== 'REVEAL' && isJoined && !isSeeker) focusWholeSpace();
         if (inLobby && !lobbyEditing) {
+            const _hm2=document.getElementById('hand-menu');if(_hm2)_hm2.style.display='none';
             show('room-lobby'); renderRoomLobby();
         }
     }
@@ -865,18 +879,31 @@ function onAvatar(sx, sy) {
     return Math.hypot(w.x-(player.x+playerSize/2), w.y-(player.y+playerSize/2)) <= playerSize*0.9;
 }
 
-function getPath(t) {
-    const p = new Path2D();
-    if(t==='stand'){p.arc(37.5,18,12,0.25*Math.PI,0.75*Math.PI,true);p.lineTo(25,32);p.lineTo(12,36);p.lineTo(14,46);p.lineTo(25,46);p.lineTo(25,54);p.lineTo(20,72);p.lineTo(30,72);p.lineTo(37.5,58);p.lineTo(45,72);p.lineTo(55,72);p.lineTo(50,54);p.lineTo(50,46);p.lineTo(61,46);p.lineTo(63,36);p.lineTo(50,32);p.closePath();}
-    else if(t==='splat'){p.arc(37.5,18,12,0.25*Math.PI,0.75*Math.PI,true);p.lineTo(15,20);p.lineTo(10,30);p.lineTo(25,40);p.lineTo(10,65);p.lineTo(20,70);p.lineTo(37.5,55);p.lineTo(55,70);p.lineTo(65,65);p.lineTo(50,40);p.lineTo(65,30);p.lineTo(60,20);p.closePath();}
-    return p;
-}
-const poses = [{path:getPath('stand'),icon:'🧍 Stand',cvs:document.createElement('canvas')},{path:getPath('splat'),icon:'🤸 Splat',cvs:document.createElement('canvas')}];
-poses.forEach(pose => {
-    pose.cvs.width = playerSize; pose.cvs.height = playerSize;
-    const p = pose.cvs.getContext('2d'); p.fillStyle = activeColor; p.fill(pose.path); p.globalCompositeOperation = 'source-atop';
+const HAND_EMOJIS = ['🖐️','🫱','🤏','🤞','✌️','🤘','🤙','👈','🖕','☝️','👍','👎','✊'];
+let currentHandIdx = 0, handFlipped = false, handDirty = true;
+// Paint canvas — players brush-stroke this to camouflage their hand
+const handPaintCvs = document.createElement('canvas');
+handPaintCvs.width = playerSize; handPaintCvs.height = playerSize;
+// Composed output = paint canvas clipped to emoji alpha shape
+const handComposed = document.createElement('canvas');
+handComposed.width = playerSize; handComposed.height = playerSize;
+// Pre-render each emoji to an offscreen canvas used as an alpha mask
+const handMasks = HAND_EMOJIS.map(emoji => {
+    const cvs = document.createElement('canvas');
+    cvs.width = playerSize; cvs.height = playerSize;
+    const c = cvs.getContext('2d');
+    c.font = Math.round(playerSize * 0.92) + 'px serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(emoji, playerSize / 2, playerSize / 2);
+    return cvs;
 });
-let currentIdx = 0, player = { x: SPACE_W/2-playerSize/2, y: SPACE_H/2-playerSize/2 };
+// Initialise paint canvas with the player's lobby colour
+(function initHandPaint() {
+    const c = handPaintCvs.getContext('2d');
+    c.fillStyle = activeColor;
+    c.fillRect(0, 0, playerSize, playerSize);
+})();
+let player = { x: SPACE_W/2-playerSize/2, y: SPACE_H/2-playerSize/2 };
 
 resize(); focusWholeSpace();
 
@@ -885,7 +912,57 @@ let avatarSendTimer = null;
 function scheduleAvatarSync() {
     if (!isJoined) return;
     clearTimeout(avatarSendTimer);
-    avatarSendTimer = setTimeout(() => { socket.emit('avatarUpdate', { avatar: poses[currentIdx].cvs.toDataURL('image/png') }); }, 250);
+    avatarSendTimer = setTimeout(() => { if (handDirty) rebuildHandCanvas(); socket.emit('avatarUpdate', { avatar: handComposed.toDataURL('image/png') }); }, 250);
+}
+
+function rebuildHandCanvas() {
+    const c = handComposed.getContext('2d');
+    c.clearRect(0, 0, playerSize, playerSize);
+    c.save();
+    if (handFlipped) { c.translate(playerSize, 0); c.scale(-1, 1); }
+    c.drawImage(handPaintCvs, 0, 0);
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(handMasks[currentHandIdx], 0, 0);
+    c.restore();
+    c.globalCompositeOperation = 'source-over';
+    handDirty = false;
+}
+function buildHandMenu() {
+    const menu = document.getElementById('hand-menu');
+    if (!menu) return;
+    const R = 90;
+    const cx = window.innerWidth / 2, cy = window.innerHeight - 210;
+    menu.style.left = (cx - R - 26) + 'px';
+    menu.style.top  = (cy - R - 26) + 'px';
+    menu.style.width  = (R * 2 + 52) + 'px';
+    menu.style.height = (R * 2 + 52) + 'px';
+    const n = HAND_EMOJIS.length;
+    menu.innerHTML = HAND_EMOJIS.map((e, i) => {
+        const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.round(R + 5 + Math.cos(angle) * R - 20);
+        const y = Math.round(R + 5 + Math.sin(angle) * R - 20);
+        return `<div class="hand-emoji-btn${i===currentHandIdx?' selected':''}" style="left:${x}px;top:${y}px;" onclick="selectHand(${i})">${e}</div>`;
+    }).join('');
+}
+function toggleHandMenu() {
+    if (isDead) return;
+    const menu = document.getElementById('hand-menu');
+    if (!menu) return;
+    if (menu.style.display === 'block') { menu.style.display = 'none'; }
+    else { buildHandMenu(); menu.style.display = 'block'; }
+}
+function selectHand(idx) {
+    currentHandIdx = idx;
+    handDirty = true;
+    document.getElementById('hand-menu').style.display = 'none';
+    scheduleAvatarSync();
+}
+function flipHand() {
+    if (isDead) return;
+    handFlipped = !handFlipped;
+    handDirty = true;
+    document.getElementById('flipBtn').style.background = handFlipped ? '#1a4a7a' : '#333';
+    scheduleAvatarSync();
 }
 
 function toggleSettingsModal(show) {
@@ -913,7 +990,7 @@ function sendVolunteer() { if (isJoined) socket.emit('volunteerSeeker', { name: 
 function toggleLobbyEdit(on) {
     if (!isJoined || gamePhase !== 'LOBBY') return;
     lobbyEditing = on;
-    if (on) { isPaint=true; isDrop=false; player.x=SPACE_W/2-playerSize/2; player.y=SPACE_H/2-playerSize/2; focusAvatar(); updateUI(); showToast('🖌️ Paint your disguise'); }
+    if (on) { isPaint=true; isDrop=false; player.x=SPACE_W/2-playerSize/2; player.y=SPACE_H/2-playerSize/2; focusAvatar(); updateUI(); showToast('🖐️ Pick your hand emoji and paint it to blend in!'); }
     applyChromeVisibility(); setCamTitle();
     const rl = document.getElementById('room-lobby');
     rl.style.display = on ? 'none' : 'flex';
@@ -944,7 +1021,7 @@ socket.on('pokeResult',({hit,name,pokesLeft,out})=>{
 socket.on('triggerPickleSlide',()=>{ isDead=true; deadAt=Date.now(); document.getElementById('modeBtn').innerText='💀 DEAD'; document.getElementById('modeBtn').style.background='#000'; updateUI(); });
 socket.on('loadMap',({dataUrl,name})=>{ const img=new Image(); img.onload=()=>setBackground(img,name); img.src=dataUrl; });
 
-function hiderDown(sx,sy){if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if(isPaint&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=poses[currentIdx].cvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
+function hiderDown(sx,sy){const _hm=document.getElementById('hand-menu');if(_hm&&_hm.style.display==='block'){_hm.style.display='none';return;}if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if(isPaint&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=handPaintCvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
 function hiderMove(sx,sy){if(dragMode==='paint')paintAt(sx,sy);else if(dragMode==='blob')moveTo(sx,sy);else if(dragMode==='drop')dropTarget={x:sx,y:sy};else if(dragMode==='pan'){camera.x+=sx-panLast.x;camera.y+=sy-panLast.y;panLast={x:sx,y:sy};clampCamera();}}
 function hiderUp(){if(dragMode==='drop'&&dropTarget&&!isDead){pickColorAt(dropTarget.x,dropTarget.y);isPaint=true;isDrop=false;updateUI();}dragMode=null;dragFollowing=false;moveLast=null;paintLast=null;tsPaintingThisGesture=false;}
 
@@ -960,7 +1037,7 @@ canvas.ontouchmove=(e)=>{if(isPinch&&e.touches.length===2){let t1=e.touches[0],t
 canvas.ontouchend=(e)=>{if(isPinch){if(e.touches.length<2)isPinch=false;return;}if(seekerDown){if(!seekerDown.moved)seekerPoke(seekerDown.x,seekerDown.y);seekerDown=null;}else if(isJoined)hiderUp();};
 
 let paintLast=null, tsUndoStack=[], tsPaintingThisGesture=false;
-function paintAt(sx,sy){const w=screenToWorld(sx,sy);const lx=w.x-player.x,ly=w.y-player.y;if(lx<0||ly<0||lx>playerSize||ly>playerSize){paintLast=null;return;}const p=poses[currentIdx].cvs.getContext('2d');const r=parseFloat(document.getElementById('brushSize').value);p.globalCompositeOperation='source-over';p.fillStyle=activeColor;p.strokeStyle=activeColor;p.lineWidth=r*2;p.lineCap='round';p.lineJoin='round';if(paintLast){p.beginPath();p.moveTo(paintLast.x,paintLast.y);p.lineTo(lx,ly);p.stroke();}p.beginPath();p.arc(lx,ly,r,0,7);p.fill();p.globalCompositeOperation='source-over';paintLast={x:lx,y:ly};scheduleAvatarSync();}
+function paintAt(sx,sy){const w=screenToWorld(sx,sy);const lx=w.x-player.x,ly=w.y-player.y;if(lx<0||ly<0||lx>playerSize||ly>playerSize){paintLast=null;return;}const p=handPaintCvs.getContext('2d');handDirty=true;const r=parseFloat(document.getElementById('brushSize').value);p.globalCompositeOperation='source-over';p.fillStyle=activeColor;p.strokeStyle=activeColor;p.lineWidth=r*2;p.lineCap='round';p.lineJoin='round';if(paintLast){p.beginPath();p.moveTo(paintLast.x,paintLast.y);p.lineTo(lx,ly);p.stroke();}p.beginPath();p.arc(lx,ly,r,0,7);p.fill();p.globalCompositeOperation='source-over';paintLast={x:lx,y:ly};scheduleAvatarSync();}
 function pickColorAt(sx,sy){const px=ctx.getImageData(sx,sy,1,1).data;let r=px[0]/255,g=px[1]/255,b=px[2]/255,max=Math.max(r,g,b),min=Math.min(r,g,b),h=0,s=0,l=(max+min)/2;if(max!==min){let d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);if(max===r)h=(g-b)/d+(g<b?6:0);else if(max===g)h=(b-r)/d+2;else h=(r-g)/d+4;h/=6;}cHue=Math.round(h*360);cSat=Math.round(s*100);cLight=Math.round(l*100);document.getElementById('brightnessSlider').value=cLight;applyColor();}
 function moveStart(sx,sy){moveLast={x:sx,y:sy};}
 function moveTo(sx,sy){if(!moveLast){moveLast={x:sx,y:sy};return;}player.x+=(sx-moveLast.x)/camera.scale;player.y+=(sy-moveLast.y)/camera.scale;moveLast={x:sx,y:sy};clampPlayerToSpace();}
@@ -969,7 +1046,7 @@ function meSeeker(){return socket.id===seekerSocketId;}
 function findMe(){if(isJoined&&socket.id!==seekerSocketId){focusAvatar();selfFlashUntil=Date.now()+2000;}}
 function zoomWhole(){if(meSeeker())focusWholeSpace();}
 function updateUI(){if(!isDead){document.getElementById('modeBtn').innerText=isPaint?'🖌️ Paint':'✋ Move';document.getElementById('modeBtn').style.background=isPaint?'#e57373':'#333';document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';}}
-function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();poses[currentIdx].cvs.getContext('2d').putImageData(snap,0,0);scheduleAvatarSync();}
+function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();handPaintCvs.getContext('2d').putImageData(snap,0,0);handDirty=true;scheduleAvatarSync();}
 function drawNoSignal(){ctx.fillStyle='#0b0b14';ctx.fillRect(0,0,SPACE_W,SPACE_H);ctx.fillStyle='rgba(255,255,255,0.05)';for(let gx=0;gx<SPACE_W;gx+=40)ctx.fillRect(gx,0,1,SPACE_H);}
 function drawNoSignalHud(){if(bg)return;const cx=canvas.width/2,cy=canvas.height/2;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='rgba(255,255,255,0.55)';ctx.font='bold 48px monospace';ctx.fillText('NO SIGNAL',cx,cy-20);ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='18px monospace';ctx.fillText('Host: load a room photo in ⚙️ HOST',cx,cy+28);ctx.textBaseline='alphabetic';ctx.restore();}
 
@@ -1000,12 +1077,11 @@ function applyColor(){activeColor=`hsl(${cHue},${cSat}%,${cLight}%)`;document.ge
 document.getElementById('brushSize').addEventListener('input',(e)=>{document.getElementById('brushLabel').innerText=e.target.value+'px';showBrushPreview=true;clearTimeout(brushPreviewTimeout);brushPreviewTimeout=setTimeout(()=>showBrushPreview=false,800);});
 document.getElementById('modeBtn').onclick=()=>{if(isDead)return;isPaint=!isPaint;isDrop=false;updateUI();};
 document.getElementById('eyedropperBtn').onclick=()=>{if(isDead)return;isDrop=true;isPaint=false;updateUI();};
-document.getElementById('poseBtn').onclick=(e)=>{if(isDead)return;currentIdx=(currentIdx+1)%poses.length;e.target.innerText=poses[currentIdx].icon;scheduleAvatarSync();};
 document.getElementById('whistleBtn').onclick=()=>{if(!isDead)whistlePulseStart=Date.now();};
 
 // Onboarding
 let obRole=null;
-function buildOnboarding(role){obRole=role;const t=document.getElementById('ob-title'),b=document.getElementById('ob-body');if(role==='seeker'){t.innerText="👁️ YOU'RE THE SEEKER";b.innerHTML='<div class="ob-line"><b>Drag</b> to look around. <b>Pinch</b> to zoom.</div><div class="ob-line">Tap a suspect to <b>POKE</b> them — or use the crosshair + POKE button.</div><div class="ob-line">Wrong pokes are limited. Correct catches are free!</div>';}else{t.innerText="🙈 YOU'RE HIDING";b.innerHTML='<div class="ob-line"><b>Drag your blob</b> to move. <b>Drag the background</b> to pan. <b>Pinch</b> to zoom.</div><div class="ob-line">Tap <b>🖌️ Paint</b> and paint yourself to blend in.</div><div class="ob-line">Lost? Tap <b>📍 FIND ME</b>.</div>';}}
+function buildOnboarding(role){obRole=role;const t=document.getElementById('ob-title'),b=document.getElementById('ob-body');if(role==='seeker'){t.innerText="👁️ YOU'RE THE SEEKER";b.innerHTML='<div class="ob-line"><b>Drag</b> to look around. <b>Pinch</b> to zoom.</div><div class="ob-line">Tap a suspect to <b>POKE</b> them — or use the crosshair + POKE button.</div><div class="ob-line">Wrong pokes are limited. Correct catches are free!</div>';}else{t.innerText="🙈 YOU'RE HIDING";b.innerHTML='<div class="ob-line"><b>Drag your hand</b> to move. <b>Drag the background</b> to pan. <b>Pinch</b> to zoom.</div><div class="ob-line">Tap <b>🖐️ HAND</b> to pick your emoji. Tap <b>🖌️ Paint</b> then brush to camouflage your colour.</div><div class="ob-line">Use the <b>💧 eyedropper</b> to match the background. Lost? Tap <b>📍 FIND ME</b>.</div>';}}
 function showOnboarding(){buildOnboarding(meSeeker()?'seeker':'hider');document.getElementById('onboarding').style.display='flex';}
 function maybeOnboard(role){if(!localStorage.getItem('jc_ob_'+role)){buildOnboarding(role);document.getElementById('onboarding').style.display='flex';}}
 function dismissOnboarding(){document.getElementById('onboarding').style.display='none';if(obRole)localStorage.setItem('jc_ob_'+obRole,'1');}
@@ -1017,7 +1093,7 @@ socket.on('emojiReaction',({emoji,name})=>{const el=document.createElement('div'
 
 // ── Main render loop ──────────────────────────────────────────────────────
 function loop(){
-    if(isJoined&&gamePhase!=='LOBBY'&&Date.now()-lastEmitTime>50){lastEmitTime=Date.now();socket.emit('playerUpdate',{x:player.x,y:player.y,pose:currentIdx,color:activeColor});}
+    if(isJoined&&gamePhase!=='LOBBY'&&Date.now()-lastEmitTime>50){lastEmitTime=Date.now();socket.emit('playerUpdate',{x:player.x,y:player.y,pose:currentHandIdx,color:activeColor});}
     if(dragFollowing&&isJoined&&!meSeeker()&&gamePhase!=='LOBBY')followPlayer(false);
     if(!camera.scale||isNaN(camera.scale)||camera.scale<=0)camera.scale=fitScale()||0.25;
 
@@ -1025,19 +1101,18 @@ function loop(){
     ctx.save();ctx.translate(camera.x,camera.y);ctx.scale(camera.scale,camera.scale);
     if(bg)ctx.drawImage(bg,0,0,SPACE_W,SPACE_H);else drawNoSignal();
 
-    const active=poses[currentIdx],breath=isDead?1:1+Math.sin(Date.now()/1000)*0.004;
+    const breath=isDead?1:1+Math.sin(Date.now()/1000)*0.004;
     const selfSlide=isDead?deadSlide(Date.now()-deadAt):{x:0,y:0,rot:0};
     const revealHead=gamePhase==='REVEAL';
     const hideSelf=meSeeker()&&(gamePhase==='HIDING'||gamePhase==='SEEKING');
 
     if(!hideSelf){
+        if(handDirty)rebuildHandCanvas();
         ctx.save();ctx.translate(player.x+playerSize/2+selfSlide.x,player.y+playerSize/2+selfSlide.y);ctx.rotate(selfSlide.rot);ctx.scale(breath,breath);ctx.translate(-playerSize/2,-playerSize/2);
-        ctx.drawImage(active.cvs,0,0);
-        if(!isDead&&!meSeeker()&&Date.now()<selfFlashUntil){const pulse=0.5+0.5*Math.sin(Date.now()/90);ctx.save();ctx.shadowColor='rgba(255,235,59,0.95)';ctx.shadowBlur=14;ctx.strokeStyle=`rgba(255,235,59,${0.55+0.45*pulse})`;ctx.lineWidth=3+pulse*3;ctx.stroke(active.path);ctx.restore();ctx.fillStyle=`rgba(255,235,59,${0.7+0.3*pulse})`;ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('▼ YOU',playerSize/2,-8);}
-        if(gamePhase==='REVEAL'&&!isDead&&!meSeeker()){ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.stroke(active.path);}
-        ctx.save();ctx.clip(active.path);const g=ctx.createLinearGradient(0,0,75,75);g.addColorStop(0,'rgba(255,255,255,0.05)');g.addColorStop(1,'rgba(0,0,0,0.10)');ctx.fillStyle=g;ctx.fill(active.path);
-        if(whistlePulseStart>0&&!isDead){let el=Date.now()-whistlePulseStart;if(el<800){let pr=el/800,sx=-50+(pr*150);let sh=ctx.createLinearGradient(sx,0,sx+30,75);sh.addColorStop(0,'rgba(255,255,255,0)');sh.addColorStop(0.5,'rgba(255,255,255,0.6)');sh.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=sh;ctx.fill(active.path);}else whistlePulseStart=0;}
-        ctx.restore();
+        ctx.drawImage(handComposed,0,0);
+        if(!isDead&&!meSeeker()&&Date.now()<selfFlashUntil){const pulse=0.5+0.5*Math.sin(Date.now()/90);ctx.save();ctx.shadowColor='rgba(255,235,59,0.95)';ctx.shadowBlur=14+pulse*6;ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.strokeStyle=`rgba(255,235,59,${0.55+0.45*pulse})`;ctx.lineWidth=3+pulse*3;ctx.stroke();ctx.restore();ctx.fillStyle=`rgba(255,235,59,${0.7+0.3*pulse})`;ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('▼ YOU',playerSize/2,-8);}
+        if(gamePhase==='REVEAL'&&!isDead&&!meSeeker()){ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.stroke();}
+        if(whistlePulseStart>0&&!isDead){let el=Date.now()-whistlePulseStart;if(el<800){let pr=el/800;ctx.save();ctx.globalAlpha=Math.max(0,0.65*(1-pr));ctx.fillStyle='rgba(255,255,255,0.9)';ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.fill();ctx.restore();}else whistlePulseStart=0;}
         if(revealHead){const _rh=hashHue(myToken);ctx.save();ctx.beginPath();ctx.arc(playerSize/2,-20,11,0,Math.PI*2);ctx.fillStyle=`hsl(${_rh},62%,42%)`;ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((playerName||'?')[0].toUpperCase(),playerSize/2,-20);ctx.restore();}
         if(isDead){ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(27,10);ctx.lineTo(35,16);ctx.moveTo(35,10);ctx.lineTo(27,16);ctx.stroke();ctx.beginPath();ctx.moveTo(39,10);ctx.lineTo(47,16);ctx.moveTo(47,10);ctx.lineTo(39,16);ctx.stroke();ctx.beginPath();ctx.arc(37,22,5,Math.PI,0);ctx.stroke();ctx.fillStyle='rgba(0,0,0,0.8)';ctx.fillRect(-10,-20,95,18);ctx.fillStyle='#FFF';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(playerName,37.5,-7);}
         ctx.restore();
@@ -1046,12 +1121,12 @@ function loop(){
     Object.values(otherPlayers).forEach(op=>{
         if(op.id===socket.id||op.id===seekerSocketId)return;
         const px=(typeof op.x==='number')?op.x:SPACE_W/2,py=(typeof op.y==='number')?op.y:SPACE_H/2;
-        const opPose=poses[op.pose||0];
         let slide={x:0,y:0,rot:0};
         if(op.isDead){if(!deadAnimAt[op.id])deadAnimAt[op.id]=Date.now();slide=deadSlide(Date.now()-deadAnimAt[op.id]);}else if(deadAnimAt[op.id])delete deadAnimAt[op.id];
         ctx.save();ctx.translate(px+playerSize/2+slide.x,py+playerSize/2+slide.y);ctx.rotate(slide.rot);ctx.translate(-playerSize/2,-playerSize/2);
-        const av=otherAvatars[op.id];if(av)ctx.drawImage(av,0,0);else{ctx.fillStyle=op.color||'#888';ctx.fill(opPose.path);}
-        if(gamePhase==='REVEAL'&&!op.isDead){ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.stroke(opPose.path);}
+        const av=otherAvatars[op.id];
+        if(av){ctx.drawImage(av,0,0);}else{ctx.font=Math.round(playerSize*0.88)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🖐️',playerSize/2,playerSize/2);}
+        if(gamePhase==='REVEAL'&&!op.isDead){ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(playerSize/2,playerSize/2,playerSize*0.42,0,7);ctx.stroke();}
         if(revealHead){const _rh=hashHue(op.token||'');ctx.save();ctx.beginPath();ctx.arc(playerSize/2,-20,11,0,Math.PI*2);ctx.fillStyle=`hsl(${_rh},62%,42%)`;ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((op.name||'?')[0].toUpperCase(),playerSize/2,-20);ctx.restore();}
         if(op.isDead||gamePhase!=='SEEKING'){ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(-2,-18,playerSize+4,16);ctx.fillStyle='#FFF';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(op.name,playerSize/2,-5);}
         if(op.isDead){ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(27,10);ctx.lineTo(35,16);ctx.moveTo(35,10);ctx.lineTo(27,16);ctx.stroke();ctx.beginPath();ctx.moveTo(39,10);ctx.lineTo(47,16);ctx.moveTo(47,10);ctx.lineTo(39,16);ctx.stroke();}
