@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>JakeCrate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
@@ -320,6 +322,129 @@
         /* Result / end */
         .rr-winner-banner { font-size:1.6em; font-weight:900; text-align:center; color:#ffeb3b; }
         .rr-score-row { display:flex; justify-content:space-between; padding:6px 4px; font-family:monospace; font-size:0.9em; border-bottom:1px solid #1a0a2e; width:min(300px,88%); }
+
+        /* ── Split Crew ── */
+        .sc-screen { display:none; position:absolute; inset:0; z-index:60; flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+12px) 12px calc(env(safe-area-inset-bottom)+16px); gap:10px; }
+        #sc-role-screen  { background:linear-gradient(180deg,#1a0050 0%,#6a0080 40%,#d4006c 70%,#ff6600 90%,#ffcc00 100%); justify-content:center; }
+        #sc-pit-screen   { background:#0a0a12; }
+        #sc-race-screen  { background:#090014; justify-content:flex-start; }
+        #sc-reveal-screen{ background:#0a0a12; }
+        #sc-end-screen   { background:linear-gradient(180deg,#0a0014,#1a0050 60%,#6a0080 100%); justify-content:center; }
+        .sc-pixel { font-family:'Press Start 2P', monospace; }
+        .sc-title { font-family:'Press Start 2P', monospace; font-size:1em; letter-spacing:2px; text-transform:uppercase; text-align:center; color:#ffcc00; text-shadow:0 0 12px #ff6600, 2px 2px 0 #000; }
+        .sc-sub   { font-size:0.78em; color:#aaa; text-align:center; letter-spacing:1px; }
+        /* Role reveal */
+        #sc-driver-card { background:rgba(0,0,0,0.45); border:2px solid rgba(255,204,0,0.5); border-radius:18px; padding:18px 24px; width:min(340px,90%); display:flex; flex-direction:column; align-items:center; gap:8px; }
+        #sc-driver-emoji { font-size:3.5em; }
+        #sc-driver-name  { font-family:'Press Start 2P', monospace; font-size:0.85em; color:#ffcc00; text-align:center; }
+        #sc-driver-blurb { font-size:0.75em; color:#ccc; text-align:center; line-height:1.5; }
+        .sc-role-badge   { font-family:'Press Start 2P', monospace; font-size:0.7em; padding:6px 14px; border-radius:8px; text-transform:uppercase; }
+        .sc-role-instr   { background:#1565c0; color:#fff; }
+        .sc-role-exec    { background:#b71c1c; color:#fff; }
+        .sc-role-pyro    { background:#e65100; color:#fff; }
+        /* Pit stop */
+        .sc-lap-badge    { font-family:'Press Start 2P', monospace; font-size:0.65em; background:rgba(255,204,0,0.15); border:1px solid #ffcc00; border-radius:6px; padding:4px 10px; color:#ffcc00; }
+        .sc-pit-timer    { font-family:'Press Start 2P', monospace; font-size:1.6em; color:#ff4444; text-shadow:0 0 10px #ff0000; }
+        /* Instructor task list */
+        .sc-task-row     { width:min(380px,95%); background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; transition:border-color .2s, background .2s; }
+        .sc-task-row.done-good { border-color:#4caf50; background:rgba(76,175,80,0.12); }
+        .sc-task-row.done-ok   { border-color:#ff9800; background:rgba(255,152,0,0.1); }
+        .sc-task-row.done-bad  { border-color:#f44336; background:rgba(244,67,54,0.1); }
+        .sc-task-label   { font-size:0.92em; font-weight:700; letter-spacing:0.5px; }
+        .sc-task-type    { font-size:0.68em; color:#888; text-transform:uppercase; letter-spacing:1px; }
+        .sc-task-ql      { font-size:0.75em; font-weight:bold; align-self:flex-end; }
+        .sc-task-car     { color:#4fc3f7; }
+        .sc-task-diva    { color:#f48fb1; }
+        /* Preview panel (during race) */
+        #sc-preview-panel { width:min(380px,95%); background:rgba(255,204,0,0.07); border:1px solid rgba(255,204,0,0.25); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:8px; }
+        #sc-preview-panel h3 { font-family:'Press Start 2P',monospace; font-size:0.55em; color:#ffcc00; margin:0; }
+        .sc-preview-row  { font-size:0.78em; color:#ccc; line-height:1.4; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.07); }
+        .sc-preview-row:last-child { border-bottom:none; }
+        /* Executor control board */
+        #sc-control-board { width:100%; display:flex; flex-direction:column; gap:14px; align-items:center; }
+        .sc-control-card  { width:min(380px,95%); background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.12); border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px; align-items:center; }
+        .sc-control-card.completed { border-color:#4caf50; background:rgba(76,175,80,0.08); }
+        .sc-ctrl-label    { font-size:0.75em; color:#888; text-transform:uppercase; letter-spacing:1px; text-align:center; }
+        .sc-ctrl-title    { font-size:0.95em; font-weight:bold; text-align:center; }
+        .sc-done-check    { font-size:1.4em; }
+        /* Gauge control */
+        .sc-gauge-wrap    { width:min(280px,88%); display:flex; flex-direction:column; align-items:center; gap:8px; }
+        .sc-gauge-track   { width:100%; height:40px; background:#111; border-radius:20px; border:2px solid #333; overflow:hidden; position:relative; cursor:pointer; }
+        .sc-gauge-fill    { height:100%; background:linear-gradient(90deg,#1565c0,#00e5ff); width:0%; border-radius:20px; transition:width .05s; pointer-events:none; }
+        .sc-gauge-level   { font-family:'Press Start 2P',monospace; font-size:0.7em; color:#00e5ff; }
+        .sc-gauge-btn     { width:70px; height:70px; border-radius:50%; border:3px solid #00e5ff; background:#001a2e; color:#00e5ff; font-size:1.8em; cursor:pointer; user-select:none; -webkit-user-select:none; }
+        .sc-gauge-btn:active { background:#002a40; }
+        /* Tap control */
+        .sc-tap-btn       { width:min(200px,70%); aspect-ratio:1; border-radius:50%; border:4px solid #ff6600; background:#1a0800; color:#ff6600; font-size:2em; cursor:pointer; user-select:none; -webkit-user-select:none; display:flex; align-items:center; justify-content:center; transition:transform .07s; }
+        .sc-tap-btn:active { transform:scale(0.9); background:#2a1000; }
+        .sc-tap-count     { font-family:'Press Start 2P',monospace; font-size:1.2em; color:#ff6600; }
+        /* Swipe sequence control */
+        .sc-swipe-zone    { width:min(220px,80%); aspect-ratio:1; background:#0a1220; border:2px solid #1565c0; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:2.5em; user-select:none; -webkit-user-select:none; touch-action:none; cursor:pointer; }
+        .sc-swipe-progress { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+        .sc-swipe-step    { width:28px; height:28px; border-radius:6px; background:#0d1b2a; border:1px solid #1565c0; display:flex; align-items:center; justify-content:center; font-size:0.9em; transition:background .15s; }
+        .sc-swipe-step.done { background:#1565c0; }
+        /* Crank control */
+        .sc-crank-wrap    { display:flex; flex-direction:column; align-items:center; gap:8px; }
+        .sc-crank         { width:100px; height:100px; border-radius:50%; border:4px solid #ffcc00; background:radial-gradient(circle,#1a1200,#0a0800); display:flex; align-items:center; justify-content:center; font-size:2em; position:relative; cursor:grab; user-select:none; -webkit-user-select:none; touch-action:none; }
+        .sc-crank-needle  { position:absolute; top:8px; left:50%; width:4px; height:38px; background:#ffcc00; border-radius:2px; transform-origin:50% 100%; transform:translateX(-50%); }
+        .sc-crank-count   { font-family:'Press Start 2P',monospace; font-size:1em; color:#ffcc00; }
+        /* Timing control */
+        .sc-timing-wrap   { display:flex; flex-direction:column; align-items:center; gap:10px; }
+        .sc-timing-ring   { position:relative; width:130px; height:130px; }
+        .sc-timing-svg    { width:130px; height:130px; }
+        .sc-timing-btn    { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:2em; cursor:pointer; border-radius:50%; background:rgba(255,204,0,0.08); border:none; color:#ffcc00; }
+        /* Angle control */
+        .sc-angle-item    { font-size:3em; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; display:block; transition:transform .05s; }
+        .sc-angle-label   { font-family:'Press Start 2P',monospace; font-size:0.7em; color:#ffcc00; }
+        /* Dial control */
+        .sc-dial-wrap     { display:flex; flex-direction:column; align-items:center; gap:8px; }
+        .sc-dial          { width:100px; height:100px; border-radius:50%; border:4px solid #e91e63; background:radial-gradient(circle,#1a0010,#0a0008); display:flex; align-items:center; justify-content:center; position:relative; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+        .sc-dial-needle   { position:absolute; top:8px; left:50%; width:3px; height:36px; background:#e91e63; border-radius:2px; transform-origin:50% 100%; transform:translateX(-50%); }
+        .sc-dial-label    { font-family:'Press Start 2P',monospace; font-size:0.65em; color:#e91e63; }
+        /* Race screen */
+        #sc-race-header   { width:100%; display:flex; justify-content:space-between; align-items:center; padding:4px 8px; }
+        .sc-race-timer    { font-family:'Press Start 2P',monospace; font-size:0.7em; color:#ffcc00; }
+        .sc-race-lap      { font-family:'Press Start 2P',monospace; font-size:0.7em; color:#fff; }
+        #sc-race-lanes    { width:100%; display:flex; flex-direction:column; gap:6px; flex:1; }
+        .sc-lane          { width:100%; height:80px; position:relative; overflow:hidden; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:#111; }
+        .sc-road          { position:absolute; inset:0; background:repeating-linear-gradient(90deg,#1a1a1a 0px,#1a1a1a 40px,#222 40px,#222 80px); animation:sc-road-scroll 0.4s linear infinite; }
+        @keyframes sc-road-scroll { from{background-position:0 0} to{background-position:-80px 0} }
+        .sc-lane-line     { position:absolute; top:50%; left:0; right:0; height:2px; background:repeating-linear-gradient(90deg,#ffcc00 0,#ffcc00 30px,transparent 30px,transparent 60px); transform:translateY(-50%); opacity:0.3; animation:sc-road-scroll 0.4s linear infinite; }
+        .sc-car           { position:absolute; top:50%; left:28%; transform:translateY(-50%); font-size:2em; transition:transform .2s; }
+        .sc-car.wobble    { animation:sc-wobble 0.3s ease-in-out infinite; }
+        .sc-car.smoke     { filter:saturate(0.4); }
+        .sc-car.crashed   { filter:grayscale(1); }
+        @keyframes sc-wobble { 0%,100%{transform:translateY(-50%) rotate(-6deg)} 50%{transform:translateY(-50%) rotate(6deg)} }
+        .sc-smoke-trail   { position:absolute; top:30%; left:20%; font-size:1em; opacity:0; animation:sc-smoke 1.2s ease-out infinite; }
+        @keyframes sc-smoke { 0%{opacity:0.7;transform:translateX(0) translateY(0) scale(0.8)} 100%{opacity:0;transform:translateX(-40px) translateY(-20px) scale(2)} }
+        .sc-lane-info     { position:absolute; top:4px; left:6px; display:flex; flex-direction:column; gap:1px; }
+        .sc-lane-name     { font-size:0.65em; font-weight:bold; color:#fff; text-shadow:1px 1px 0 #000; white-space:nowrap; }
+        .sc-lane-speed    { font-family:'Press Start 2P',monospace; font-size:0.5em; color:#ffcc00; text-shadow:1px 1px 0 #000; }
+        .sc-lane-pos      { position:absolute; right:6px; top:50%; transform:translateY(-50%); font-family:'Press Start 2P',monospace; font-size:0.9em; color:#fff; text-shadow:2px 2px 0 #000; }
+        /* Reveal screen */
+        .sc-reveal-team   { width:min(380px,95%); background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:14px; display:flex; flex-direction:column; gap:8px; }
+        .sc-reveal-team.crashed { border-color:#f44336; background:rgba(244,67,54,0.08); }
+        .sc-reveal-header { display:flex; align-items:center; gap:10px; }
+        .sc-reveal-driver { font-size:2em; }
+        .sc-reveal-info   { display:flex; flex-direction:column; gap:2px; }
+        .sc-reveal-dname  { font-weight:900; font-size:0.95em; }
+        .sc-reveal-crew   { font-size:0.72em; color:#888; }
+        .sc-reveal-speed  { font-family:'Press Start 2P',monospace; font-size:0.8em; color:#4fc3f7; align-self:flex-end; margin-left:auto; }
+        .sc-reveal-task   { display:flex; align-items:center; gap:8px; font-size:0.78em; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+        .sc-reveal-task:last-child { border-bottom:none; }
+        .sc-reveal-fail   { font-size:0.7em; color:#ef9a9a; padding:2px 0 2px 26px; line-height:1.4; }
+        .sc-crash-banner  { text-align:center; font-size:1.2em; padding:6px; }
+        /* End screen */
+        .sc-podium-row    { width:min(360px,94%); display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:14px; }
+        .sc-podium-row.p1 { background:rgba(255,215,0,0.15); border:2px solid #ffd700; }
+        .sc-podium-row.p2 { background:rgba(192,192,192,0.1); border:1px solid #aaa; }
+        .sc-podium-row.p3 { background:rgba(205,127,50,0.1); border:1px solid #cd7f32; }
+        .sc-podium-row.crashed-row { background:rgba(244,67,54,0.06); border:1px solid #333; opacity:0.7; }
+        .sc-podium-medal  { font-size:1.8em; }
+        .sc-podium-info   { display:flex; flex-direction:column; gap:2px; flex:1; }
+        .sc-podium-driver { font-weight:900; font-size:0.95em; }
+        .sc-podium-crew   { font-size:0.72em; color:#888; }
+        .sc-podium-speed  { font-family:'Press Start 2P',monospace; font-size:0.65em; color:#4fc3f7; align-self:center; }
     </style>
 </head>
 <body>
@@ -386,6 +511,14 @@
                 <div class="gc-name">Rizz or Roast</div>
                 <div class="gc-desc">Same madlib, different energy — fill it in, record yourself, go 1v1</div>
                 <div class="gc-voters" id="gv-rr"></div>
+            </div>
+        </div>
+        <div class="game-card" id="gc-sc" onclick="pickGame('splitcrew')">
+            <div class="gc-icon">🏎️</div>
+            <div class="gc-info">
+                <div class="gc-name">Split Crew</div>
+                <div class="gc-desc">One phone reads the tasks, one phone does them — keep your diva driver happy or watch the car explode</div>
+                <div class="gc-voters" id="gv-sc"></div>
             </div>
         </div>
     </div>
@@ -812,6 +945,84 @@
     <button id="rr-lobby-btn" onclick="rrReturnToLobby()" style="display:none;background:#c62828;border:none;border-radius:10px;padding:12px 28px;color:#fff;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;">🏠 BACK TO LOBBY</button>
 </div>
 
+<!-- ════════════════════ SPLIT CREW SCREENS ════════════════════ -->
+
+<!-- Role reveal -->
+<div id="sc-role-screen" class="sc-screen">
+    <div class="sc-title">SPLIT CREW</div>
+    <div class="sc-sub" id="sc-role-partner"></div>
+    <div id="sc-driver-card">
+        <div id="sc-driver-emoji"></div>
+        <div id="sc-driver-name"></div>
+        <div id="sc-driver-blurb"></div>
+    </div>
+    <div class="sc-role-badge" id="sc-role-badge"></div>
+    <div class="sc-sub" id="sc-role-hint" style="max-width:300px;line-height:1.6;"></div>
+    <div class="sc-sub" style="color:#888;font-size:0.72em;">Get ready — pit stop starting soon…</div>
+</div>
+
+<!-- Pit stop (instructor + executor — same screen, role shown via content) -->
+<div id="sc-pit-screen" class="sc-screen">
+    <div style="display:flex;align-items:center;justify-content:space-between;width:min(380px,95%);">
+        <div class="sc-lap-badge" id="sc-pit-lap"></div>
+        <div class="sc-pit-timer" id="sc-pit-timer"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;width:min(380px,95%)">
+        <div id="sc-pit-driver-emoji" style="font-size:1.8em;"></div>
+        <div>
+            <div style="font-weight:900;font-size:0.9em;" id="sc-pit-driver-name"></div>
+            <div style="font-size:0.7em;color:#888;" id="sc-pit-role-label"></div>
+        </div>
+    </div>
+    <!-- Instructor view -->
+    <div id="sc-instructor-view" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <div class="sc-sub" style="font-size:0.75em;">READ THESE TASKS TO YOUR PARTNER</div>
+        <div id="sc-task-list"></div>
+    </div>
+    <!-- Executor view -->
+    <div id="sc-executor-view" style="display:none;width:100%;">
+        <div class="sc-sub" style="font-size:0.75em;text-align:center;margin-bottom:8px;">LISTEN TO YOUR PARTNER — DO EACH TASK</div>
+        <div id="sc-control-board"></div>
+    </div>
+    <!-- Pyro view -->
+    <div id="sc-pyro-view" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <div style="font-size:3em;">🔥</div>
+        <div class="sc-title" style="font-size:0.8em;">PYROMANIAC</div>
+        <div class="sc-sub">Watch the chaos unfold.<br>Hope someone messes up.</div>
+    </div>
+</div>
+
+<!-- Race screen -->
+<div id="sc-race-screen" class="sc-screen">
+    <div id="sc-race-header">
+        <div class="sc-race-lap" id="sc-race-lap-label"></div>
+        <div class="sc-pixel" style="font-size:0.75em;color:#e91e63;">PIT STOP RESULTS ↑</div>
+        <div class="sc-race-timer" id="sc-race-timer"></div>
+    </div>
+    <div class="sc-title" style="font-size:0.65em;margin-bottom:4px;">STANDINGS</div>
+    <div id="sc-race-lanes"></div>
+    <!-- Next pit preview (instructors only) -->
+    <div id="sc-preview-panel" style="display:none;">
+        <h3>📋 NEXT PIT STOP — PREP NOW</h3>
+        <div id="sc-preview-tasks"></div>
+    </div>
+</div>
+
+<!-- Pit reveal -->
+<div id="sc-reveal-screen" class="sc-screen">
+    <div class="sc-title" style="font-size:0.8em;" id="sc-reveal-lap-title"></div>
+    <div class="sc-sub">PIT STOP RESULTS</div>
+    <div id="sc-reveal-list" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:10px;"></div>
+</div>
+
+<!-- End screen -->
+<div id="sc-end-screen" class="sc-screen">
+    <div class="sc-title">RACE OVER</div>
+    <div class="sc-sub">FINAL STANDINGS</div>
+    <div id="sc-podium" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:8px;"></div>
+    <button onclick="scReturnToLobby()" id="sc-lobby-btn" style="display:none;margin-top:16px;background:#d32f2f;border:none;border-radius:12px;padding:14px 32px;color:#fff;font-weight:bold;font-size:1em;cursor:pointer;letter-spacing:1px;">🏠 BACK TO LOBBY</button>
+</div>
+
 <script>
 const socket = io();
 
@@ -921,6 +1132,7 @@ function rlStartGame() {
     else if (selectedGame === 'squiggle') socket.emit('sqStartGame');
     else if (selectedGame === 'pikpic') socket.emit('ppStartGame');
     else if (selectedGame === 'rizzorroast') socket.emit('rrStartGame');
+    else if (selectedGame === 'splitcrew') socket.emit('scStartGame');
 }
 
 function shareRoom() {
@@ -2751,6 +2963,540 @@ socket.on('rrTimer', ({ timeLeft, phase }) => {
     else if (phase === 'RECORD') { const el = document.getElementById('rr-record-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
     else if (phase === 'VOTE') { const el = document.getElementById('rr-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
 });
+
+// ─── Split Crew client ───────────────────────────────────────────────────────
+
+const SC_SCREENS = ['sc-role-screen','sc-pit-screen','sc-race-screen','sc-reveal-screen','sc-end-screen'];
+let scMyRole = null, scMyTeamIdx = null, scMyTasks = [], scLaneAnimFrames = {}, scRaceInterval = null;
+
+function scShowOnly(id) {
+    SC_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; });
+    const target = document.getElementById(id);
+    if (target) { target.style.display = 'flex'; target.scrollTop = 0; }
+}
+
+function scCleanup() {
+    SC_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; });
+    if (scRaceInterval) { clearInterval(scRaceInterval); scRaceInterval = null; }
+}
+
+// ── Role reveal ──────────────────────────────────────────────────────────────
+socket.on('scYourRole', ({ role, partner, driver }) => {
+    scMyRole = role;
+    document.getElementById('sc-driver-emoji').innerText = driver ? driver.emoji : '🔥';
+    document.getElementById('sc-driver-name').innerText  = driver ? driver.name  : 'PYROMANIAC';
+    document.getElementById('sc-driver-blurb').innerText = driver ? driver.blurb : 'Watch. Hope. Pray someone crashes.';
+    const badge = document.getElementById('sc-role-badge');
+    const hint  = document.getElementById('sc-role-hint');
+    const partnerEl = document.getElementById('sc-role-partner');
+    if (role === 'instructor') {
+        badge.className = 'sc-role-badge sc-role-instr'; badge.innerText = '📋 INSTRUCTOR';
+        hint.innerText  = `You read the task list to ${partner}. Say everything clearly — they can't see your screen.`;
+        partnerEl.innerText = `Your partner: ${partner}`;
+    } else if (role === 'executor') {
+        badge.className = 'sc-role-badge sc-role-exec'; badge.innerText = '🔧 PIT CREW';
+        hint.innerText  = `You operate the controls. Listen to ${partner} and do exactly what they say.`;
+        partnerEl.innerText = `Your partner: ${partner}`;
+    } else {
+        badge.className = 'sc-role-badge sc-role-pyro'; badge.innerText = '🔥 PYROMANIAC';
+        hint.innerText  = 'Sit back. Watch the chaos. You win if any car explodes.';
+        partnerEl.innerText = '';
+    }
+    scShowOnly('sc-role-screen');
+});
+
+socket.on('scTeamsAssigned', ({ teams, pyroName }) => {
+    // host broadcast — everyone already has their role via scYourRole
+    // Just update race lane data for later
+    // (no extra action needed; role screen is already shown)
+});
+
+// ── Pit stop ─────────────────────────────────────────────────────────────────
+socket.on('scPitStart', ({ role, lap, timeLeft, tasks, driver }) => {
+    scMyRole = role;
+    scMyTasks = tasks || [];
+    document.getElementById('sc-pit-lap').innerText    = `LAP ${lap} PIT`;
+    document.getElementById('sc-pit-timer').innerText  = timeLeft;
+    document.getElementById('sc-pit-driver-emoji').innerText = driver ? driver.emoji : '';
+    document.getElementById('sc-pit-driver-name').innerText  = driver ? driver.name  : '';
+
+    const instrView = document.getElementById('sc-instructor-view');
+    const execView  = document.getElementById('sc-executor-view');
+    const pyroView  = document.getElementById('sc-pyro-view');
+    instrView.style.display = 'none';
+    execView.style.display  = 'none';
+    pyroView.style.display  = 'none';
+
+    if (role === 'instructor') {
+        document.getElementById('sc-pit-role-label').innerText = '📋 READ TASKS TO YOUR PARTNER';
+        instrView.style.display = 'flex';
+        scBuildInstructorTaskList(tasks);
+    } else if (role === 'executor') {
+        document.getElementById('sc-pit-role-label').innerText = '🔧 LISTEN & OPERATE THE CONTROLS';
+        execView.style.display = 'block';
+        scBuildControlBoard(tasks);
+    } else {
+        document.getElementById('sc-pit-role-label').innerText = '🔥 WATCHING...';
+        pyroView.style.display = 'flex';
+    }
+    scShowOnly('sc-pit-screen');
+});
+
+function scBuildInstructorTaskList(tasks) {
+    const list = document.getElementById('sc-task-list');
+    list.innerHTML = '';
+    tasks.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'sc-task-row';
+        row.id = `sc-irow-${t.id}`;
+        row.innerHTML = `
+            <div class="sc-task-type ${t.car ? 'sc-task-car' : 'sc-task-diva'}">${t.car ? '🔧 CAR TASK' : '🌟 DRIVER TASK'}</div>
+            <div class="sc-task-label">${t.instructorLabel}</div>
+            <div class="sc-task-ql" id="sc-iql-${t.id}">⏳</div>`;
+        list.appendChild(row);
+    });
+}
+
+socket.on('scTaskUpdate', ({ taskId, quality, qualityLabel }) => {
+    const row = document.getElementById(`sc-irow-${taskId}`);
+    const ql  = document.getElementById(`sc-iql-${taskId}`);
+    if (!row || !ql) return;
+    ql.innerText = qualityLabel;
+    row.className = 'sc-task-row ' + (quality >= 0.9 ? 'done-good' : quality >= 0.6 ? 'done-ok' : 'done-bad');
+});
+
+// ── Control Board (executor) ─────────────────────────────────────────────────
+function scBuildControlBoard(tasks) {
+    const board = document.getElementById('sc-control-board');
+    board.innerHTML = '';
+    tasks.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'sc-control-card';
+        card.id = `sc-card-${t.id}`;
+        card.innerHTML = `<div class="sc-ctrl-label">${t.car ? '🔧 CAR TASK' : '🌟 DRIVER TASK'}</div>
+            <div class="sc-ctrl-title">${t.driverLabel}</div>
+            <div id="sc-ctrl-body-${t.id}">${scBuildControl(t)}</div>
+            <div class="sc-done-check" id="sc-check-${t.id}" style="display:none;">✅</div>`;
+        board.appendChild(card);
+        scInitControl(t);
+    });
+}
+
+function scBuildControl(task) {
+    const id = task.id;
+    switch (task.type) {
+        case 'gauge':
+            return `<div class="sc-gauge-wrap">
+                <div class="sc-gauge-level" id="sc-glevel-${id}">0</div>
+                <div class="sc-gauge-track"><div class="sc-gauge-fill" id="sc-gfill-${id}"></div></div>
+                <button class="sc-gauge-btn" id="sc-gbtn-${id}" ontouchstart="scGaugeStart('${id}')" ontouchend="scGaugeEnd('${id}')" onmousedown="scGaugeStart('${id}')" onmouseup="scGaugeEnd('${id}')">⬛</button>
+            </div>`;
+        case 'tap':
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+                <div class="sc-tap-count" id="sc-tcount-${id}">0</div>
+                <button class="sc-tap-btn" id="sc-tbtn-${id}" onclick="scTap('${id}')">TAP</button>
+                <button onclick="scSubmitTap('${id}')" style="background:#1565c0;border:none;border-radius:10px;padding:10px 24px;color:#fff;font-weight:bold;cursor:pointer;">DONE</button>
+            </div>`;
+        case 'swipe_seq':
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+                <div class="sc-swipe-progress" id="sc-sprog-${id}"></div>
+                <div class="sc-swipe-zone" id="sc-szone-${id}">👆</div>
+            </div>`;
+        case 'crank':
+            return `<div class="sc-crank-wrap">
+                <div class="sc-crank" id="sc-crank-${id}"><div class="sc-crank-needle" id="sc-cneedle-${id}"></div>🔧</div>
+                <div class="sc-crank-count" id="sc-ccount-${id}">0.0 turns</div>
+                <button onclick="scSubmitCrank('${id}')" style="background:#1565c0;border:none;border-radius:10px;padding:10px 24px;color:#fff;font-weight:bold;cursor:pointer;">DONE</button>
+            </div>`;
+        case 'timing':
+            return `<div class="sc-timing-wrap">
+                <div class="sc-timing-ring">
+                    <svg class="sc-timing-svg" id="sc-tsvg-${id}" viewBox="0 0 130 130">
+                        <circle cx="65" cy="65" r="50" fill="none" stroke="#222" stroke-width="8"/>
+                        <circle cx="65" cy="65" r="50" fill="none" stroke="#ffcc00" stroke-width="8" stroke-dasharray="314" stroke-dashoffset="314" id="sc-tarc-${id}" style="transform-origin:65px 65px;transform:rotate(-90deg);transition:stroke-dashoffset .05s;"/>
+                        <circle cx="65" cy="65" r="42" fill="none" stroke="#ff4444" stroke-width="4" id="sc-tring-${id}" opacity="0.8"/>
+                    </svg>
+                    <button class="sc-timing-btn" id="sc-tbtn-${id}" onclick="scTimingTap('${id}')">⚡</button>
+                </div>
+                <div style="font-size:0.8em;color:#888;">tap when the bar reaches the ring!</div>
+            </div>`;
+        case 'angle':
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+                <div class="sc-angle-item" id="sc-aitem-${id}" style="transform:rotate(0deg);">🕶️</div>
+                <div class="sc-angle-label" id="sc-adeg-${id}">0°</div>
+                <button onclick="scSubmitAngle('${id}')" style="background:#1565c0;border:none;border-radius:10px;padding:10px 24px;color:#fff;font-weight:bold;cursor:pointer;">SET</button>
+            </div>`;
+        case 'dial':
+            return `<div class="sc-dial-wrap">
+                <div class="sc-dial" id="sc-dial-${id}"><div class="sc-dial-needle" id="sc-dneedle-${id}"></div></div>
+                <div class="sc-dial-label" id="sc-dlabel-${id}">---</div>
+                <button onclick="scSubmitDial('${id}')" style="background:#e91e63;border:none;border-radius:10px;padding:10px 24px;color:#fff;font-weight:bold;cursor:pointer;">TUNE IN</button>
+            </div>`;
+        default:
+            return `<button onclick="scMarkDone('${id}',{})" style="background:#555;border:none;border-radius:10px;padding:12px 24px;color:#fff;font-weight:bold;cursor:pointer;">DONE</button>`;
+    }
+}
+
+// ── Gauge ────────────────────────────────────────────────────────────────────
+const scGaugeState = {};
+function scGaugeStart(id) {
+    if (scGaugeState[id]?.done) return;
+    scGaugeState[id] = { ...scGaugeState[id], holding: true, level: scGaugeState[id]?.level || 0 };
+    scGaugeState[id].raf = requestAnimationFrame(function fill() {
+        if (!scGaugeState[id]?.holding) return;
+        scGaugeState[id].level = Math.min(10, (scGaugeState[id].level || 0) + 0.06);
+        scUpdateGauge(id);
+        scGaugeState[id].raf = requestAnimationFrame(fill);
+    });
+}
+function scGaugeEnd(id) {
+    if (!scGaugeState[id]) return;
+    cancelAnimationFrame(scGaugeState[id].raf);
+    scGaugeState[id].holding = false;
+    scGaugeState[id].done = true;
+    const level = scGaugeState[id].level;
+    scMarkDone(id, { level });
+}
+function scUpdateGauge(id) {
+    const level = scGaugeState[id]?.level || 0;
+    const fill = document.getElementById(`sc-gfill-${id}`);
+    const lbl  = document.getElementById(`sc-glevel-${id}`);
+    if (fill) fill.style.width = `${level * 10}%`;
+    if (lbl)  lbl.innerText = level.toFixed(1);
+}
+
+// ── Tap ──────────────────────────────────────────────────────────────────────
+const scTapState = {};
+function scTap(id) {
+    if (!scTapState[id]) scTapState[id] = { count: 0 };
+    scTapState[id].count++;
+    const el = document.getElementById(`sc-tcount-${id}`);
+    if (el) el.innerText = scTapState[id].count;
+    const btn = document.getElementById(`sc-tbtn-${id}`);
+    if (btn) { btn.style.transform = 'scale(0.88)'; setTimeout(() => { btn.style.transform = ''; }, 80); }
+}
+function scSubmitTap(id) {
+    const count = scTapState[id]?.count || 0;
+    scMarkDone(id, { count });
+}
+
+// ── Swipe sequence ───────────────────────────────────────────────────────────
+const scSwipeState = {};
+const SC_DIR_ARROWS = { U:'⬆️', D:'⬇️', L:'⬅️', R:'➡️' };
+function scAddSwipe(id, dir) {
+    if (scSwipeState[id]?.done) return;
+    if (!scSwipeState[id]) scSwipeState[id] = { steps: [] };
+    scSwipeState[id].steps.push(dir);
+    const prog = document.getElementById(`sc-sprog-${id}`);
+    const zone = document.getElementById(`sc-szone-${id}`);
+    if (prog) {
+        const step = document.createElement('div');
+        step.className = 'sc-swipe-step done';
+        step.innerText = SC_DIR_ARROWS[dir] || dir;
+        prog.appendChild(step);
+    }
+    if (zone) zone.innerText = SC_DIR_ARROWS[dir] || dir;
+    // Auto-submit after 1.2s of no new swipes
+    clearTimeout(scSwipeState[id].timer);
+    scSwipeState[id].timer = setTimeout(() => {
+        if (!scSwipeState[id]?.done) {
+            scSwipeState[id].done = true;
+            scMarkDone(id, { sequence: scSwipeState[id].steps });
+        }
+    }, 1200);
+}
+
+// ── Crank ────────────────────────────────────────────────────────────────────
+const scCrankState = {};
+function scInitCrank(id) {
+    const el = document.getElementById(`sc-crank-${id}`);
+    if (!el) return;
+    scCrankState[id] = { rotations: 0, lastAngle: null };
+    const getAngle = (cx, cy, ex, ey) => Math.atan2(ey - cy, ex - cx) * (180 / Math.PI);
+    const move = (ex, ey) => {
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+        const angle = getAngle(cx, cy, ex, ey);
+        const st = scCrankState[id];
+        if (st.lastAngle !== null) {
+            let delta = angle - st.lastAngle;
+            if (delta > 180) delta -= 360;
+            if (delta < -180) delta += 360;
+            st.rotations += delta / 360;
+        }
+        st.lastAngle = angle;
+        const needle = document.getElementById(`sc-cneedle-${id}`);
+        if (needle) needle.style.transform = `translateX(-50%) rotate(${angle + 90}deg)`;
+        const cnt = document.getElementById(`sc-ccount-${id}`);
+        if (cnt) cnt.innerText = `${Math.abs(st.rotations).toFixed(1)} turns`;
+    };
+    el.addEventListener('touchstart', e => { const t=e.touches[0]; move(t.clientX,t.clientY); e.preventDefault(); }, { passive:false });
+    el.addEventListener('touchmove',  e => { const t=e.touches[0]; move(t.clientX,t.clientY); e.preventDefault(); }, { passive:false });
+    el.addEventListener('touchend',   () => { scCrankState[id].lastAngle = null; });
+    el.addEventListener('mousedown',  e => { scCrankState[id].dragging = true; move(e.clientX,e.clientY); });
+    el.addEventListener('mousemove',  e => { if (scCrankState[id].dragging) move(e.clientX,e.clientY); });
+    el.addEventListener('mouseup',    () => { scCrankState[id].dragging = false; scCrankState[id].lastAngle = null; });
+}
+function scSubmitCrank(id) {
+    const rotations = Math.abs(scCrankState[id]?.rotations || 0);
+    scMarkDone(id, { rotations });
+}
+
+// ── Timing ring ──────────────────────────────────────────────────────────────
+const scTimingState = {};
+function scInitTiming(id) {
+    const arc = document.getElementById(`sc-tarc-${id}`);
+    if (!arc) return;
+    const circumference = 314;
+    let progress = 0, dir = 1, speed = 0.8, rafId;
+    scTimingState[id] = { tapped: false };
+    function tick() {
+        if (scTimingState[id].tapped) return;
+        progress += speed * dir;
+        if (progress >= 100) { progress = 100; dir = -1; }
+        if (progress <= 0)   { progress = 0;   dir = 1;  }
+        arc.style.strokeDashoffset = circumference - (progress / 100) * circumference;
+        rafId = requestAnimationFrame(tick);
+    }
+    scTimingState[id].stop = () => cancelAnimationFrame(rafId);
+    scTimingState[id].getProgress = () => progress;
+    rafId = requestAnimationFrame(tick);
+}
+function scTimingTap(id) {
+    if (scTimingState[id]?.tapped) return;
+    scTimingState[id].tapped = true;
+    if (scTimingState[id].stop) scTimingState[id].stop();
+    const p = scTimingState[id].getProgress ? scTimingState[id].getProgress() : 50;
+    // Target is ~75-80% of the ring (the "sweet spot")
+    const target = 77;
+    const diff = Math.abs(p - target);
+    const accuracy = diff <= 5 ? 1.0 : diff <= 15 ? 0.7 : diff <= 25 ? 0.4 : 0.1;
+    scMarkDone(id, { accuracy });
+}
+
+// ── Angle ────────────────────────────────────────────────────────────────────
+const scAngleState = {};
+function scInitAngle(id) {
+    const el = document.getElementById(`sc-aitem-${id}`);
+    if (!el) return;
+    scAngleState[id] = { degrees: 0 };
+    let lastY = null;
+    el.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; e.preventDefault(); }, { passive:false });
+    el.addEventListener('touchmove',  e => {
+        const dy = e.touches[0].clientY - lastY;
+        lastY = e.touches[0].clientY;
+        scAngleState[id].degrees = Math.max(-90, Math.min(90, scAngleState[id].degrees + dy * 0.8));
+        el.style.transform = `rotate(${scAngleState[id].degrees}deg)`;
+        const lbl = document.getElementById(`sc-adeg-${id}`);
+        if (lbl) lbl.innerText = Math.round(scAngleState[id].degrees) + '°';
+        e.preventDefault();
+    }, { passive:false });
+}
+function scSubmitAngle(id) {
+    scMarkDone(id, { degrees: Math.round(scAngleState[id]?.degrees || 0) });
+}
+
+// ── Dial ─────────────────────────────────────────────────────────────────────
+const scDialState = {};
+const SC_STATIONS = ['94.1','94.7','96.1','96.7','98.1','98.7','100.1','100.7','102.1','102.7','104.1','104.7','106.1','106.7','108.1','108.7'];
+function scInitDial(id) {
+    const el = document.getElementById(`sc-dial-${id}`);
+    if (!el) return;
+    scDialState[id] = { idx: 0, lastAngle: null };
+    const getAngle = (cx, cy, ex, ey) => Math.atan2(ey - cy, ex - cx) * (180 / Math.PI);
+    const move = (ex, ey) => {
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+        const angle = getAngle(cx, cy, ex, ey);
+        const st = scDialState[id];
+        if (st.lastAngle !== null) {
+            let delta = angle - st.lastAngle;
+            if (delta > 180) delta -= 360;
+            if (delta < -180) delta += 360;
+            if (Math.abs(delta) > 15) {
+                st.idx = (st.idx + (delta > 0 ? 1 : -1) + SC_STATIONS.length) % SC_STATIONS.length;
+                const needle = document.getElementById(`sc-dneedle-${id}`);
+                const lbl    = document.getElementById(`sc-dlabel-${id}`);
+                if (needle) needle.style.transform = `translateX(-50%) rotate(${(st.idx / SC_STATIONS.length) * 360}deg)`;
+                if (lbl)    lbl.innerText = SC_STATIONS[st.idx] + ' FM';
+                st.lastAngle = angle;
+            }
+        } else {
+            st.lastAngle = angle;
+        }
+    };
+    el.addEventListener('touchstart', e => { const t=e.touches[0]; move(t.clientX,t.clientY); e.preventDefault(); }, { passive:false });
+    el.addEventListener('touchmove',  e => { const t=e.touches[0]; move(t.clientX,t.clientY); e.preventDefault(); }, { passive:false });
+    el.addEventListener('touchend',   () => { scDialState[id].lastAngle = null; });
+    el.addEventListener('mousedown',  e => { scDialState[id].dragging = true; move(e.clientX, e.clientY); });
+    el.addEventListener('mousemove',  e => { if (scDialState[id].dragging) move(e.clientX, e.clientY); });
+    el.addEventListener('mouseup',    () => { scDialState[id].dragging = false; scDialState[id].lastAngle = null; });
+}
+function scSubmitDial(id) {
+    const value = SC_STATIONS[scDialState[id]?.idx || 0];
+    scMarkDone(id, { value });
+}
+
+// ── Init controls after DOM render ───────────────────────────────────────────
+function scInitControl(task) {
+    requestAnimationFrame(() => {
+        if (task.type === 'crank')  scInitCrank(task.id);
+        if (task.type === 'timing') scInitTiming(task.id);
+        if (task.type === 'angle')  scInitAngle(task.id);
+        if (task.type === 'dial')   scInitDial(task.id);
+        if (task.type === 'swipe_seq') {
+            scSwipeState[task.id] = { steps: [], done: false };
+            const zone = document.getElementById(`sc-szone-${task.id}`);
+            if (!zone) return;
+            let t0x = 0, t0y = 0;
+            zone.addEventListener('touchstart', e => { t0x = e.touches[0].clientX; t0y = e.touches[0].clientY; e.preventDefault(); }, { passive:false });
+            zone.addEventListener('touchend', e => {
+                const t = e.changedTouches[0];
+                const dx = t.clientX - t0x, dy = t.clientY - t0y;
+                if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+                let dir;
+                if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'R' : 'L';
+                else dir = dy > 0 ? 'D' : 'U';
+                scAddSwipe(task.id, dir);
+                e.preventDefault();
+            }, { passive:false });
+        }
+    });
+}
+
+function scMarkDone(taskId, result) {
+    const card = document.getElementById(`sc-card-${taskId}`);
+    const check = document.getElementById(`sc-check-${taskId}`);
+    const body  = document.getElementById(`sc-ctrl-body-${taskId}`);
+    if (card)  card.classList.add('completed');
+    if (check) check.style.display = 'block';
+    if (body)  body.style.opacity  = '0.4';
+    socket.emit('scCompleteTask', { taskId, result });
+}
+
+socket.on('scTaskAck', ({ taskId, quality }) => {
+    const card = document.getElementById(`sc-card-${taskId}`);
+    if (card) {
+        card.style.borderColor = quality >= 0.9 ? '#4caf50' : quality >= 0.6 ? '#ff9800' : '#f44336';
+    }
+});
+
+socket.on('scTimer', ({ phase, timeLeft, lap }) => {
+    if (phase === 'PIT') {
+        const el = document.getElementById('sc-pit-timer');
+        if (el) el.innerText = timeLeft > 0 ? timeLeft : '0';
+    } else if (phase === 'RACE') {
+        const el = document.getElementById('sc-race-timer');
+        if (el) el.innerText = timeLeft;
+    }
+});
+
+// ── Race screen ──────────────────────────────────────────────────────────────
+socket.on('scRaceStart', ({ lap, timeLeft, teams }) => {
+    document.getElementById('sc-race-lap-label').innerText = `LAP ${lap}`;
+    document.getElementById('sc-race-timer').innerText = timeLeft;
+    scBuildRaceLanes(teams);
+    scShowOnly('sc-race-screen');
+});
+
+function scBuildRaceLanes(teams) {
+    const container = document.getElementById('sc-race-lanes');
+    container.innerHTML = '';
+    // Sort by speed desc for display order
+    const sorted = [...teams].sort((a, b) => {
+        if (a.crashed && !b.crashed) return 1;
+        if (!a.crashed && b.crashed) return -1;
+        return b.speed - a.speed;
+    });
+    sorted.forEach((team, pos) => {
+        const lane = document.createElement('div');
+        lane.className = 'sc-lane';
+        lane.id = `sc-lane-${team.teamIdx}`;
+        // Speed → road animation speed (slower car = slower scroll)
+        const scrollSpeed = team.crashed ? 0 : Math.max(0.2, team.speed / 150);
+        const animDur = team.crashed ? '999s' : `${(0.8 / scrollSpeed).toFixed(2)}s`;
+        const hasSmoke = team.damages && team.damages.length > 0;
+        lane.innerHTML = `
+            <div class="sc-road" style="animation-duration:${animDur};${team.crashed?'animation-play-state:paused':''}"></div>
+            <div class="sc-lane-line" style="animation-duration:${animDur};${team.crashed?'animation-play-state:paused':''}"></div>
+            ${hasSmoke ? '<div class="sc-smoke-trail">💨</div>' : ''}
+            <div class="sc-car ${team.crashed?'crashed':hasSmoke?'smoke':''}" style="color:${team.driver.color};">${team.driver.emoji}</div>
+            <div class="sc-lane-info">
+                <div class="sc-lane-name">${team.driver.name}</div>
+                <div class="sc-lane-speed">${team.crashed ? '💥 OUT' : team.speed + ' MPH'}</div>
+            </div>
+            <div class="sc-lane-pos">${team.crashed ? '💀' : '#' + (pos + 1)}</div>`;
+        container.appendChild(lane);
+    });
+}
+
+socket.on('scNextPitPreview', ({ tasks }) => {
+    if (scMyRole !== 'instructor') return;
+    const panel = document.getElementById('sc-preview-panel');
+    const list  = document.getElementById('sc-preview-tasks');
+    if (!panel || !list) return;
+    list.innerHTML = tasks.map(t =>
+        `<div class="sc-preview-row">${t.car ? '🔧' : '🌟'} ${t.instructorLabel}</div>`
+    ).join('');
+    panel.style.display = 'flex';
+});
+
+// ── Pit reveal ───────────────────────────────────────────────────────────────
+socket.on('scPitReveal', ({ lap, results }) => {
+    document.getElementById('sc-reveal-lap-title').innerText = `LAP ${lap} DONE`;
+    const list = document.getElementById('sc-reveal-list');
+    list.innerHTML = '';
+    results.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'sc-reveal-team' + (r.crashed ? ' crashed' : '');
+        const taskRows = r.tasks.map(t => {
+            const pct = Math.round(t.quality * 100);
+            const icon = t.quality >= 0.9 ? '✅' : t.quality >= 0.6 ? '⚠️' : '❌';
+            return `<div class="sc-reveal-task">${icon} <span>${t.driverLabel}</span> <span style="margin-left:auto;font-family:monospace;font-size:0.8em;color:#aaa;">${pct}%</span></div>
+                ${t.fail ? `<div class="sc-reveal-fail">${t.fail}</div>` : ''}`;
+        }).join('');
+        div.innerHTML = `
+            <div class="sc-reveal-header">
+                <div class="sc-reveal-driver">${r.driverEmoji}</div>
+                <div class="sc-reveal-info">
+                    <div class="sc-reveal-dname">${r.driverName}</div>
+                    <div class="sc-reveal-crew">📋 ${r.instructorName} &nbsp;🔧 ${r.executorName}</div>
+                </div>
+                <div class="sc-reveal-speed">${r.crashed ? '💥 CRASH' : r.speed + ' MPH'}</div>
+            </div>
+            ${taskRows}
+            ${r.crashed ? '<div class="sc-crash-banner">💥 CAR ELIMINATED</div>' : ''}`;
+        list.appendChild(div);
+    });
+    scShowOnly('sc-reveal-screen');
+});
+
+// ── End screen ───────────────────────────────────────────────────────────────
+socket.on('scGameEnd', ({ standings }) => {
+    const podium = document.getElementById('sc-podium');
+    podium.innerHTML = '';
+    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+    standings.forEach((s, i) => {
+        const div = document.createElement('div');
+        div.className = 'sc-podium-row ' + (s.crashed ? 'crashed-row' : i===0?'p1':i===1?'p2':i===2?'p3':'');
+        div.innerHTML = `
+            <div class="sc-podium-medal">${s.crashed ? '💥' : medals[i] || '🏁'}</div>
+            <div class="sc-podium-info">
+                <div class="sc-podium-driver">${s.driver.emoji} ${s.driver.name}</div>
+                <div class="sc-podium-crew">📋 ${s.instructorName} &nbsp;🔧 ${s.executorName}</div>
+            </div>
+            <div class="sc-podium-speed">${s.crashed ? 'CRASHED L'+s.crashedOnLap : s.totalSpeed+' TOT'}</div>`;
+        podium.appendChild(div);
+    });
+    if (isRoomHost) document.getElementById('sc-lobby-btn').style.display = 'block';
+    scShowOnly('sc-end-screen');
+});
+
+function scReturnToLobby() {
+    socket.emit('scReturnToLobby');
+    scCleanup();
+    show('room-lobby'); renderRoomLobby();
+}
 
 // ─── Stroke Off (squiggle) client ────────────────────────────────────────────
 

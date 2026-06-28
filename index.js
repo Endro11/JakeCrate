@@ -98,6 +98,13 @@ function makeRoom(code) {
         rrScores: {},
         rrTimer: null,
         rrTimeLeft: 0,
+        // Split Crew state
+        scPhase: 'LOBBY',
+        scTeams: [],
+        scLap: 0,
+        scPyroId: null,
+        scTimer: null,
+        scTimeLeft: 0,
     };
 }
 
@@ -1005,6 +1012,316 @@ function rr_returnToLobby(room) {
     broadcastGameState(room);
 }
 
+// ─── Split Crew ────────────────────────────────────────────────────────────────
+
+const SC_PIT_SECONDS    = 55;
+const SC_RACE_SECONDS   = 18;
+const SC_REVEAL_SECONDS = 8;
+const SC_LAPS           = 3;
+
+function sc_ri(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
+function sc_randStation() {
+    const bases = [94, 96, 98, 100, 102, 104, 106, 108];
+    return bases[sc_ri(0, bases.length - 1)] + (Math.random() < 0.5 ? '.1' : '.7');
+}
+function sc_shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+
+const SC_DRIVERS = [
+    { id:'chad',    name:'Chad McSpeed',    emoji:'😎', color:'#e53935', blurb:'Needs constant pampering',          signatureTasks:['coffee','sunscreen','selfie'] },
+    { id:'brittney',name:'Brittney Burnout',emoji:'💅', color:'#e91e63', blurb:'High-maintenance party girl',       signatureTasks:['nails','sunglasses','hairspray'] },
+    { id:'rico',    name:'Rico Veloso',     emoji:'🙏', color:'#fdd835', blurb:'Deeply superstitious before races', signatureTasks:['holy_cross','champagne','rosary'] },
+    { id:'dale',    name:'Dale Danger',     emoji:'🤠', color:'#795548', blurb:'Needs his comfort items',           signatureTasks:['spit_cup','country_radio','beer_cozy'] },
+    { id:'yuki',    name:'Yuki Turbō',      emoji:'⚡', color:'#00bcd4', blurb:'Zen speedster. Rituals are sacred', signatureTasks:['energy_drink','meditation_bell','origami'] },
+    { id:'fabrice', name:'Fabrice Le Fou',  emoji:'🥐', color:'#3f51b5', blurb:'Insufferable Frenchman',            signatureTasks:['beret','croissant','shrug'] },
+];
+
+const SC_TASK_DEFS = {
+    // ── Car tasks ──
+    lug_nuts:        { type:'crank',    car:true,  gen:()=>sc_ri(2,5),     instruct:(t)=>`Crank the wrench exactly ${t} full turn${t>1?'s':''}`,           fail:'Wheel wobbled off mid-corner.' },
+    fuel:            { type:'gauge',    car:true,  gen:()=>sc_ri(3,9),     instruct:(t)=>`Fill fuel — hold until level hits ${t}, release right there`,    fail:'Ran dry on the back straight.' },
+    air_gun:         { type:'tap',      car:true,  gen:()=>sc_ri(4,8),     instruct:(t)=>`Air gun — hit it exactly ${t} times`,                           fail:'Tires underinflated. Handling gone.' },
+    squeegee:        { type:'swipe_seq',car:true,  gen:()=>{ const n=sc_ri(2,3); const s=[]; for(let i=0;i<n*2-1;i++) s.push(i%2===0?'L':'R'); return s; }, instruct:(seq)=>`Squeegee windshield: ${seq.join(' → ')}`, fail:"Driver can't see. Swerving wildly." },
+    // ── Diva tasks ──
+    coffee:          { type:'gauge',    car:false, gen:()=>sc_ri(5,9),     instruct:(t)=>`Fill his coffee to level ${t} — not a drop more`,               fail:'Cold coffee. Driver furious. Speed penalty.' },
+    nails:           { type:'tap',      car:false, gen:()=>5,              instruct:()=>'Clip all 5 nails — tap 5 times left to right',                   fail:'Clipped wrong finger. Drama ensued.' },
+    holy_cross:      { type:'swipe_seq',car:false, gen:()=>['U','L','R','D'], instruct:()=>'Holy cross: swipe UP → LEFT → RIGHT → DOWN',                 fail:"God isn't watching now. Rico is rattled." },
+    sunglasses:      { type:'angle',    car:false, gen:()=>sc_ri(-2,3)*15, instruct:(t)=>`Tilt sunglasses ${t===0?'perfectly straight':Math.abs(t)+'° to the '+(t>0?'right':'left')}`, fail:'Crooked shades. Absolutely unacceptable.' },
+    selfie:          { type:'timing',   car:false, gen:()=>null,           instruct:()=>'Hold pose — tap EXACTLY when the flash fires',                   fail:"Missed the shot. Instagram ruined." },
+    energy_drink:    { type:'gauge',    car:false, gen:()=>sc_ri(6,10),    instruct:(t)=>`Energy drink — fill to level ${t}`,                            fail:'Too little energy. Yuki feels mortal.' },
+    meditation_bell: { type:'timing',   car:false, gen:()=>null,           instruct:()=>'Ring the bell — tap when the circle touches the ring',           fail:"Wrong frequency. Yuki's vibes are ruined." },
+    spit_cup:        { type:'gauge',    car:false, gen:()=>sc_ri(4,7),     instruct:(t)=>`Spit cup to level ${t} — do NOT overflow`,                     fail:'Overflowed. Dale is disgusted with everyone.' },
+    country_radio:   { type:'dial',     car:false, gen:()=>sc_randStation(), instruct:(t)=>`Tune the radio to ${t} FM`,                                  fail:'Heard jazz. Dale cannot function on jazz.' },
+    beret:           { type:'angle',    car:false, gen:()=>sc_ri(-2,2)*15, instruct:(t)=>`Tilt the beret ${t===0?'perfectly straight':Math.abs(t)+'° to the '+(t>0?'right':'left')}`, fail:"Wrong angle. Fabrice won't leave the pit." },
+    champagne:       { type:'tap',      car:false, gen:()=>sc_ri(3,6),     instruct:(t)=>`Shake the champagne bottle exactly ${t} times`,                fail:"Flat champagne. Rico's curse activated." },
+    beer_cozy:       { type:'swipe_seq',car:false, gen:()=>['U'],          instruct:()=>'Slide the beer cozy UP over the can',                           fail:"Beer got warm. Dale's focus is gone." },
+    shrug:           { type:'swipe_seq',car:false, gen:()=>['U','U'],      instruct:()=>'Dramatic shrug — swipe UP, UP',                                 fail:"Not dramatic enough. Fabrice is sulking." },
+    origami:         { type:'swipe_seq',car:false, gen:()=>['R','D','L','U'], instruct:()=>'Fold origami: RIGHT → DOWN → LEFT → UP',                    fail:"Bad luck origami. Yuki feels cursed." },
+    rosary:          { type:'tap',      car:false, gen:()=>10,             instruct:()=>'Count 10 rosary beads — tap 10 times',                          fail:"Skipped beads. Rico's prayers unanswered." },
+    sunscreen:       { type:'swipe_seq',car:false, gen:()=>['L','R','L'],  instruct:()=>'Apply sunscreen: LEFT → RIGHT → LEFT',                          fail:'Chad is burning. He is NOT happy.' },
+    hairspray:       { type:'timing',   car:false, gen:()=>null,           instruct:()=>'Hairspray — tap when the bar hits the sweet spot',              fail:"Helmet-hair catastrophe. Chad is devastated." },
+    croissant:       { type:'timing',   car:false, gen:()=>null,           instruct:()=>"Hand him the croissant — tap when he opens his mouth",          fail:"Missed his mouth. Fabrice is appalled." },
+};
+
+function sc_generateTasks(driver, lap) {
+    const carPool = sc_shuffle(['lug_nuts', 'fuel', 'air_gun', 'squeegee']);
+    const sigPool = sc_shuffle([...driver.signatureTasks]);
+    const carCount = lap === 1 ? 1 : 2;
+    const divaCount = lap === 1 ? 1 : 2;
+    const picked = sc_shuffle([...carPool.slice(0, carCount), ...sigPool.slice(0, divaCount)]);
+    return picked.map((taskId, idx) => {
+        const def = SC_TASK_DEFS[taskId];
+        const target = def.gen();
+        return {
+            id: `${taskId}_${idx}`,
+            taskId,
+            type: def.type,
+            car: def.car,
+            target,
+            instructorLabel: def.instruct(target),
+            driverLabel: taskId.replace(/_/g, ' ').toUpperCase(),
+            completed: false,
+            quality: 0,
+        };
+    });
+}
+
+function sc_calcQuality(type, target, result) {
+    switch (type) {
+        case 'crank': {
+            const diff = Math.abs((result.rotations || 0) - target);
+            return diff <= 0.3 ? 1.0 : Math.max(0, 1 - diff * 0.4);
+        }
+        case 'gauge': {
+            const diff = Math.abs((result.level || 0) - target);
+            return diff <= 0.5 ? 1.0 : Math.max(0, 1 - diff * 0.15);
+        }
+        case 'tap': {
+            const diff = Math.abs((result.count || 0) - target);
+            return diff === 0 ? 1.0 : diff === 1 ? 0.65 : diff === 2 ? 0.3 : 0;
+        }
+        case 'swipe_seq': {
+            if (!Array.isArray(result.sequence) || !Array.isArray(target)) return 0;
+            if (result.sequence.length !== target.length) return 0;
+            return result.sequence.every((v, i) => v === target[i]) ? 1.0 : 0;
+        }
+        case 'timing': {
+            return typeof result.accuracy === 'number' ? Math.max(0, Math.min(1, result.accuracy)) : 0;
+        }
+        case 'angle': {
+            const diff = Math.abs((result.degrees || 0) - target);
+            return diff <= 10 ? 1.0 : diff <= 20 ? 0.6 : Math.max(0, 1 - diff / 90);
+        }
+        case 'dial': {
+            return String(result.value) === String(target) ? 1.0 : 0.1;
+        }
+        default: return 0.5;
+    }
+}
+
+function sc_calcLapResult(team) {
+    const carTasks  = team.currentTasks.filter(t => t.car);
+    const divaTasks = team.currentTasks.filter(t => !t.car);
+    const carAvg  = carTasks.length  ? carTasks.reduce((s, t)  => s + t.quality, 0) / carTasks.length  : 1;
+    const divaAvg = divaTasks.length ? divaTasks.reduce((s, t) => s + t.quality, 0) / divaTasks.length : 1;
+    const speed = Math.round(60 + carAvg * 60 + divaAvg * 30);
+    const damages = team.currentTasks
+        .filter(t => t.quality < 0.4)
+        .map(t => ({ taskId: t.taskId, msg: SC_TASK_DEFS[t.taskId]?.fail || 'Something went wrong.' }));
+    const newDamageTotal = (team.totalDamage || 0) + damages.length;
+    const crashed = newDamageTotal >= 4 && damages.length >= 2;
+    return { speed, damages, crashed, newDamageTotal };
+}
+
+function sc_assignTeams(room) {
+    const shuffled = sc_shuffle(Object.keys(room.players));
+    const driverPool = sc_shuffle([...SC_DRIVERS]);
+    room.scTeams = [];
+    room.scPyroId = null;
+    const teamCount = Math.floor(shuffled.length / 2);
+    for (let i = 0; i < teamCount; i++) {
+        const driver = driverPool[i % driverPool.length];
+        const tasksByLap = [1, 2, 3].map(lap => sc_generateTasks(driver, lap));
+        room.scTeams.push({
+            teamIdx: i,
+            instructorId: shuffled[i * 2],
+            executorId: shuffled[i * 2 + 1],
+            driver,
+            tasksByLap,
+            currentTasks: [],
+            lapSpeeds: [],
+            totalDamage: 0,
+            allDamages: [],
+            crashed: false,
+            crashedOnLap: null,
+        });
+    }
+    if (shuffled.length % 2 === 1) room.scPyroId = shuffled[shuffled.length - 1];
+}
+
+function sc_startGame(room) {
+    room.scPhase = 'ASSIGNING';
+    room.scLap = 0;
+    room.gamePhase = 'PLAYING';
+    room.gameVotes = {};
+    sc_assignTeams(room);
+
+    room.scTeams.forEach(team => {
+        const instrName = room.players[team.instructorId]?.name || '?';
+        const execName  = room.players[team.executorId]?.name  || '?';
+        io.to(team.instructorId).emit('scYourRole', { role:'instructor', partner:execName,  driver:team.driver });
+        io.to(team.executorId).emit('scYourRole',   { role:'executor',   partner:instrName, driver:team.driver });
+    });
+    if (room.scPyroId) io.to(room.scPyroId).emit('scYourRole', { role:'pyro', driver:null });
+
+    const teamSummary = room.scTeams.map(t => ({
+        teamIdx: t.teamIdx, driver: t.driver,
+        instructorName: room.players[t.instructorId]?.name || '?',
+        executorName:   room.players[t.executorId]?.name   || '?',
+        lapSpeeds: [], crashed: false,
+    }));
+    broadcastRoom(room, 'scTeamsAssigned', {
+        teams: teamSummary,
+        pyroName: room.scPyroId ? (room.players[room.scPyroId]?.name || '?') : null,
+    });
+
+    setTimeout(() => sc_startPit(room), 4000);
+}
+
+function sc_startPit(room) {
+    room.scPhase = 'PIT';
+    room.scLap++;
+    room.scTimeLeft = SC_PIT_SECONDS;
+
+    room.scTeams.forEach(team => {
+        team.currentTasks = team.tasksByLap[room.scLap - 1].map(t => ({ ...t, completed: false, quality: 0 }));
+
+        io.to(team.instructorId).emit('scPitStart', {
+            role: 'instructor', lap: room.scLap, timeLeft: SC_PIT_SECONDS,
+            driver: team.driver,
+            tasks: team.currentTasks.map(t => ({
+                id: t.id, instructorLabel: t.instructorLabel, driverLabel: t.driverLabel,
+                car: t.car, type: t.type, completed: false,
+            })),
+        });
+        io.to(team.executorId).emit('scPitStart', {
+            role: 'executor', lap: room.scLap, timeLeft: SC_PIT_SECONDS,
+            driver: team.driver,
+            tasks: team.currentTasks.map(t => ({
+                id: t.id, type: t.type, driverLabel: t.driverLabel, car: t.car, completed: false,
+            })),
+        });
+    });
+    if (room.scPyroId) {
+        io.to(room.scPyroId).emit('scPitStart', { role:'pyro', lap: room.scLap, timeLeft: SC_PIT_SECONDS });
+    }
+
+    room.scTimer = setInterval(() => {
+        room.scTimeLeft--;
+        broadcastRoom(room, 'scTimer', { phase:'PIT', timeLeft: room.scTimeLeft, lap: room.scLap });
+        if (room.scTimeLeft <= 0) { clearInterval(room.scTimer); sc_resolvePit(room); }
+    }, 1000);
+}
+
+function sc_resolvePit(room) {
+    room.scPhase = 'REVEAL';
+
+    const results = room.scTeams.map(team => {
+        let speed = 0, damages = [], crashed = team.crashed;
+        if (!team.crashed) {
+            const r = sc_calcLapResult(team);
+            speed = r.speed; damages = r.damages;
+            team.lapSpeeds.push(speed);
+            team.allDamages.push(...damages);
+            team.totalDamage = r.newDamageTotal;
+            if (r.crashed) { team.crashed = true; team.crashedOnLap = room.scLap; crashed = true; }
+        } else {
+            team.lapSpeeds.push(0);
+        }
+        return {
+            teamIdx: team.teamIdx,
+            driverName: team.driver.name, driverEmoji: team.driver.emoji,
+            instructorName: room.players[team.instructorId]?.name || '?',
+            executorName:   room.players[team.executorId]?.name   || '?',
+            tasks: team.currentTasks.map(t => ({
+                driverLabel: t.driverLabel, instructorLabel: t.instructorLabel,
+                quality: t.quality, completed: t.completed,
+                fail: t.quality < 0.4 ? (SC_TASK_DEFS[t.taskId]?.fail || null) : null,
+            })),
+            speed, damages, crashed, crashedOnLap: team.crashedOnLap,
+        };
+    });
+
+    broadcastRoom(room, 'scPitReveal', { lap: room.scLap, results });
+    setTimeout(() => sc_startRace(room), SC_REVEAL_SECONDS * 1000);
+}
+
+function sc_startRace(room) {
+    room.scPhase = 'RACE';
+    room.scTimeLeft = SC_RACE_SECONDS;
+
+    const teamSpeeds = room.scTeams.map(t => ({
+        teamIdx: t.teamIdx,
+        speed: t.lapSpeeds[t.lapSpeeds.length - 1] || 0,
+        crashed: t.crashed,
+        driver: t.driver,
+        instructorName: room.players[t.instructorId]?.name || '?',
+        executorName:   room.players[t.executorId]?.name   || '?',
+    }));
+
+    broadcastRoom(room, 'scRaceStart', { lap: room.scLap, timeLeft: SC_RACE_SECONDS, teams: teamSpeeds });
+
+    // Send next pit preview to instructors (they see upcoming tasks while car drives)
+    if (room.scLap < SC_LAPS) {
+        room.scTeams.forEach(team => {
+            const nextTasks = team.tasksByLap[room.scLap]; // room.scLap is current, next is +1 (0-indexed)
+            if (nextTasks) {
+                io.to(team.instructorId).emit('scNextPitPreview', {
+                    tasks: nextTasks.map(t => ({ instructorLabel: t.instructorLabel, car: t.car, type: t.type })),
+                });
+            }
+        });
+    }
+
+    room.scTimer = setInterval(() => {
+        room.scTimeLeft--;
+        broadcastRoom(room, 'scTimer', { phase:'RACE', timeLeft: room.scTimeLeft, lap: room.scLap });
+        if (room.scTimeLeft <= 0) {
+            clearInterval(room.scTimer);
+            if (room.scLap >= SC_LAPS) sc_endGame(room); else sc_startPit(room);
+        }
+    }, 1000);
+}
+
+function sc_endGame(room) {
+    room.scPhase = 'END';
+    room.gamePhase = 'END';
+    const standings = room.scTeams
+        .map(t => ({
+            teamIdx: t.teamIdx,
+            driver: t.driver,
+            instructorName: room.players[t.instructorId]?.name || '?',
+            executorName:   room.players[t.executorId]?.name   || '?',
+            totalSpeed: t.lapSpeeds.reduce((s, v) => s + v, 0),
+            lapSpeeds: t.lapSpeeds,
+            crashed: t.crashed,
+            crashedOnLap: t.crashedOnLap,
+            allDamages: t.allDamages,
+        }))
+        .sort((a, b) => {
+            if (a.crashed && !b.crashed) return 1;
+            if (!a.crashed && b.crashed) return -1;
+            return b.totalSpeed - a.totalSpeed;
+        });
+    broadcastRoom(room, 'scGameEnd', { standings });
+}
+
+function sc_returnToLobby(room) {
+    clearInterval(room.scTimer); clearTimeout(room.scTimer);
+    room.scPhase = 'LOBBY'; room.scTeams = []; room.scLap = 0;
+    room.scPyroId = null; room.scTimeLeft = 0; room.gamePhase = 'LOBBY';
+    broadcastGameState(room);
+}
+
 // ─── Socket connections ────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
@@ -1525,6 +1842,37 @@ io.on('connection', (socket) => {
         rr_returnToLobby(room);
     });
 
+    // ── Split Crew events ─────────────────────────────────────────────────────
+
+    socket.on('scStartGame', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        room.selectedGame = 'splitcrew';
+        sc_startGame(room);
+    });
+
+    socket.on('scCompleteTask', ({ taskId, result }) => {
+        const room = socketRoom(socket);
+        if (!room || room.scPhase !== 'PIT') return;
+        const team = room.scTeams.find(t => t.executorId === socket.id);
+        if (!team) return;
+        const task = team.currentTasks.find(t => t.id === taskId);
+        if (!task || task.completed) return;
+        const def = SC_TASK_DEFS[task.taskId];
+        if (!def) return;
+        task.quality = sc_calcQuality(def.type, task.target, result || {});
+        task.completed = true;
+        const ql = task.quality >= 0.9 ? '✅ Perfect' : task.quality >= 0.6 ? '⚠️ Okay' : '❌ Bad';
+        io.to(team.instructorId).emit('scTaskUpdate', { taskId, quality: task.quality, completed: true, qualityLabel: ql });
+        io.to(socket.id).emit('scTaskAck', { taskId, quality: task.quality });
+    });
+
+    socket.on('scReturnToLobby', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        sc_returnToLobby(room);
+    });
+
     // ── Kick / leave ──────────────────────────────────────────────────────────
 
     socket.on('kickPlayer', ({ targetId }) => {
@@ -1565,6 +1913,7 @@ io.on('connection', (socket) => {
             clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
             clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
             clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
+            clearInterval(room.scTimer); clearTimeout(room.scTimer);
             delete rooms[room.code];
         }
     });
@@ -1610,6 +1959,7 @@ io.on('connection', (socket) => {
             clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
             clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
             clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
+            clearInterval(room.scTimer); clearTimeout(room.scTimer);
             delete rooms[room.code];
             console.log(`🗑️  Room ${room.code} removed (empty)`);
         }
