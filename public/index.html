@@ -275,6 +275,51 @@
         .pp-clue-display { font-size:1.3em; font-weight:bold; color:#ffeb3b; text-align:center; font-style:italic; padding:8px 16px; background:rgba(255,235,59,0.08); border:1px solid rgba(255,235,59,0.25); border-radius:10px; max-width:340px; }
         .pp-voter-row { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
         .pp-outcome-box { font-size:0.9em; text-align:center; color:#ccc; background:rgba(255,255,255,0.05); border:1px solid #2a3a55; border-radius:8px; padding:10px 14px; max-width:340px; }
+
+        /* ── Rizz or Roast ── */
+        .rr-screen { display:none; position:absolute; inset:0; z-index:55; background:radial-gradient(circle at 50% 10%,#1a0a2e,#050508 70%); flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+16px) 16px calc(env(safe-area-inset-bottom)+20px); gap:14px; }
+        .rr-title { font-size:1.4em; font-weight:900; letter-spacing:3px; text-transform:uppercase; }
+        .rr-sub { font-family:monospace; font-size:0.82em; color:#888; text-align:center; }
+        .rr-timer { font-family:monospace; font-size:2em; font-weight:900; color:#ffeb3b; text-shadow:0 0 12px rgba(255,235,59,0.5); }
+        /* Fill screen */
+        #rr-template-wrap { background:rgba(255,255,255,0.04); border:1px solid #2a1a4a; border-radius:12px; padding:14px 16px; width:min(420px,92%); line-height:2.2em; font-size:1em; color:#ddd; }
+        .rr-blank-input { display:inline-block; min-width:80px; max-width:130px; background:transparent; border:none; border-bottom:2px solid #9c27b0; color:#e040fb; font-weight:bold; font-size:1em; text-align:center; outline:none; padding:0 4px; vertical-align:bottom; }
+        .rr-blank-input::placeholder { color:#5a3a6a; font-weight:normal; font-size:0.85em; }
+        .rr-blank-input:focus { border-bottom-color:#e040fb; }
+        #rr-fill-progress { font-family:monospace; font-size:0.8em; color:#556; }
+        /* Record screen */
+        #rr-assembled-text { font-size:1.1em; font-weight:bold; line-height:1.6; text-align:center; color:#fff; background:rgba(255,255,255,0.05); border:1px solid #2a1a4a; border-radius:12px; padding:16px 18px; width:min(420px,92%); }
+        #rr-record-btn { width:80px; height:80px; border-radius:50%; border:4px solid #e91e63; background:#1a0010; color:#e91e63; font-size:2em; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0; }
+        #rr-record-btn.recording { background:#e91e63; color:#fff; animation:rr-pulse 1s infinite; }
+        @keyframes rr-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(233,30,99,0.6)} 50%{box-shadow:0 0 0 14px rgba(233,30,99,0)} }
+        #rr-record-btn.done { border-color:#2e7d32; color:#2e7d32; background:#001a05; }
+        #rr-waveform { display:flex; align-items:center; gap:3px; height:32px; opacity:0; transition:opacity .2s; }
+        #rr-waveform.active { opacity:1; }
+        .rr-wave-bar { width:4px; background:#e91e63; border-radius:2px; animation:rr-wave 0.5s ease-in-out infinite alternate; }
+        @keyframes rr-wave { from{height:4px} to{height:24px} }
+        #rr-playback-btn { display:none; background:#1565c0; border:none; border-radius:10px; padding:10px 24px; color:#fff; font-weight:bold; font-size:0.88em; cursor:pointer; letter-spacing:1px; }
+        #rr-submit-recording-btn { display:none; background:#2e7d32; border:none; border-radius:10px; padding:12px 28px; color:#fff; font-weight:bold; font-size:0.9em; cursor:pointer; letter-spacing:1px; text-transform:uppercase; }
+        #rr-skip-recording-btn { background:transparent; border:1px solid #2a1a4a; border-radius:10px; padding:8px 20px; color:#556; font-size:0.8em; cursor:pointer; }
+        /* Battle screen */
+        #rr-battle-type { font-size:2em; font-weight:900; letter-spacing:4px; }
+        #rr-battle-type.RIZZ { color:#ff80ab; text-shadow:0 0 20px rgba(255,128,171,0.6); }
+        #rr-battle-type.ROAST { color:#ff6d00; text-shadow:0 0 20px rgba(255,109,0,0.6); }
+        .rr-combatant { background:rgba(255,255,255,0.04); border:2px solid #2a1a4a; border-radius:14px; padding:14px 16px; width:min(380px,92%); display:flex; flex-direction:column; gap:8px; }
+        .rr-combatant.voted { border-color:#9c27b0; }
+        .rr-combatant-name { font-weight:900; font-size:1.1em; letter-spacing:1px; }
+        .rr-combatant-text { font-size:0.85em; color:#aaa; font-style:italic; line-height:1.5; }
+        .rr-play-btn { background:#1565c0; border:none; border-radius:8px; padding:9px 18px; color:#fff; font-size:0.85em; font-weight:bold; cursor:pointer; align-self:flex-start; }
+        .rr-play-btn.playing { background:#7b1fa2; }
+        .rr-play-btn.no-audio { background:#263238; color:#546e7a; cursor:default; }
+        .rr-vote-btn { border:none; border-radius:10px; padding:11px 20px; font-weight:bold; font-size:0.9em; cursor:pointer; letter-spacing:1px; text-transform:uppercase; transition:opacity .15s; }
+        .rr-vote-btn.vote-rizz { background:#ff80ab; color:#1a0010; }
+        .rr-vote-btn.vote-roast { background:#ff6d00; color:#fff; }
+        .rr-vote-btn:disabled { opacity:.4; cursor:default; }
+        #rr-vs { font-size:1.4em; font-weight:900; color:#556; }
+        #rr-vote-tally { font-family:monospace; font-size:0.8em; color:#556; text-align:center; }
+        /* Result / end */
+        .rr-winner-banner { font-size:1.6em; font-weight:900; text-align:center; color:#ffeb3b; }
+        .rr-score-row { display:flex; justify-content:space-between; padding:6px 4px; font-family:monospace; font-size:0.9em; border-bottom:1px solid #1a0a2e; width:min(300px,88%); }
     </style>
 </head>
 <body>
@@ -333,6 +378,14 @@
                 <div class="gc-name">PikPic</div>
                 <div class="gc-desc">Upload your photos, deal a deck, give clues — Dixit with your camera roll</div>
                 <div class="gc-voters" id="gv-pp"></div>
+            </div>
+        </div>
+        <div class="game-card" id="gc-rr" onclick="pickGame('rizzorroast')">
+            <div class="gc-icon">🔥</div>
+            <div class="gc-info">
+                <div class="gc-name">Rizz or Roast</div>
+                <div class="gc-desc">Same madlib, different energy — fill it in, record yourself, go 1v1</div>
+                <div class="gc-voters" id="gv-rr"></div>
             </div>
         </div>
     </div>
@@ -684,6 +737,81 @@
     <button id="pp-lobby-btn" class="pp-btn pp-btn-red" onclick="ppReturnToLobby()" style="display:none;width:min(280px,88%);">🏠 BACK TO LOBBY</button>
 </div>
 
+<!-- ════════════════════ RIZZ OR ROAST ════════════════════ -->
+
+<!-- Fill screen -->
+<div id="rr-fill-screen" class="rr-screen">
+    <div class="rr-title">✍️ FILL IT IN</div>
+    <div class="rr-sub">Same prompt for everyone — fill your blanks, then deliver it with energy</div>
+    <div id="rr-template-wrap"></div>
+    <button onclick="rrSubmitFills()" style="background:#9c27b0;border:none;border-radius:10px;padding:12px 30px;color:#fff;font-weight:bold;font-size:0.95em;cursor:pointer;letter-spacing:1px;text-transform:uppercase;">✅ LOCK IT IN</button>
+    <div id="rr-fill-progress" class="rr-sub"></div>
+    <div class="rr-timer" id="rr-fill-timer"></div>
+</div>
+
+<!-- Record screen -->
+<div id="rr-record-screen" class="rr-screen">
+    <div id="rr-battle-banner" class="rr-title"></div>
+    <div id="rr-battle-context" class="rr-sub"></div>
+    <div id="rr-assembled-text"></div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <div id="rr-waveform">
+            <div class="rr-wave-bar" style="animation-delay:0s"></div>
+            <div class="rr-wave-bar" style="animation-delay:.07s"></div>
+            <div class="rr-wave-bar" style="animation-delay:.14s"></div>
+            <div class="rr-wave-bar" style="animation-delay:.21s"></div>
+            <div class="rr-wave-bar" style="animation-delay:.28s"></div>
+            <div class="rr-wave-bar" style="animation-delay:.35s"></div>
+            <div class="rr-wave-bar" style="animation-delay:.42s"></div>
+        </div>
+        <button id="rr-record-btn" onclick="rrToggleRecord()">🎙️</button>
+        <div style="font-family:monospace;font-size:0.75em;color:#556;" id="rr-record-hint">Tap to record</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+        <button id="rr-playback-btn" onclick="rrPlayback()">▶ PLAY BACK</button>
+        <button id="rr-submit-recording-btn" onclick="rrSubmitRecording()">🚀 SUBMIT</button>
+        <button id="rr-skip-recording-btn" onclick="rrSkipRecording()">Skip (no audio)</button>
+    </div>
+    <div id="rr-record-wait" class="rr-sub"></div>
+    <div class="rr-timer" id="rr-record-timer"></div>
+</div>
+
+<!-- Battle screen -->
+<div id="rr-battle-screen" class="rr-screen">
+    <div style="font-family:monospace;font-size:0.75em;color:#556;" id="rr-battle-counter"></div>
+    <div id="rr-battle-type" class="rr-title"></div>
+    <div class="rr-sub" id="rr-battle-sub"></div>
+    <div class="rr-combatant" id="rr-p1-card">
+        <div class="rr-combatant-name" id="rr-p1-name"></div>
+        <div class="rr-combatant-text" id="rr-p1-text"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="rr-play-btn" id="rr-p1-play" onclick="rrPlayAudio(1)">▶ PLAY</button>
+            <button class="rr-vote-btn" id="rr-vote-p1" onclick="rrVote('p1')"></button>
+        </div>
+    </div>
+    <div id="rr-vs">VS</div>
+    <div class="rr-combatant" id="rr-p2-card">
+        <div class="rr-combatant-name" id="rr-p2-name"></div>
+        <div class="rr-combatant-text" id="rr-p2-text"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="rr-play-btn" id="rr-p2-play" onclick="rrPlayAudio(2)">▶ PLAY</button>
+            <button class="rr-vote-btn" id="rr-vote-p2" onclick="rrVote('p2')"></button>
+        </div>
+    </div>
+    <div class="rr-timer" id="rr-vote-timer"></div>
+    <div id="rr-vote-tally"></div>
+</div>
+
+<!-- Battle result overlay (shown between battles) -->
+<div id="rr-result-screen" class="rr-screen">
+    <div class="rr-winner-banner" id="rr-winner-label"></div>
+    <div class="rr-sub" id="rr-result-votes"></div>
+    <div class="rr-sub" style="color:#9fb0c8;margin-top:6px;">SCORES SO FAR</div>
+    <div id="rr-running-scores"></div>
+    <div class="rr-sub" id="rr-result-next"></div>
+    <button id="rr-lobby-btn" onclick="rrReturnToLobby()" style="display:none;background:#c62828;border:none;border-radius:10px;padding:12px 28px;color:#fff;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;">🏠 BACK TO LOBBY</button>
+</div>
+
 <script>
 const socket = io();
 
@@ -792,6 +920,7 @@ function rlStartGame() {
     else if (selectedGame === 'strokeoff') soPickFakeAndStart();
     else if (selectedGame === 'squiggle') socket.emit('sqStartGame');
     else if (selectedGame === 'pikpic') socket.emit('ppStartGame');
+    else if (selectedGame === 'rizzorroast') socket.emit('rrStartGame');
 }
 
 function shareRoom() {
@@ -812,7 +941,7 @@ function kickPlayer(targetId) { socket.emit('kickPlayer', { targetId }); }
 
 function leaveRoom() {
     socket.emit('leaveRoom');
-    soCleanup(); tsSkipRules(); ppCleanup();
+    soCleanup(); tsSkipRules(); ppCleanup(); rrCleanup();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     inRoom = false; isJoined = false; isRoomHost = false;
@@ -827,7 +956,7 @@ function closeRoom() {
 }
 
 socket.on('roomClosed', () => {
-    soCleanup(); tsSkipRules(); ppCleanup();
+    soCleanup(); tsSkipRules(); ppCleanup(); rrCleanup();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     inRoom = false; isJoined = false; isRoomHost = false;
@@ -1079,6 +1208,8 @@ socket.on('gameVotes', ({ votes, players }) => {
     if (sqEl) sqEl.innerHTML = (byGame['squiggle'] || []).join('');
     const ppEl = document.getElementById('gv-pp');
     if (ppEl) ppEl.innerHTML = (byGame['pikpic'] || []).join('');
+    const rrEl = document.getElementById('gv-rr');
+    if (rrEl) rrEl.innerHTML = (byGame['rizzorroast'] || []).join('');
 });
 
 // ── Taco Stealth ──────────────────────────────────────────────────────────
@@ -2333,6 +2464,292 @@ socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, vot
 
     document.getElementById('pp-result-next').innerText = isLastRound ? '🏆 Game over! Final scores above.' : `Next round starting in ${10}s…`;
     if (isLastRound && isRoomHost) document.getElementById('pp-lobby-btn').style.display = 'block';
+});
+
+// ─── Rizz or Roast client ────────────────────────────────────────────────────
+
+const RR_SCREENS = ['rr-fill-screen','rr-record-screen','rr-battle-screen','rr-result-screen'];
+let rrPhase = 'LOBBY', rrMediaRecorder = null, rrAudioChunks = [], rrAudioDataUrl = null;
+let rrBattleAudio = [null, null], rrCurrentAudioEl = null, rrMyId = null;
+
+function rrCleanup() {
+    RR_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    if (rrMediaRecorder && rrMediaRecorder.state !== 'inactive') rrMediaRecorder.stop();
+    if (rrCurrentAudioEl) { rrCurrentAudioEl.pause(); rrCurrentAudioEl = null; }
+    rrMediaRecorder = null; rrAudioChunks = []; rrAudioDataUrl = null;
+    rrBattleAudio = [null, null]; rrPhase = 'LOBBY';
+}
+
+function rrShow(id) {
+    RR_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; });
+    const el = document.getElementById(id); if (el) el.style.display = 'flex';
+}
+
+// ── Fill phase ────────────────────────────────────────────────────────────────
+function rrRenderTemplate(template, blanks) {
+    const wrap = document.getElementById('rr-template-wrap');
+    let blankIdx = 0;
+    const html = template.replace(/\[([^\]]+)\]/g, (_, label) => {
+        const i = blankIdx++;
+        return `<input class="rr-blank-input" data-idx="${i}" placeholder="${label}" maxlength="25" autocomplete="off" autocorrect="off" spellcheck="false">`;
+    });
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.rr-blank-input')[0]?.focus();
+}
+
+function rrSubmitFills() {
+    const inputs = document.querySelectorAll('#rr-template-wrap .rr-blank-input');
+    const fills = Array.from(inputs).map(el => el.value.trim());
+    if (fills.some(f => !f)) { showToast('Fill in all the blanks first!'); return; }
+    socket.emit('rrSubmitFills', { fills });
+    inputs.forEach(el => el.disabled = true);
+    document.querySelector('#rr-fill-screen button').disabled = true;
+    showToast('Locked in! Waiting for others…');
+}
+
+socket.on('rrFillPhase', ({ template, timeLeft }) => {
+    hide('room-lobby'); rrPhase = 'FILL';
+    rrShow('rr-fill-screen');
+    rrRenderTemplate(template.template, template.blanks);
+    document.getElementById('rr-fill-timer').innerText = timeLeft;
+    document.getElementById('rr-fill-progress').innerText = '';
+});
+
+socket.on('rrFillProgress', ({ readyCount, totalCount }) => {
+    const el = document.getElementById('rr-fill-progress');
+    if (el) el.innerText = `${readyCount} / ${totalCount} locked in`;
+});
+
+// ── Record phase ──────────────────────────────────────────────────────────────
+socket.on('rrRecordPhase', ({ assembled, timeLeft, opponentName, battleType, bye }) => {
+    rrPhase = 'RECORD'; rrAudioDataUrl = null; rrAudioChunks = [];
+    rrShow('rr-record-screen');
+
+    document.getElementById('rr-assembled-text').innerText = assembled;
+
+    const banner = document.getElementById('rr-battle-banner');
+    const ctx = document.getElementById('rr-battle-context');
+    if (bye) {
+        banner.innerText = '👻 BYE ROUND';
+        ctx.innerText = 'Odd player out — no battle this round, but still record for fun!';
+    } else if (battleType === 'RIZZ') {
+        banner.innerText = '💘 RIZZ BATTLE';
+        banner.style.color = '#ff80ab';
+        ctx.innerText = `You vs ${opponentName} — deliver this like you mean it romantically!`;
+    } else {
+        banner.innerText = '🔥 ROAST BATTLE';
+        banner.style.color = '#ff6d00';
+        ctx.innerText = `You vs ${opponentName} — deliver this like you're clowning them!`;
+    }
+
+    document.getElementById('rr-record-timer').innerText = timeLeft;
+    document.getElementById('rr-record-btn').className = '';
+    document.getElementById('rr-record-hint').innerText = 'Tap to record';
+    document.getElementById('rr-playback-btn').style.display = 'none';
+    document.getElementById('rr-submit-recording-btn').style.display = 'none';
+    document.getElementById('rr-waveform').classList.remove('active');
+    document.getElementById('rr-record-wait').innerText = '';
+});
+
+async function rrToggleRecord() {
+    if (rrMediaRecorder && rrMediaRecorder.state === 'recording') {
+        rrMediaRecorder.stop(); return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        rrAudioChunks = [];
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus' : 'audio/webm';
+        rrMediaRecorder = new MediaRecorder(stream, { mimeType });
+        rrMediaRecorder.ondataavailable = e => { if (e.data.size > 0) rrAudioChunks.push(e.data); };
+        rrMediaRecorder.onstop = () => {
+            stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(rrAudioChunks, { type: mimeType });
+            const reader = new FileReader();
+            reader.onload = () => {
+                rrAudioDataUrl = reader.result;
+                document.getElementById('rr-record-btn').className = 'done';
+                document.getElementById('rr-record-btn').innerText = '✅';
+                document.getElementById('rr-record-hint').innerText = 'Recorded!';
+                document.getElementById('rr-waveform').classList.remove('active');
+                document.getElementById('rr-playback-btn').style.display = 'inline-block';
+                document.getElementById('rr-submit-recording-btn').style.display = 'inline-block';
+            };
+            reader.readAsDataURL(blob);
+        };
+        rrMediaRecorder.start();
+        document.getElementById('rr-record-btn').className = 'recording';
+        document.getElementById('rr-record-btn').innerText = '⏹';
+        document.getElementById('rr-record-hint').innerText = 'Recording… tap to stop';
+        document.getElementById('rr-waveform').classList.add('active');
+        // Auto-stop after 22s
+        setTimeout(() => { if (rrMediaRecorder?.state === 'recording') rrMediaRecorder.stop(); }, 22000);
+    } catch (e) {
+        showToast('Mic not available — tap Skip');
+        document.getElementById('rr-submit-recording-btn').style.display = 'inline-block';
+    }
+}
+
+function rrPlayback() {
+    if (!rrAudioDataUrl) return;
+    if (rrCurrentAudioEl) { rrCurrentAudioEl.pause(); rrCurrentAudioEl = null; }
+    rrCurrentAudioEl = new Audio(rrAudioDataUrl);
+    rrCurrentAudioEl.play();
+    const btn = document.getElementById('rr-playback-btn');
+    btn.innerText = '▶ PLAYING…';
+    rrCurrentAudioEl.onended = () => { btn.innerText = '▶ PLAY BACK'; rrCurrentAudioEl = null; };
+}
+
+function rrSubmitRecording() {
+    socket.emit('rrSubmitRecording', { audio: rrAudioDataUrl });
+    document.getElementById('rr-submit-recording-btn').disabled = true;
+    document.getElementById('rr-skip-recording-btn').style.display = 'none';
+    document.getElementById('rr-record-wait').innerText = 'Submitted! Waiting for others…';
+}
+
+function rrSkipRecording() {
+    rrAudioDataUrl = null;
+    socket.emit('rrSubmitRecording', { audio: null });
+    document.getElementById('rr-submit-recording-btn').style.display = 'none';
+    document.getElementById('rr-skip-recording-btn').style.display = 'none';
+    document.getElementById('rr-record-wait').innerText = 'Skipped. Waiting for others…';
+}
+
+socket.on('rrRecordProgress', ({ readyCount, totalCount }) => {
+    const el = document.getElementById('rr-record-wait');
+    if (el && rrPhase === 'RECORD') el.innerText = `${readyCount} / ${totalCount} ready`;
+});
+
+// ── Battle phase ──────────────────────────────────────────────────────────────
+socket.on('rrBattleStart', ({ battleIndex, totalBattles, type, p1, p2, p1audio, p2audio, p1text, p2text, timeLeft }) => {
+    rrPhase = 'BATTLE';
+    if (rrCurrentAudioEl) { rrCurrentAudioEl.pause(); rrCurrentAudioEl = null; }
+    rrBattleAudio = [p1audio, p2audio];
+    rrMyId = socket.id;
+    rrShow('rr-battle-screen');
+
+    document.getElementById('rr-battle-counter').innerText = `BATTLE ${battleIndex + 1} OF ${totalBattles}`;
+    const typeEl = document.getElementById('rr-battle-type');
+    typeEl.className = 'rr-title ' + type;
+    typeEl.innerText = type === 'RIZZ' ? '💘 RIZZ BATTLE' : '🔥 ROAST BATTLE';
+    document.getElementById('rr-battle-sub').innerText = type === 'RIZZ'
+        ? 'Who's got the better pickup line? Vote for the best rizz 💘'
+        : 'Who clowned harder? Vote for the best roast 🔥';
+
+    document.getElementById('rr-p1-name').innerText = p1.name;
+    document.getElementById('rr-p2-name').innerText = p2.name;
+    document.getElementById('rr-p1-text').innerText = `"${p1text}"`;
+    document.getElementById('rr-p2-text').innerText = `"${p2text}"`;
+    document.getElementById('rr-vote-timer').innerText = timeLeft;
+    document.getElementById('rr-vote-tally').innerText = '';
+
+    // Play buttons
+    const p1play = document.getElementById('rr-p1-play');
+    const p2play = document.getElementById('rr-p2-play');
+    p1play.className = 'rr-play-btn' + (p1audio ? '' : ' no-audio');
+    p2play.className = 'rr-play-btn' + (p2audio ? '' : ' no-audio');
+    p1play.innerText = p1audio ? '▶ PLAY' : '🔇 No audio';
+    p2play.innerText = p2audio ? '▶ PLAY' : '🔇 No audio';
+
+    // Vote buttons
+    const voteLabel = type === 'RIZZ' ? '💘 VOTE RIZZ' : '🔥 VOTE ROAST';
+    const vClass = type === 'RIZZ' ? 'rr-vote-btn vote-rizz' : 'rr-vote-btn vote-roast';
+    const vp1 = document.getElementById('rr-vote-p1');
+    const vp2 = document.getElementById('rr-vote-p2');
+    vp1.innerText = voteLabel; vp1.className = vClass; vp1.disabled = false;
+    vp2.innerText = voteLabel; vp2.className = vClass; vp2.disabled = false;
+
+    // Combatants can't vote for themselves
+    const amP1 = socket.id === p1.id, amP2 = socket.id === p2.id;
+    if (amP1 || amP2) {
+        vp1.disabled = true; vp2.disabled = true;
+        vp1.innerText = amP1 ? '(you)' : voteLabel;
+        vp2.innerText = amP2 ? '(you)' : voteLabel;
+    }
+
+    document.getElementById('rr-p1-card').classList.remove('voted');
+    document.getElementById('rr-p2-card').classList.remove('voted');
+
+    // Store IDs for voting
+    document.getElementById('rr-vote-p1').dataset.pid = p1.id;
+    document.getElementById('rr-vote-p2').dataset.pid = p2.id;
+
+    // Auto-play p1 recording
+    if (p1audio) setTimeout(() => rrPlayAudio(1), 400);
+});
+
+function rrPlayAudio(player) {
+    const audio = rrBattleAudio[player - 1];
+    if (!audio) return;
+    if (rrCurrentAudioEl) { rrCurrentAudioEl.pause(); rrCurrentAudioEl = null; }
+    rrCurrentAudioEl = new Audio(audio);
+    const btn = document.getElementById(`rr-p${player}-play`);
+    btn.innerText = '⏸ PLAYING…'; btn.classList.add('playing');
+    rrCurrentAudioEl.play().catch(() => {});
+    rrCurrentAudioEl.onended = () => {
+        btn.innerText = '▶ PLAY'; btn.classList.remove('playing');
+        rrCurrentAudioEl = null;
+        // Auto-chain to p2 after p1 finishes
+        if (player === 1 && rrBattleAudio[1]) setTimeout(() => rrPlayAudio(2), 600);
+    };
+}
+
+function rrVote(which) {
+    const pid = document.getElementById(`rr-vote-${which}`).dataset.pid;
+    socket.emit('rrVote', { votedForId: pid });
+    document.getElementById('rr-vote-p1').disabled = true;
+    document.getElementById('rr-vote-p2').disabled = true;
+    document.getElementById(`rr-${which}-card`).classList.add('voted');
+    showToast('✅ Voted!');
+}
+
+socket.on('rrVoteUpdate', ({ voterCount, voterNames }) => {
+    const el = document.getElementById('rr-vote-tally');
+    if (el) el.innerText = `${voterCount} voted · ${voterNames.join(', ')}`;
+});
+
+// ── Results ───────────────────────────────────────────────────────────────────
+socket.on('rrBattleResult', ({ battleIndex, totalBattles, winner, p1votes, p2votes, p1, p2, rrScores }) => {
+    rrPhase = 'RESULT';
+    if (rrCurrentAudioEl) { rrCurrentAudioEl.pause(); rrCurrentAudioEl = null; }
+    const p1name = document.getElementById('rr-p1-name')?.innerText || '?';
+    const p2name = document.getElementById('rr-p2-name')?.innerText || '?';
+    rrShow('rr-result-screen');
+    const winnerName = winner === p1 ? p1name : p2name;
+    document.getElementById('rr-winner-label').innerText = p1votes === p2votes
+        ? "🤝 IT'S A TIE!" : `🏆 ${winnerName} WINS!`;
+    document.getElementById('rr-result-votes').innerText =
+        `${p1name}: ${p1votes} vote${p1votes !== 1 ? 's' : ''} · ${p2name}: ${p2votes} vote${p2votes !== 1 ? 's' : ''}`;
+    const sorted = Object.entries(rrScores).sort((a, b) => b[1] - a[1]);
+    document.getElementById('rr-running-scores').innerHTML = sorted.map(([name, pts]) =>
+        `<div class="rr-score-row"><span>${name}</span><span style="color:#ffeb3b;">${pts} pts</span></div>`
+    ).join('');
+    document.getElementById('rr-lobby-btn').style.display = 'none';
+    document.getElementById('rr-result-next').innerText = 'Next battle starting…';
+});
+
+socket.on('rrGameEnd', ({ sorted, rrScores }) => {
+    rrPhase = 'END';
+    rrShow('rr-result-screen');
+    document.getElementById('rr-winner-label').innerText = `🏆 ${sorted[0]?.[0] || '?'} WINS!`;
+    document.getElementById('rr-result-votes').innerText = 'Final scores:';
+    document.getElementById('rr-running-scores').innerHTML = sorted.map(([name, pts]) =>
+        `<div class="rr-score-row"><span>${name}</span><span style="color:#ffeb3b;">${pts} pts</span></div>`
+    ).join('');
+    document.getElementById('rr-result-next').innerText = '';
+    if (isRoomHost) document.getElementById('rr-lobby-btn').style.display = 'block';
+});
+
+function rrReturnToLobby() {
+    socket.emit('rrReturnToLobby');
+    rrCleanup();
+    show('room-lobby'); renderRoomLobby();
+}
+
+socket.on('rrTimer', ({ timeLeft, phase }) => {
+    if (phase === 'FILL') { const el = document.getElementById('rr-fill-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+    else if (phase === 'RECORD') { const el = document.getElementById('rr-record-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
+    else if (phase === 'VOTE') { const el = document.getElementById('rr-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
 });
 
 // ─── Stroke Off (squiggle) client ────────────────────────────────────────────

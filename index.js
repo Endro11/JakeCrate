@@ -86,6 +86,18 @@ function makeRoom(code) {
         ppScores: {},
         ppTimer: null,
         ppTimeLeft: 0,
+        // Rizz or Roast state
+        rrPhase: 'LOBBY',
+        rrTemplate: null,
+        rrPlayerFills: {},
+        rrFillReady: {},
+        rrPlayerRecordings: {},
+        rrRecordReady: {},
+        rrBattles: [],
+        rrCurrentBattle: 0,
+        rrScores: {},
+        rrTimer: null,
+        rrTimeLeft: 0,
     };
 }
 
@@ -832,6 +844,167 @@ function pp_returnToLobby(room) {
     broadcastGameState(room);
 }
 
+// ─── Rizz or Roast ────────────────────────────────────────────────────────────
+
+const RR_FILL_SECONDS   = 60;
+const RR_RECORD_SECONDS = 25;
+const RR_VOTE_SECONDS   = 22;
+const RR_RESULT_SECONDS = 6;
+const RR_MAX_AUDIO_BYTES = 2_000_000; // ~1.5MB audio
+
+const RR_TEMPLATES = [
+    { id:'rr01', template:"Every time I see you, my [BODY PART] does a [DANCE MOVE] because you remind me of a [ADJECTIVE] [ANIMAL] eating [FOOD].", blanks:['BODY PART','DANCE MOVE','ADJECTIVE','ANIMAL','FOOD'] },
+    { id:'rr02', template:"You must be a [NOUN] because every time you walk in, my [BODY PART] starts [VERB]ing like a [ANIMAL] in [PLACE].", blanks:['NOUN','BODY PART','VERB','ANIMAL','PLACE'] },
+    { id:'rr03', template:"If I could describe you to [FAMOUS PERSON], I'd say you're like [ADJECTIVE] [FOOD] that somehow [VERB]s in [PLACE].", blanks:['FAMOUS PERSON','ADJECTIVE','FOOD','VERB','PLACE'] },
+    { id:'rr04', template:"Roses are red, [PLURAL NOUN] are [COLOR]. You look like a [ADJECTIVE] [ANIMAL] and smell like [FOOD].", blanks:['PLURAL NOUN','COLOR','ADJECTIVE','ANIMAL','FOOD'] },
+    { id:'rr05', template:"I've never met anyone whose [BODY PART] makes me want to [VERB] like a [ADJECTIVE] [ANIMAL] in front of [NUMBER] people.", blanks:['BODY PART','VERB','ADJECTIVE','ANIMAL','NUMBER'] },
+    { id:'rr06', template:"You walk in the room like a [ADJECTIVE] [ANIMAL] and suddenly my [BODY PART] forgets how to [VERB].", blanks:['ADJECTIVE','ANIMAL','BODY PART','VERB'] },
+    { id:'rr07', template:"The way your [BODY PART] moves makes me think of [NUMBER] [ADJECTIVE] [ANIMAL]s doing [DANCE MOVE] in [PLACE].", blanks:['BODY PART','NUMBER','ADJECTIVE','ANIMAL','DANCE MOVE','PLACE'] },
+    { id:'rr08', template:"Your [BODY PART] is so [ADJECTIVE] it made my [RELATIVE] [VERB] and knock over all the [FOOD] at [PLACE].", blanks:['BODY PART','ADJECTIVE','RELATIVE','VERB','FOOD','PLACE'] },
+    { id:'rr09', template:"If I were [FAMOUS PERSON], I'd write a whole [NOUN] about how your [BODY PART] looks like a [ADJECTIVE] [ANIMAL].", blanks:['FAMOUS PERSON','NOUN','BODY PART','ADJECTIVE','ANIMAL'] },
+    { id:'rr10', template:"The first time I saw you, I dropped my [FOOD], tripped over a [NOUN], and [VERB]ed like a [ADJECTIVE] [ANIMAL].", blanks:['FOOD','NOUN','VERB','ADJECTIVE','ANIMAL'] },
+    { id:'rr11', template:"I wrote a poem about you: '[ADJECTIVE] as a [ANIMAL], warm as a [FOOD], your [BODY PART] haunts me like a [ADJECTIVE] [NOUN].'", blanks:['ADJECTIVE','ANIMAL','FOOD','BODY PART','ADJECTIVE','NOUN'] },
+    { id:'rr12', template:"Scientists say that [NUMBER]% of [PLURAL NOUN] agree: your [BODY PART] is the most [ADJECTIVE] thing in [PLACE].", blanks:['NUMBER','PLURAL NOUN','BODY PART','ADJECTIVE','PLACE'] },
+];
+
+function rr_assemble(template, fills) {
+    let i = 0;
+    return template.replace(/\[[^\]]+\]/g, () => fills[i++] || '____');
+}
+
+function rr_startGame(room) {
+    room.rrPhase = 'FILL';
+    room.rrTemplate = RR_TEMPLATES[Math.floor(Math.random() * RR_TEMPLATES.length)];
+    room.rrPlayerFills = {}; room.rrFillReady = {};
+    room.rrPlayerRecordings = {}; room.rrRecordReady = {};
+    room.rrBattles = []; room.rrCurrentBattle = 0; room.rrScores = {};
+    room.gamePhase = 'PLAYING'; room.gameVotes = {};
+    Object.keys(room.players).forEach(id => { room.rrScores[room.players[id].name] = 0; });
+    clearInterval(room.rrTimer);
+    broadcastRoom(room, 'rrFillPhase', { template: room.rrTemplate, timeLeft: RR_FILL_SECONDS });
+    room.rrTimeLeft = RR_FILL_SECONDS;
+    room.rrTimer = setInterval(() => {
+        room.rrTimeLeft--;
+        broadcastRoom(room, 'rrTimer', { timeLeft: room.rrTimeLeft, phase: 'FILL' });
+        if (room.rrTimeLeft <= 0) { clearInterval(room.rrTimer); rr_startRecordPhase(room); }
+    }, 1000);
+}
+
+function rr_broadcastFillProgress(room) {
+    const readyCount = Object.values(room.rrFillReady).filter(Boolean).length;
+    const totalCount = Object.keys(room.players).length;
+    broadcastRoom(room, 'rrFillProgress', { readyCount, totalCount });
+}
+
+function rr_startRecordPhase(room) {
+    clearInterval(room.rrTimer);
+    room.rrPhase = 'RECORD'; room.rrRecordReady = {};
+    // Fill any missing players with placeholder fills
+    Object.keys(room.players).forEach(id => {
+        if (!room.rrPlayerFills[id]) room.rrPlayerFills[id] = room.rrTemplate.blanks.map(() => '____');
+    });
+    // Create pairings NOW so players know their matchup while recording
+    const shuffled = Object.keys(room.players).sort(() => Math.random() - 0.5);
+    room.rrBattles = [];
+    for (let i = 0; i + 1 < shuffled.length; i += 2) {
+        room.rrBattles.push({
+            p1: shuffled[i], p2: shuffled[i + 1],
+            type: Math.random() < 0.5 ? 'RIZZ' : 'ROAST',
+            votes: {}, winner: null,
+        });
+    }
+    // Tell each player: their assembled line + who they're up against + battle type
+    Object.keys(room.players).forEach(id => {
+        const assembled = rr_assemble(room.rrTemplate.template, room.rrPlayerFills[id]);
+        const battle = room.rrBattles.find(b => b.p1 === id || b.p2 === id);
+        const opponentId = battle ? (battle.p1 === id ? battle.p2 : battle.p1) : null;
+        const opponentName = opponentId ? (room.players[opponentId]?.name || '?') : null;
+        const battleType = battle?.type || null;
+        io.to(id).emit('rrRecordPhase', { assembled, timeLeft: RR_RECORD_SECONDS, opponentName, battleType, bye: !battle });
+    });
+    room.rrTimeLeft = RR_RECORD_SECONDS;
+    room.rrTimer = setInterval(() => {
+        room.rrTimeLeft--;
+        broadcastRoom(room, 'rrTimer', { timeLeft: room.rrTimeLeft, phase: 'RECORD' });
+        if (room.rrTimeLeft <= 0) { clearInterval(room.rrTimer); rr_launchBattles(room); }
+    }, 1000);
+}
+
+function rr_launchBattles(room) {
+    clearInterval(room.rrTimer);
+    room.rrPhase = 'BATTLE';
+    room.rrCurrentBattle = 0;
+    rr_runBattle(room, 0);
+}
+
+function rr_runBattle(room, idx) {
+    clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
+    if (idx >= room.rrBattles.length) { rr_endGame(room); return; }
+    room.rrCurrentBattle = idx;
+    const battle = room.rrBattles[idx];
+    const p1 = room.players[battle.p1], p2 = room.players[battle.p2];
+    const payload = {
+        battleIndex: idx, totalBattles: room.rrBattles.length,
+        type: battle.type,
+        p1: { id: battle.p1, name: p1?.name || '?' },
+        p2: { id: battle.p2, name: p2?.name || '?' },
+        p1audio: room.rrPlayerRecordings[battle.p1] || null,
+        p2audio: room.rrPlayerRecordings[battle.p2] || null,
+        p1text: rr_assemble(room.rrTemplate.template, room.rrPlayerFills[battle.p1] || []),
+        p2text: rr_assemble(room.rrTemplate.template, room.rrPlayerFills[battle.p2] || []),
+        timeLeft: RR_VOTE_SECONDS,
+    };
+    broadcastRoom(room, 'rrBattleStart', payload);
+    room.rrTimeLeft = RR_VOTE_SECONDS;
+    room.rrTimer = setInterval(() => {
+        room.rrTimeLeft--;
+        broadcastRoom(room, 'rrTimer', { timeLeft: room.rrTimeLeft, phase: 'VOTE' });
+        if (room.rrTimeLeft <= 0) { clearInterval(room.rrTimer); rr_resolveBattle(room, idx); }
+    }, 1000);
+}
+
+function rr_resolveBattle(room, idx) {
+    clearInterval(room.rrTimer);
+    const battle = room.rrBattles[idx];
+    let p1votes = 0, p2votes = 0;
+    Object.entries(battle.votes).forEach(([, pid]) => { if (pid === battle.p1) p1votes++; else p2votes++; });
+    battle.winner = p1votes >= p2votes ? battle.p1 : battle.p2;
+    // Award points: winner 3, loser 1, tie both get 2
+    const p1name = room.players[battle.p1]?.name, p2name = room.players[battle.p2]?.name;
+    if (p1votes === p2votes) {
+        if (p1name) room.rrScores[p1name] = (room.rrScores[p1name] || 0) + 2;
+        if (p2name) room.rrScores[p2name] = (room.rrScores[p2name] || 0) + 2;
+    } else if (p1votes > p2votes) {
+        if (p1name) room.rrScores[p1name] = (room.rrScores[p1name] || 0) + 3;
+        if (p2name) room.rrScores[p2name] = (room.rrScores[p2name] || 0) + 1;
+    } else {
+        if (p2name) room.rrScores[p2name] = (room.rrScores[p2name] || 0) + 3;
+        if (p1name) room.rrScores[p1name] = (room.rrScores[p1name] || 0) + 1;
+    }
+    broadcastRoom(room, 'rrBattleResult', {
+        battleIndex: idx, winner: battle.winner,
+        p1votes, p2votes, p1: battle.p1, p2: battle.p2,
+        rrScores: room.rrScores,
+    });
+    room.rrTimer = setTimeout(() => rr_runBattle(room, idx + 1), RR_RESULT_SECONDS * 1000);
+}
+
+function rr_endGame(room) {
+    room.rrPhase = 'END';
+    const sorted = Object.entries(room.rrScores).sort((a, b) => b[1] - a[1]);
+    broadcastRoom(room, 'rrGameEnd', { rrScores: room.rrScores, sorted, players: Object.values(room.players).map(p => ({ id: p.id, name: p.name })) });
+}
+
+function rr_returnToLobby(room) {
+    clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
+    room.rrPhase = 'LOBBY'; room.rrTemplate = null;
+    room.rrPlayerFills = {}; room.rrFillReady = {};
+    room.rrPlayerRecordings = {}; room.rrRecordReady = {};
+    room.rrBattles = []; room.rrCurrentBattle = 0; room.rrScores = {};
+    room.gamePhase = 'LOBBY';
+    broadcastGameState(room);
+}
+
 // ─── Socket connections ────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
@@ -1286,6 +1459,72 @@ io.on('connection', (socket) => {
         pp_returnToLobby(room);
     });
 
+    // ── Rizz or Roast events ──────────────────────────────────────────────────
+
+    socket.on('rrStartGame', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        room.selectedGame = 'rizzorroast';
+        rr_startGame(room);
+    });
+
+    socket.on('rrSubmitFills', ({ fills }) => {
+        const room = socketRoom(socket);
+        if (!room || room.rrPhase !== 'FILL') return;
+        if (!Array.isArray(fills) || fills.length !== room.rrTemplate.blanks.length) return;
+        room.rrPlayerFills[socket.id] = fills.map(f => String(f).slice(0, 30).trim() || '____');
+        room.rrFillReady[socket.id] = true;
+        rr_broadcastFillProgress(room);
+        const total = Object.keys(room.players).length;
+        if (Object.values(room.rrFillReady).filter(Boolean).length >= total) {
+            clearInterval(room.rrTimer); rr_startRecordPhase(room);
+        }
+    });
+
+    socket.on('rrSubmitRecording', ({ audio }) => {
+        const room = socketRoom(socket);
+        if (!room || room.rrPhase !== 'RECORD') return;
+        if (typeof audio === 'string' && audio.length < RR_MAX_AUDIO_BYTES) {
+            room.rrPlayerRecordings[socket.id] = audio;
+        }
+        room.rrRecordReady[socket.id] = true;
+        const total = Object.keys(room.players).length;
+        const readyCount = Object.values(room.rrRecordReady).filter(Boolean).length;
+        broadcastRoom(room, 'rrRecordProgress', { readyCount, totalCount: total });
+        if (readyCount >= total) { clearInterval(room.rrTimer); rr_launchBattles(room); }
+    });
+
+    socket.on('rrVote', ({ votedForId }) => {
+        const room = socketRoom(socket);
+        if (!room || room.rrPhase !== 'BATTLE') return;
+        const battle = room.rrBattles[room.rrCurrentBattle];
+        if (!battle) return;
+        if (socket.id === battle.p1 || socket.id === battle.p2) return; // can't vote for yourself
+        if (battle.votes[socket.id]) return; // already voted
+        if (votedForId !== battle.p1 && votedForId !== battle.p2) return;
+        battle.votes[socket.id] = votedForId;
+        const voters = Object.keys(battle.votes).map(id => room.players[id]?.name).filter(Boolean);
+        broadcastRoom(room, 'rrVoteUpdate', { voterCount: voters.length, voterNames: voters });
+        const eligible = Object.keys(room.players).filter(id => id !== battle.p1 && id !== battle.p2);
+        if (Object.keys(battle.votes).length >= eligible.length) {
+            clearInterval(room.rrTimer); rr_resolveBattle(room, room.rrCurrentBattle);
+        }
+    });
+
+    socket.on('rrNextBattle', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
+        room.rrCurrentBattle++;
+        rr_runBattle(room, room.rrCurrentBattle);
+    });
+
+    socket.on('rrReturnToLobby', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        rr_returnToLobby(room);
+    });
+
     // ── Kick / leave ──────────────────────────────────────────────────────────
 
     socket.on('kickPlayer', ({ targetId }) => {
@@ -1325,6 +1564,7 @@ io.on('connection', (socket) => {
             clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
             clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
             clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
+            clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
             delete rooms[room.code];
         }
     });
@@ -1369,6 +1609,7 @@ io.on('connection', (socket) => {
             clearTimeout(room.revealTimer);
             clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
             clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
+            clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
             delete rooms[room.code];
             console.log(`🗑️  Room ${room.code} removed (empty)`);
         }
