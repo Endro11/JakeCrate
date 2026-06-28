@@ -993,17 +993,16 @@
 </div>
 
 <!-- Race screen -->
-<div id="sc-race-screen" class="sc-screen">
-    <div id="sc-race-header">
+<div id="sc-race-screen" class="sc-screen" style="padding:0;overflow:hidden;">
+    <canvas id="sc-race-canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
+    <!-- Timer / lap HUD overlaid on canvas -->
+    <div style="position:absolute;top:0;left:0;right:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top)+8px) 14px 8px;background:linear-gradient(180deg,rgba(0,0,0,0.6) 0%,transparent 100%);">
         <div class="sc-race-lap" id="sc-race-lap-label"></div>
-        <div class="sc-pixel" style="font-size:0.75em;color:#e91e63;">PIT STOP RESULTS ↑</div>
         <div class="sc-race-timer" id="sc-race-timer"></div>
     </div>
-    <div class="sc-title" style="font-size:0.65em;margin-bottom:4px;">STANDINGS</div>
-    <div id="sc-race-lanes"></div>
-    <!-- Next pit preview (instructors only) -->
-    <div id="sc-preview-panel" style="display:none;">
-        <h3>📋 NEXT PIT STOP — PREP NOW</h3>
+    <!-- Next pit preview (instructors only) — overlaid at bottom -->
+    <div id="sc-preview-panel" style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:2;background:rgba(0,0,0,0.82);border-top:1px solid rgba(255,204,0,0.3);padding:10px 14px;">
+        <div style="font-family:'Press Start 2P',monospace;font-size:0.5em;color:#ffcc00;margin-bottom:6px;">📋 NEXT PIT STOP — PREP NOW</div>
         <div id="sc-preview-tasks"></div>
     </div>
 </div>
@@ -2977,7 +2976,7 @@ function scShowOnly(id) {
 
 function scCleanup() {
     SC_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; });
-    if (scRaceInterval) { clearInterval(scRaceInterval); scRaceInterval = null; }
+    if (scRaceRaf) { cancelAnimationFrame(scRaceRaf); scRaceRaf = null; }
 }
 
 // ── Role reveal ──────────────────────────────────────────────────────────────
@@ -3397,43 +3396,149 @@ socket.on('scTimer', ({ phase, timeLeft, lap }) => {
     }
 });
 
-// ── Race screen ──────────────────────────────────────────────────────────────
+// ── Race screen (canvas) ─────────────────────────────────────────────────────
+const SC_CAR_COLS = 3, SC_CAR_ROWS = 6;
+const SC_CAR_SW = 469, SC_CAR_SH = 128; // sprite cell size in sheet
+let scTrackImg = null, scCarSheet = null;
+let scRaceRaf = null, scRaceScrollX = 0, scRaceTick = 0, scRaceTeams = [];
+
+(function scPreload() {
+    scTrackImg = new Image(); scTrackImg.src = '/sprites/track_crop.jpg';
+    scCarSheet  = new Image(); scCarSheet.src  = '/sprites/cars.png';
+})();
+
 socket.on('scRaceStart', ({ lap, timeLeft, teams }) => {
     document.getElementById('sc-race-lap-label').innerText = `LAP ${lap}`;
     document.getElementById('sc-race-timer').innerText = timeLeft;
-    scBuildRaceLanes(teams);
-    scShowOnly('sc-race-screen');
-});
-
-function scBuildRaceLanes(teams) {
-    const container = document.getElementById('sc-race-lanes');
-    container.innerHTML = '';
-    // Sort by speed desc for display order
-    const sorted = [...teams].sort((a, b) => {
+    scRaceTeams = [...teams].sort((a, b) => {
         if (a.crashed && !b.crashed) return 1;
         if (!a.crashed && b.crashed) return -1;
         return b.speed - a.speed;
     });
-    sorted.forEach((team, pos) => {
-        const lane = document.createElement('div');
-        lane.className = 'sc-lane';
-        lane.id = `sc-lane-${team.teamIdx}`;
-        // Speed → road animation speed (slower car = slower scroll)
-        const scrollSpeed = team.crashed ? 0 : Math.max(0.2, team.speed / 150);
-        const animDur = team.crashed ? '999s' : `${(0.8 / scrollSpeed).toFixed(2)}s`;
-        const hasSmoke = team.damages && team.damages.length > 0;
-        lane.innerHTML = `
-            <div class="sc-road" style="animation-duration:${animDur};${team.crashed?'animation-play-state:paused':''}"></div>
-            <div class="sc-lane-line" style="animation-duration:${animDur};${team.crashed?'animation-play-state:paused':''}"></div>
-            ${hasSmoke ? '<div class="sc-smoke-trail">💨</div>' : ''}
-            <div class="sc-car ${team.crashed?'crashed':hasSmoke?'smoke':''}" style="color:${team.driver.color};">${team.driver.emoji}</div>
-            <div class="sc-lane-info">
-                <div class="sc-lane-name">${team.driver.name}</div>
-                <div class="sc-lane-speed">${team.crashed ? '💥 OUT' : team.speed + ' MPH'}</div>
-            </div>
-            <div class="sc-lane-pos">${team.crashed ? '💀' : '#' + (pos + 1)}</div>`;
-        container.appendChild(lane);
-    });
+    scShowOnly('sc-race-screen');
+    scStartRaceCanvas();
+});
+
+function scStartRaceCanvas() {
+    if (scRaceRaf) { cancelAnimationFrame(scRaceRaf); scRaceRaf = null; }
+    scRaceScrollX = 0; scRaceTick = 0;
+
+    const canvas = document.getElementById('sc-race-canvas');
+    if (!canvas) return;
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+
+    const maxSpeed = Math.max(...scRaceTeams.map(t => t.speed || 60), 80);
+    // Track background takes up top ~55% of screen
+    const TRACK_FRAC = 0.54;
+
+    function draw() {
+        const W = canvas.width, H = canvas.height;
+        const trackH = Math.round(H * TRACK_FRAC);
+        const lanesH  = H - trackH;
+        const n = scRaceTeams.length;
+        const laneH = Math.floor(lanesH / n);
+
+        // ── Scrolling track background ──────────────────────────────────────
+        const scrollPx = (maxSpeed / 150) * 2.2;
+        scRaceScrollX = (scRaceScrollX + scrollPx);
+
+        if (scTrackImg.complete && scTrackImg.naturalWidth > 0) {
+            const iw = scTrackImg.naturalWidth;
+            const drawW = Math.round(iw * (trackH / scTrackImg.naturalHeight));
+            scRaceScrollX = scRaceScrollX % drawW;
+            let x = -scRaceScrollX;
+            while (x < W) { ctx.drawImage(scTrackImg, x, 0, drawW, trackH); x += drawW; }
+        } else {
+            const g = ctx.createLinearGradient(0, 0, 0, trackH);
+            g.addColorStop(0, '#5bb8f5'); g.addColorStop(0.55, '#3a8c3a'); g.addColorStop(1, '#555');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, trackH);
+        }
+
+        // ── Lane rows ───────────────────────────────────────────────────────
+        scRaceTeams.forEach((team, pos) => {
+            const laneY = trackH + pos * laneH;
+            const isFirst = pos === 0;
+
+            // Lane background
+            ctx.fillStyle = team.crashed
+                ? 'rgba(80,0,0,0.85)'
+                : isFirst ? 'rgba(20,16,0,0.92)' : (pos % 2 === 0 ? 'rgba(12,12,20,0.92)' : 'rgba(8,8,16,0.92)');
+            ctx.fillRect(0, laneY, W, laneH);
+
+            // Gold accent for leader
+            if (isFirst && !team.crashed) {
+                ctx.fillStyle = 'rgba(255,204,0,0.08)';
+                ctx.fillRect(0, laneY, W, laneH);
+            }
+
+            // Top divider
+            ctx.strokeStyle = isFirst ? 'rgba(255,204,0,0.5)' : 'rgba(255,255,255,0.07)';
+            ctx.lineWidth = isFirst ? 2 : 1;
+            ctx.beginPath(); ctx.moveTo(0, laneY); ctx.lineTo(W, laneY); ctx.stroke();
+
+            // ── Car sprite ──────────────────────────────────────────────────
+            const displayH = Math.min(laneH - 10, 58);
+            const displayW = Math.round(displayH * (SC_CAR_SW / SC_CAR_SH));
+            const row = team.teamIdx % SC_CAR_ROWS;
+
+            let frame = 0;
+            const dmg = team.damages ? team.damages.length : 0;
+            if (team.crashed) {
+                frame = 2;
+            } else if (dmg >= 2) {
+                frame = Math.floor(scRaceTick / 4) % 2 === 0 ? 1 : 2;
+            } else if (dmg === 1) {
+                frame = Math.floor(scRaceTick / 10) % 2;
+            }
+
+            // Car x-position reflects relative speed (faster = further right)
+            const maxX = W * 0.58, minX = 10;
+            const speedFrac = team.crashed ? 0 : (team.speed || 0) / maxSpeed;
+            const carX = Math.round(minX + speedFrac * (maxX - minX) + Math.sin(scRaceTick * 0.04 + pos) * 3);
+            const carY = laneY + Math.round((laneH - displayH) / 2);
+
+            if (scCarSheet.complete && scCarSheet.naturalWidth > 0) {
+                if (team.crashed) ctx.globalAlpha = 0.45;
+                ctx.drawImage(scCarSheet, frame * SC_CAR_SW, row * SC_CAR_SH, SC_CAR_SW, SC_CAR_SH, carX, carY, displayW, displayH);
+                ctx.globalAlpha = 1;
+                // Smoke overlay for damaged cars
+                if (dmg > 0 && !team.crashed) {
+                    ctx.font = `${Math.round(displayH * 0.6)}px serif`;
+                    ctx.fillText('💨', carX + displayW - 4, carY + 4);
+                }
+            } else {
+                ctx.fillStyle = team.driver.color || '#888';
+                ctx.fillRect(carX, carY, displayW, displayH);
+            }
+
+            // ── Text info ───────────────────────────────────────────────────
+            const textX = Math.round(W * 0.65);
+            const midY  = laneY + laneH / 2;
+            const fs    = Math.max(10, Math.round(laneH * 0.3));
+
+            // Position number
+            ctx.font = `bold ${Math.round(laneH * 0.45)}px "Press Start 2P", monospace`;
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = team.crashed ? '#e57373' : isFirst ? '#ffd700' : '#aaa';
+            ctx.fillText(team.crashed ? '💀' : `#${pos+1}`, textX - 38, midY);
+
+            // Driver name
+            ctx.font = `bold ${fs}px sans-serif`;
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`${team.driver.emoji} ${team.driver.name}`, textX + 12, midY - fs * 0.45);
+
+            // Speed
+            ctx.font = `bold ${Math.round(fs * 0.85)}px monospace`;
+            ctx.fillStyle = team.crashed ? '#ef5350' : '#4fc3f7';
+            ctx.fillText(team.crashed ? '💥 OUT' : `${team.speed} MPH`, textX + 12, midY + fs * 0.6);
+        });
+
+        scRaceTick++;
+        scRaceRaf = requestAnimationFrame(draw);
+    }
+    draw();
 }
 
 socket.on('scNextPitPreview', ({ tasks }) => {
