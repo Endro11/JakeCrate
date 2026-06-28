@@ -3027,7 +3027,13 @@ socket.on('scPitStart', ({ role, lap, timeLeft, tasks, driver }) => {
     execView.style.display  = 'none';
     pyroView.style.display  = 'none';
 
-    if (role === 'instructor') {
+    if (role === 'crashed') {
+        document.getElementById('sc-pit-role-label').innerText = '💥 YOUR CAR IS OUT';
+        pyroView.style.display = 'flex';
+        pyroView.innerHTML = `<div style="font-size:3em;">💥</div><div class="sc-title" style="font-size:0.7em;">CAR ELIMINATED</div><div class="sc-sub" style="max-width:280px;line-height:1.7;">${driver ? driver.name + ' is done.' : 'Your car is done.'}<br>Watch the other teams suffer.</div>`;
+        scShowOnly('sc-pit-screen');
+        return;
+    } else if (role === 'instructor') {
         document.getElementById('sc-pit-role-label').innerText = '📋 READ TASKS TO YOUR PARTNER';
         instrView.style.display = 'flex';
         scBuildInstructorTaskList(tasks);

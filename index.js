@@ -1193,6 +1193,13 @@ function sc_startPit(room) {
     room.scTimeLeft = SC_PIT_SECONDS;
 
     room.scTeams.forEach(team => {
+        if (team.crashed) {
+            team.currentTasks = [];
+            const crashMsg = { role:'crashed', lap: room.scLap, timeLeft: SC_PIT_SECONDS, driver: team.driver };
+            io.to(team.instructorId).emit('scPitStart', crashMsg);
+            io.to(team.executorId).emit('scPitStart', crashMsg);
+            return;
+        }
         team.currentTasks = team.tasksByLap[room.scLap - 1].map(t => ({ ...t, completed: false, quality: 0 }));
 
         io.to(team.instructorId).emit('scPitStart', {
