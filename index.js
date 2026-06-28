@@ -1035,7 +1035,7 @@ const SC_DRIVERS = [
     { id:'rico',    name:'Rico Veloso',     emoji:'🙏', color:'#fdd835', blurb:'Deeply superstitious before races', signatureTasks:['holy_cross','champagne','rosary'] },
     { id:'dale',    name:'Dale Danger',     emoji:'🤠', color:'#795548', blurb:'Needs his comfort items',           signatureTasks:['spit_cup','country_radio','beer_cozy'] },
     { id:'yuki',    name:'Yuki Turbō',      emoji:'⚡', color:'#00bcd4', blurb:'Zen speedster. Rituals are sacred', signatureTasks:['energy_drink','meditation_bell','origami'] },
-    { id:'fabrice', name:'Fabrice Le Fou',  emoji:'🥐', color:'#3f51b5', blurb:'Insufferable Frenchman',            signatureTasks:['beret','croissant','shrug'] },
+    { id:'fabrice', name:'Fabrice Le Fou',  emoji:'🧑‍🎨', color:'#3f51b5', blurb:'Insufferable Frenchman',            signatureTasks:['beret','croissant','shrug'] },
 ];
 
 const SC_TASK_DEFS = {

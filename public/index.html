@@ -962,22 +962,25 @@
 </div>
 
 <!-- Pit stop (instructor + executor — same screen, role shown via content) -->
-<div id="sc-pit-screen" class="sc-screen">
-    <div style="display:flex;align-items:center;justify-content:space-between;width:min(380px,95%);">
-        <div class="sc-lap-badge" id="sc-pit-lap"></div>
-        <div class="sc-pit-timer" id="sc-pit-timer"></div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;width:min(380px,95%)">
-        <div id="sc-pit-driver-emoji" style="font-size:1.8em;"></div>
-        <div>
-            <div style="font-weight:900;font-size:0.9em;" id="sc-pit-driver-name"></div>
-            <div style="font-size:0.7em;color:#888;" id="sc-pit-role-label"></div>
+<div id="sc-pit-screen" class="sc-screen" style="padding-top:0;">
+    <div style="position:sticky;top:0;z-index:2;background:#0a0a12;width:100%;padding:calc(env(safe-area-inset-top)+8px) 12px 8px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid rgba(255,255,255,0.07);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="sc-lap-badge" id="sc-pit-lap"></div>
+            <div class="sc-pit-timer" id="sc-pit-timer"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <div id="sc-pit-driver-emoji" style="font-size:1.6em;"></div>
+            <div>
+                <div style="font-weight:900;font-size:0.88em;" id="sc-pit-driver-name"></div>
+                <div style="font-size:0.68em;color:#888;" id="sc-pit-role-label"></div>
+            </div>
         </div>
     </div>
+    <div style="width:100%;padding:10px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;">
     <!-- Instructor view -->
-    <div id="sc-instructor-view" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;">
-        <div class="sc-sub" style="font-size:0.75em;">READ THESE TASKS TO YOUR PARTNER</div>
-        <div id="sc-task-list"></div>
+    <div id="sc-instructor-view" style="display:none;width:100%;">
+        <div class="sc-sub" style="font-size:0.75em;text-align:center;margin-bottom:8px;">READ THESE TASKS TO YOUR PARTNER</div>
+        <div id="sc-task-list" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;"></div>
     </div>
     <!-- Executor view -->
     <div id="sc-executor-view" style="display:none;width:100%;">
@@ -985,12 +988,13 @@
         <div id="sc-control-board"></div>
     </div>
     <!-- Pyro view -->
-    <div id="sc-pyro-view" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px;">
+    <div id="sc-pyro-view" style="display:none;width:100%;flex-direction:column;align-items:center;gap:16px;">
         <div style="font-size:3em;">🔥</div>
         <div class="sc-title" style="font-size:0.8em;">PYROMANIAC</div>
         <div class="sc-sub">Watch the chaos unfold.<br>Hope someone messes up.</div>
     </div>
-</div>
+    </div><!-- end content wrapper -->
+</div><!-- end sc-pit-screen -->
 
 <!-- Race screen -->
 <div id="sc-race-screen" class="sc-screen" style="padding:0;overflow:hidden;">
@@ -2702,7 +2706,7 @@ function rrRenderTemplate(template, blanks) {
     let blankIdx = 0;
     const html = template.replace(/\[([^\]]+)\]/g, (_, label) => {
         const i = blankIdx++;
-        return `<input class="rr-blank-input" data-idx="${i}" placeholder="${label}" maxlength="25" autocomplete="off" autocorrect="off" spellcheck="false">`;
+        return `<input class="rr-blank-input" data-idx="${i}" placeholder="___" maxlength="25" autocomplete="off" autocorrect="off" spellcheck="false">`;
     });
     wrap.innerHTML = html;
     wrap.querySelectorAll('.rr-blank-input')[0]?.focus();
@@ -3038,7 +3042,8 @@ socket.on('scPitStart', ({ role, lap, timeLeft, tasks, driver }) => {
         scBuildInstructorTaskList(tasks);
     } else if (role === 'executor') {
         document.getElementById('sc-pit-role-label').innerText = '🔧 LISTEN & OPERATE THE CONTROLS';
-        execView.style.display = 'block';
+        execView.style.display = 'flex';
+        execView.style.flexDirection = 'column';
         scBuildControlBoard(tasks);
     } else {
         document.getElementById('sc-pit-role-label').innerText = '🔥 WATCHING...';
@@ -3145,7 +3150,7 @@ function scBuildControl(task) {
 // ── Gauge ────────────────────────────────────────────────────────────────────
 const scGaugeState = {};
 function scGaugeStart(id) {
-    if (scGaugeState[id]?.done) return;
+    if (scGaugeState[id]?.done || scGaugeState[id]?.holding) return;
     scGaugeState[id] = { ...scGaugeState[id], holding: true, level: scGaugeState[id]?.level || 0 };
     scGaugeState[id].raf = requestAnimationFrame(function fill() {
         if (!scGaugeState[id]?.holding) return;
