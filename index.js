@@ -860,18 +860,21 @@ const RR_RESULT_SECONDS = 6;
 const RR_MAX_AUDIO_BYTES = 2_000_000; // ~1.5MB audio
 
 const RR_TEMPLATES = [
-    { id:'rr01', template:"Every time I see you, my [BODY PART] does a [DANCE MOVE] because you remind me of a [ADJECTIVE] [ANIMAL] eating [FOOD].", blanks:['BODY PART','DANCE MOVE','ADJECTIVE','ANIMAL','FOOD'] },
-    { id:'rr02', template:"You must be a [NOUN] because every time you walk in, my [BODY PART] starts [VERB]ing like a [ANIMAL] in [PLACE].", blanks:['NOUN','BODY PART','VERB','ANIMAL','PLACE'] },
-    { id:'rr03', template:"If I could describe you to [FAMOUS PERSON], I'd say you're like [ADJECTIVE] [FOOD] that somehow [VERB]s in [PLACE].", blanks:['FAMOUS PERSON','ADJECTIVE','FOOD','VERB','PLACE'] },
-    { id:'rr04', template:"Roses are red, [PLURAL NOUN] are [COLOR]. You look like a [ADJECTIVE] [ANIMAL] and smell like [FOOD].", blanks:['PLURAL NOUN','COLOR','ADJECTIVE','ANIMAL','FOOD'] },
-    { id:'rr05', template:"I've never met anyone whose [BODY PART] makes me want to [VERB] like a [ADJECTIVE] [ANIMAL] in front of [NUMBER] people.", blanks:['BODY PART','VERB','ADJECTIVE','ANIMAL','NUMBER'] },
-    { id:'rr06', template:"You walk in the room like a [ADJECTIVE] [ANIMAL] and suddenly my [BODY PART] forgets how to [VERB].", blanks:['ADJECTIVE','ANIMAL','BODY PART','VERB'] },
-    { id:'rr07', template:"The way your [BODY PART] moves makes me think of [NUMBER] [ADJECTIVE] [ANIMAL]s doing [DANCE MOVE] in [PLACE].", blanks:['BODY PART','NUMBER','ADJECTIVE','ANIMAL','DANCE MOVE','PLACE'] },
-    { id:'rr08', template:"Your [BODY PART] is so [ADJECTIVE] it made my [RELATIVE] [VERB] and knock over all the [FOOD] at [PLACE].", blanks:['BODY PART','ADJECTIVE','RELATIVE','VERB','FOOD','PLACE'] },
-    { id:'rr09', template:"If I were [FAMOUS PERSON], I'd write a whole [NOUN] about how your [BODY PART] looks like a [ADJECTIVE] [ANIMAL].", blanks:['FAMOUS PERSON','NOUN','BODY PART','ADJECTIVE','ANIMAL'] },
-    { id:'rr10', template:"The first time I saw you, I dropped my [FOOD], tripped over a [NOUN], and [VERB]ed like a [ADJECTIVE] [ANIMAL].", blanks:['FOOD','NOUN','VERB','ADJECTIVE','ANIMAL'] },
-    { id:'rr11', template:"I wrote a poem about you: '[ADJECTIVE] as a [ANIMAL], warm as a [FOOD], your [BODY PART] haunts me like a [ADJECTIVE] [NOUN].'", blanks:['ADJECTIVE','ANIMAL','FOOD','BODY PART','ADJECTIVE','NOUN'] },
-    { id:'rr12', template:"Scientists say that [NUMBER]% of [PLURAL NOUN] agree: your [BODY PART] is the most [ADJECTIVE] thing in [PLACE].", blanks:['NUMBER','PLURAL NOUN','BODY PART','ADJECTIVE','PLACE'] },
+    { id:'rr01', template:"You give off very strong [NOUN] energy.", blanks:['NOUN'] },
+    { id:'rr02', template:"If you were a [NOUN], you'd be the [ADJECTIVE] one.", blanks:['NOUN','ADJECTIVE'] },
+    { id:'rr03', template:"You have the energy of someone who [VERB]s [NOUN] for fun.", blanks:['VERB','NOUN'] },
+    { id:'rr04', template:"History will remember you as the person who [VERB]ed a [NOUN].", blanks:['VERB','NOUN'] },
+    { id:'rr05', template:"You're the type of person who brings [NOUN] to a [NOUN].", blanks:['NOUN','NOUN'] },
+    { id:'rr06', template:"Your whole thing is [ADJECTIVE] [NOUN] and everyone knows it.", blanks:['ADJECTIVE','NOUN'] },
+    { id:'rr07', template:"You remind me of [NOUN] — and that's [ADJECTIVE].", blanks:['NOUN','ADJECTIVE'] },
+    { id:'rr08', template:"The vibe you bring to every room is just [ADJECTIVE] [NOUN].", blanks:['ADJECTIVE','NOUN'] },
+    { id:'rr09', template:"You look like the kind of person who [VERB]s [NOUN] unironically.", blanks:['VERB','NOUN'] },
+    { id:'rr10', template:"Honestly, you have the same energy as [NOUN] at [PLACE].", blanks:['NOUN','PLACE'] },
+    { id:'rr11', template:"If there were an award for being [ADJECTIVE], you'd show up in a [NOUN].", blanks:['ADJECTIVE','NOUN'] },
+    { id:'rr12', template:"You're basically what happens when [NOUN] meets [NOUN].", blanks:['NOUN','NOUN'] },
+    { id:'rr13', template:"The last person this [ADJECTIVE] was [CELEBRITY].", blanks:['ADJECTIVE','CELEBRITY'] },
+    { id:'rr14', template:"I've seen [NOUN]s with more [NOUN] than you.", blanks:['NOUN','NOUN'] },
+    { id:'rr15', template:"You walk into a room and people think: '[ADJECTIVE] [NOUN].'", blanks:['ADJECTIVE','NOUN'] },
 ];
 
 function rr_assemble(template, fills) {

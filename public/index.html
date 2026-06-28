@@ -2744,13 +2744,13 @@ socket.on('rrRecordPhase', ({ assembled, timeLeft, opponentName, battleType, bye
         banner.innerText = '👻 BYE ROUND';
         ctx.innerText = 'Odd player out — no battle this round, but still record for fun!';
     } else if (battleType === 'RIZZ') {
-        banner.innerText = '💘 RIZZ BATTLE';
+        banner.innerText = '✨ BIG UP BATTLE';
         banner.style.color = '#ff80ab';
-        ctx.innerText = `You vs ${opponentName} — deliver this like you mean it romantically!`;
+        ctx.innerText = `You vs ${opponentName} — say it like a compliment and sell it.`;
     } else {
         banner.innerText = '🔥 ROAST BATTLE';
         banner.style.color = '#ff6d00';
-        ctx.innerText = `You vs ${opponentName} — deliver this like you're clowning them!`;
+        ctx.innerText = `You vs ${opponentName} — say it like you're clowning them hard.`;
     }
 
     document.getElementById('rr-record-timer').innerText = timeLeft;
@@ -2842,10 +2842,10 @@ socket.on('rrBattleStart', ({ battleIndex, totalBattles, type, p1, p2, p1audio, 
     document.getElementById('rr-battle-counter').innerText = `BATTLE ${battleIndex + 1} OF ${totalBattles}`;
     const typeEl = document.getElementById('rr-battle-type');
     typeEl.className = 'rr-title ' + type;
-    typeEl.innerText = type === 'RIZZ' ? '💘 RIZZ BATTLE' : '🔥 ROAST BATTLE';
+    typeEl.innerText = type === 'RIZZ' ? '✨ BIG UP BATTLE' : '🔥 ROAST BATTLE';
     document.getElementById('rr-battle-sub').innerText = type === 'RIZZ'
-        ? "Who's got the better pickup line? Vote for the best rizz 💘"
-        : 'Who clowned harder? Vote for the best roast 🔥';
+        ? "Who said it nicer? Vote for the best delivery ✨"
+        : "Who burned harder? Vote for the best roast 🔥";
 
     document.getElementById('rr-p1-name').innerText = p1.name;
     document.getElementById('rr-p2-name').innerText = p2.name;
