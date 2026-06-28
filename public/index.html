@@ -136,8 +136,10 @@
         #so-mem-title { font-weight:bold; font-size:0.95em; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         #so-mem-artist { font-size:0.72em; color:#888; }
         #so-mem-part { font-family:monospace; font-size:0.82em; color:#ffeb3b; background:rgba(255,235,59,0.1); border:1px solid rgba(255,235,59,0.3); border-radius:6px; padding:4px 12px; white-space:nowrap; flex-shrink:0; }
-        #so-mem-img-wrap { flex:1; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; }
-        #so-mem-img { max-width:100%; max-height:100%; object-fit:contain; pointer-events:none; user-select:none; -webkit-user-select:none; display:block; }
+        #so-mem-img-wrap { flex:1; width:100%; overflow:hidden; min-height:0; position:relative; cursor:grab; }
+        #so-mem-img-wrap:active { cursor:grabbing; }
+        #so-mem-img { display:block; transform-origin:0 0; touch-action:none; user-select:none; -webkit-user-select:none; position:absolute; }
+        #so-mem-zoom-hint { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); color:#888; font-size:0.72em; padding:3px 10px; border-radius:20px; pointer-events:none; white-space:nowrap; }
         #so-mem-footer { width:100%; text-align:center; color:#555; font-size:0.75em; padding:6px; flex-shrink:0; }
         .kick-btn { background:none !important; border:none !important; color:#e57373 !important; cursor:pointer; padding:0 4px !important; font-size:0.8em !important; font-weight:bold; flex-grow:0 !important; min-width:0 !important; opacity:0.7; }
         .kick-btn:hover { opacity:1; }
@@ -476,6 +478,7 @@
     <div id="so-ref-strip">
         <img id="so-ref-img" src="" alt="" onclick="soPickFromThumb(event)" onerror="this.parentElement.style.display='none';soResizeCanvas();">
         <div id="so-ref-part-label"></div>
+        <button onclick="soZoomRef()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);border:1px solid #444;border-radius:6px;color:#fff;font-size:1em;padding:2px 7px;cursor:pointer;z-index:3;line-height:1.4;">🔍</button>
     </div>
     <div id="so-toolbar">
         <div id="so-color-swatch" onclick="toggleColorModal(true)" style="display:none;width:32px;height:28px;border:2px solid #fff;border-radius:6px;background:#ff0000;cursor:pointer;flex-shrink:0;box-shadow:0 0 5px rgba(0,0,0,0.5);"></div>
@@ -527,9 +530,10 @@
         <div id="so-mem-part">YOUR PART: ???</div>
     </div>
     <div id="so-mem-img-wrap">
-        <img id="so-mem-img" src="" alt="painting" draggable="false">
+        <img id="so-mem-img" src="" alt="meme" draggable="false">
+        <div id="so-mem-zoom-hint">Pinch to zoom · drag to pan · double-tap to reset</div>
     </div>
-    <div id="so-mem-footer">Memorize it — you won't see it again while drawing</div>
+    <div id="so-mem-footer">Memorize your part — only a small reference shown while drawing</div>
 </div>
 
 <!-- ════════════════════ STROKE OFF REVEAL SCREEN ════════════════════ -->
@@ -1621,6 +1625,78 @@ function soSkipRules() {
     if (soRulesCallback) { soRulesCallback(); soRulesCallback = null; }
 }
 
+// ── Memorize screen pinch-to-zoom ──────────────────────────────────────────
+function soMemZoomInit() {
+    const wrap = document.getElementById('so-mem-img-wrap');
+    const img  = document.getElementById('so-mem-img');
+    let scale = 1, tx = 0, ty = 0;
+    let lastDist = null, lastMid = null, dragStart = null, pinching = false;
+
+    function clamp(s) { return Math.min(8, Math.max(1, s)); }
+    function applyTransform() {
+        img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+    }
+    function resetView() {
+        // Fit image inside wrap
+        const ww = wrap.clientWidth, wh = wrap.clientHeight;
+        const iw = img.naturalWidth || ww, ih = img.naturalHeight || wh;
+        const fit = Math.min(ww / iw, wh / ih, 1);
+        scale = fit; tx = (ww - iw * fit) / 2; ty = (wh - ih * fit) / 2;
+        img.style.width = iw + 'px'; img.style.height = ih + 'px';
+        applyTransform();
+    }
+
+    img.onload = resetView;
+    if (img.complete && img.naturalWidth) resetView();
+
+    let lastTap = 0;
+    wrap.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            pinching = true; dragStart = null;
+            const t0 = e.touches[0], t1 = e.touches[1];
+            lastDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+            lastMid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+        } else if (e.touches.length === 1) {
+            const now = Date.now();
+            if (now - lastTap < 300) { resetView(); lastTap = 0; return; }
+            lastTap = now;
+            if (!pinching) dragStart = { x: e.touches[0].clientX - tx, y: e.touches[0].clientY - ty };
+        }
+    }, { passive: true });
+
+    wrap.addEventListener('touchmove', e => {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+            const t0 = e.touches[0], t1 = e.touches[1];
+            const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+            const mid  = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+            const ds = dist / lastDist;
+            const newScale = clamp(scale * ds);
+            const rect = wrap.getBoundingClientRect();
+            const ox = lastMid.x - rect.left, oy = lastMid.y - rect.top;
+            tx = ox - (ox - tx) * (newScale / scale) + (mid.x - lastMid.x);
+            ty = oy - (oy - ty) * (newScale / scale) + (mid.y - lastMid.y);
+            scale = newScale; lastDist = dist; lastMid = mid;
+            applyTransform();
+        } else if (e.touches.length === 1 && dragStart && !pinching) {
+            tx = e.touches[0].clientX - dragStart.x;
+            ty = e.touches[0].clientY - dragStart.y;
+            applyTransform();
+        }
+    }, { passive: false });
+
+    wrap.addEventListener('touchend', e => {
+        if (e.touches.length < 2) { lastDist = null; lastMid = null; }
+        if (e.touches.length === 0) { pinching = false; dragStart = null; }
+    }, { passive: true });
+}
+
+function soZoomRef() {
+    const src = document.getElementById('so-ref-img').src;
+    if (!src) return;
+    ppLightbox(src);
+}
+
 function showMemorize(imageUrl, title, artist, yourPart, memorizeSeconds) {
     const screen = document.getElementById('so-memorize-screen');
     screen.style.display = 'flex';
@@ -1922,6 +1998,7 @@ socket.on('updateSoScores', (scoreData) => {
 applyColor();
 loop();
 soResizeCanvas();
+soMemZoomInit();
 
 // ── PikPic ──────────────────────────────────────────────────────────────────
 

@@ -188,89 +188,84 @@ function ts_checkReveal(room) {
 
 const PAINTINGS = [
     {
-        title: 'Mona Lisa', artist: 'Leonardo da Vinci · c.1503',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/800px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg',
-        parts: ['her face and enigmatic smile','her hands folded in her lap','her hair, veil, and dark headband','her dress, neckline, and bodice','the winding road and arch (right background)','the river and bridge (left background)','the misty distant mountains','the shadowy ambience around her'],
+        title: 'Distracted Boyfriend', artist: 'Antonio Guillem · 2017',
+        imageUrl: 'https://i.imgflip.com/1ur9b0.jpg',
+        parts: ['the boyfriend turning his head to look','his girlfriend\'s horrified expression beside him','the attractive woman he\'s looking at','the boyfriend\'s outstretched arm','the woman\'s red outfit','the background street and parked cars','the girlfriend\'s hand on her hip','the boyfriend\'s blue t-shirt'],
     },
     {
-        title: 'The Starry Night', artist: 'Vincent van Gogh · 1889',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/1280px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg',
-        parts: ['the swirling turbulent sky','the large moon and its glowing halo','the eleven bright spiral star clusters','the tall dark cypress tree','the quiet village rooftops below','the church steeple','the rolling dark blue hills','the horizon where sky meets hills'],
+        title: 'Drake Approving / Disapproving', artist: 'Hotline Bling · 2016',
+        imageUrl: 'https://i.imgflip.com/30b1gx.jpg',
+        parts: ['top panel: Drake\'s dismissive hand wave','top panel: Drake\'s disgusted side-eye','bottom panel: Drake\'s pointing finger','bottom panel: Drake\'s approving smile','Drake\'s turtleneck and chain','the warm yellow-brown background','the horizontal dividing line between panels','Drake\'s relaxed body language (bottom)'],
     },
     {
-        title: 'The Scream', artist: 'Edvard Munch · 1893',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73_cm%2C_National_Gallery_of_Norway.jpg/800px-Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73_cm%2C_National_Gallery_of_Norway.jpg',
-        parts: ['the screaming figure with oval head','the two dark figures walking behind','the blood-red and orange swirling sky','the dark undulating shoreline','the long wooden boardwalk','the dark fjord water below','the swirling wavy landscape lines','the distant ships on the water'],
+        title: 'Woman Yelling at Cat', artist: 'Real Housewives · 2019',
+        imageUrl: 'https://i.imgflip.com/345v97.jpg',
+        parts: ['the blonde woman pointing and yelling','the woman behind her gesturing','the white cat sitting at the dinner table','the cat\'s flat unimpressed face','the salad plate in front of the cat','the split-screen dividing line','the women\'s dramatic expressions','the cat\'s small front paws on the table'],
     },
     {
-        title: 'Girl with a Pearl Earring', artist: 'Johannes Vermeer · c.1665',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/1665_Girl_with_a_Pearl_Earring.jpg/800px-1665_Girl_with_a_Pearl_Earring.jpg',
-        parts: ['her face, skin and lips','the large teardrop pearl earring','the blue and yellow wrapped turban','her eyes and direct gaze','the jet-black background','her neck and draped cloth collar','the shadow falling across her face','her slightly open mouth and chin'],
+        title: 'This Is Fine', artist: 'K.C. Green · 2013',
+        imageUrl: 'https://i.imgflip.com/wx5xt.jpg',
+        parts: ['the dog sitting calmly at the table','the coffee mug in the dog\'s hand/paw','the orange flames surrounding the room','the burning chair the dog sits on','the dog\'s little hat','the dog\'s calm smiling face','the room\'s flaming walls and ceiling','the open window with fire outside'],
     },
     {
-        title: 'The Great Wave off Kanagawa', artist: 'Katsushika Hokusai · c.1831',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Tsunami_by_hokusai_19th_century.jpg/1280px-Tsunami_by_hokusai_19th_century.jpg',
-        parts: ['the giant cresting wave (upper left)','the white foamy claw-like wave tips','the small snow-capped Mount Fuji','the three struggling fishing boats','the smaller background wave swells','the dark navy and indigo water trough','the spray and white seafoam','the pale grey sky above'],
+        title: 'Two Buttons', artist: 'Jake Clark · 2016',
+        imageUrl: 'https://i.imgflip.com/1g8my4.jpg',
+        parts: ['the sweating man\'s panicked face','the left red button','the right red button','the man\'s hovering uncertain hand','the sweat dripping down his forehead','the man\'s wide stressed eyes','the button panel and controls','the man\'s collared shirt'],
     },
     {
-        title: 'The Birth of Venus', artist: 'Sandro Botticelli · c.1485',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg/1280px-Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg',
-        parts: ['Venus standing on the giant shell','her long flowing golden hair','the wind god Zephyr blowing (far left)','the flower-scattering nymph with cloth (right)','the stylized sea waves below','the falling rose petals','the trees and shore (far right)','the golden light and pale sky'],
+        title: 'Spider-Man Pointing', artist: 'Spider-Man TV · 1967',
+        imageUrl: 'https://i.imgflip.com/1yxkcp.jpg',
+        parts: ['left Spider-Man pointing to the right','right Spider-Man pointing to the left','the web-shooter on left Spidey\'s wrist','the web-shooter on right Spidey\'s wrist','the two pointing index fingers','the red-and-blue costumes','the background setting','both Spideys\' face lenses'],
     },
     {
-        title: 'Nighthawks', artist: 'Edward Hopper · 1942',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Nighthawks_by_Edward_Hopper_1942.jpg/1280px-Nighthawks_by_Edward_Hopper_1942.jpg',
-        parts: ['the glowing diner interior','the couple sitting at the counter','the lone man with his back turned','the white-uniformed server behind the counter','the dark empty street outside','the large curved diner window','the green diner exterior trim','the coffee urns and counter items'],
+        title: 'Change My Mind', artist: 'Steven Crowder · 2018',
+        imageUrl: 'https://i.imgflip.com/24y43o.jpg',
+        parts: ['the man sitting at the folding table','the printed sign on the table','the man\'s crossed arms','the man\'s baseball cap','the outdoor street background','the folding table metal legs','the coffee cup to the side','the man\'s challenging expression'],
     },
     {
-        title: 'American Gothic', artist: 'Grant Wood · 1930',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Grant_Wood_-_American_Gothic_-_Google_Art_Project.jpg/800px-Grant_Wood_-_American_Gothic_-_Google_Art_Project.jpg',
-        parts: ['the stern man holding a pitchfork','the woman standing at his side','the house with the Gothic arched window','their stern facial expressions','the metal pitchfork itself','the red barn and trees behind them','the man\'s overalls and dark jacket','the woman\'s apron and brooch'],
+        title: 'Surprised Pikachu', artist: 'Pokémon Anime · 2018',
+        imageUrl: 'https://i.imgflip.com/3oevdk.jpg',
+        parts: ['Pikachu\'s wide-open O-shaped mouth','Pikachu\'s huge round black eyes','the red circle cheek patches','the yellow pointed ears with black tips','Pikachu\'s small stubby arms raised','the pudgy yellow body','the brown stripe markings on back','the blank background'],
     },
     {
-        title: 'A Sunday on La Grande Jatte', artist: 'Georges Seurat · 1886',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg/1280px-A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg',
-        parts: ['the woman with parasol and monkey (right)','the couple strolling in the middle','the men lounging on the grass (left)','the river and sailboats in the distance','the group under the trees (left middle)','the dappled tree shadows on the grass','the small dog in the foreground','the crowd of figures in the middle-distance'],
+        title: 'Gru\'s Plan', artist: 'Despicable Me · 2010',
+        imageUrl: 'https://i.imgflip.com/26am.jpg',
+        parts: ['Gru pointing approvingly at panel 1','Gru pointing approvingly at panel 2','Gru\'s confused stare at panel 3 (same as panel 1)','the plan board with written steps','Gru\'s yellow scarf','Gru\'s long bald elongated head','Gru\'s overalls and boots','the four-panel grid layout'],
     },
     {
-        title: 'Water Lilies', artist: 'Claude Monet · 1906',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Claude_Monet_-_Water_Lilies_-_1906%2C_Ryerson.jpg/1280px-Claude_Monet_-_Water_Lilies_-_1906%2C_Ryerson.jpg',
-        parts: ['the large pink water lily flowers','the round floating lily pad leaves','the sky reflected in the water (upper)','the weeping willow reflections (edges)','the dark murky water between the pads','the loose brushwork and reflections (center)','the lighter warm tones on the right','the heavy shadows and dark green patches'],
+        title: 'Expanding Brain', artist: 'Internet · 2017',
+        imageUrl: 'https://i.imgflip.com/1jwhww.jpg',
+        parts: ['the small dim brain in panel 1','the slightly glowing brain in panel 2','the brightly lit brain in panel 3','the massive galaxy-filled brain in panel 4','the glowing light halo effects','the panel borders and layout','the text area beside each brain','the increasing radiance from top to bottom'],
     },
     {
-        title: 'The Persistence of Memory', artist: 'Salvador Dalí · 1931',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/en/d/dd/The_Persistence_of_Memory.jpg',
-        parts: ['the melting watch draped over the ledge','the melting watch draped over the creature','the open watch covered in ants','the solid closed pocket watch with flies','the rocky brown plateau and table','the distant cliffs and small bay','the strange soft central creature','the reflective water on the left'],
+        title: 'Disaster Girl', artist: 'Dave Roth · 2007',
+        imageUrl: 'https://i.imgflip.com/23ls.jpg',
+        parts: ['the young girl\'s evil sideways smirk','the girl looking directly at the camera','the burning house in the background','the firefighters battling the blaze','the fire hose and water stream','the orange flames on the house','the suburban street setting','the girl\'s braided pigtails'],
     },
     {
-        title: 'Las Meninas', artist: 'Diego Velázquez · 1656',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Las_Meninas_01.jpg/900px-Las_Meninas_01.jpg',
-        parts: ['the Infanta Margarita (center)','the two ladies-in-waiting beside her','the large dog lying in the foreground','Velázquez at his easel (far left)','the mirror reflecting the king and queen','the open doorway with standing figure','the dwarfs and courtiers (right side)','the large dark paintings on the back wall'],
+        title: 'Doge', artist: 'Kabosu the Shiba · 2013',
+        imageUrl: 'https://upload.wikimedia.org/wikipedia/en/5/5f/Original_Doge_meme.jpg',
+        parts: ['the dog\'s iconic sideways glance','the dog\'s fluffy ruff around the face','the multicolored Comic Sans text floating around','the dog\'s perky pointed ears','the blurry couch/furniture background','the dog\'s visible front paws','the dog\'s small black nose and snout','the dog\'s fluffy body and coat'],
     },
     {
-        title: 'The Last Supper', artist: 'Leonardo da Vinci · c.1495',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/%22The_Last_Supper%22_by_Leonardo_da_Vinci.jpg/1280px-%22The_Last_Supper%22_by_Leonardo_da_Vinci.jpg',
-        parts: ['Jesus at the center of the table','the three disciples at the far left','disciples leaning in left of center','Judas reaching for the bread (center-left)','the bread rolls and overturned salt cellar','disciples gesturing right of center','the three disciples at the far right','the arched ceiling and tapestried walls'],
+        title: 'One Does Not Simply', artist: 'Lord of the Rings · 2001',
+        imageUrl: 'https://i.imgflip.com/1bij.jpg',
+        parts: ['Boromir\'s serious stern face','his hand raised in a cautionary gesture','his dark wavy hair','his chainmail and armor','his brown travel cloak','his beard and facial features','the dark stone background of Rivendell','his wide-set earnest eyes'],
     },
     {
-        title: 'The Creation of Adam', artist: 'Michelangelo · c.1512',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Michelangelo_-_Creation_of_Adam_%28cropped%29.jpg/1280px-Michelangelo_-_Creation_of_Adam_%28cropped%29.jpg',
-        parts: ['God\'s outstretched right arm','Adam\'s reaching left hand','the gap between the two fingers','God\'s flowing red cloak and wind','the cluster of angels surrounding God','Adam\'s reclining body','the barren rocky ledge Adam rests on','the swirling cloud silhouette around God'],
+        title: 'Success Kid', artist: 'Sammy Griner · 2007',
+        imageUrl: 'https://i.imgflip.com/1bhf.jpg',
+        parts: ['the baby\'s triumphant raised fist','the sand clenched in his little fist','the baby\'s determined scrunched expression','his furrowed chubby brow','the beach sand in the background','the ocean water behind him','the baby\'s round chubby cheeks','his tiny clenched fingers'],
     },
     {
-        title: 'Impression, Sunrise', artist: 'Claude Monet · 1872',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Monet_-_Impression%2C_Sunrise.jpg/1280px-Monet_-_Impression%2C_Sunrise.jpg',
-        parts: ['the bright orange sun on the horizon','the orange rippling reflection on water','the small rowboat in the foreground','the silhouetted figures in the boat','the industrial cranes and smokestacks','the misty blue-grey harbor sky','the hazy ghost ships in the background','the dark choppy foreground water'],
+        title: 'Bad Luck Brian', artist: 'Kyle Craven · 2012',
+        imageUrl: 'https://i.imgflip.com/1bik.jpg',
+        parts: ['Brian\'s awkward wide forced smile','his large gap-toothed grin','his plaid vest over a collared shirt','his wild reddish hair','his thick-rimmed glasses','the school photo blue background','his braces visible in the smile','his overall dorky yearbook expression'],
     },
     {
-        title: 'The Hay Wain', artist: 'John Constable · 1821',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/John_Constable_-_The_Hay_Wain_%281821%29.jpg/1280px-John_Constable_-_The_Hay_Wain_%281821%29.jpg',
-        parts: ['the hay wagon fording the river','the white farmhouse on the left bank','the small dog in the shallow water','the river and its calm reflections','the distant haymakers in the sunlit field','the large oak trees on the far left','the billowing white clouds and blue sky','the far-right trees and open pasture'],
-    },
-    {
-        title: 'The Milkmaid', artist: 'Johannes Vermeer · c.1658',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Johannes_Vermeer_-_Het_melkmeisje_-_Rijksmuseum_Amsterdam_%28cropped%29.jpg/800px-Johannes_Vermeer_-_Het_melkmeisje_-_Rijksmuseum_Amsterdam_%28cropped%29.jpg',
-        parts: ['her face and white linen cap','her hands and the pouring milk stream','the wicker basket and crusty bread loaves','her deep blue apron','her yellow bodice and rolled sleeves','the bare white plaster wall behind her','the window and its warm morning light','the foot warmer and blue-tile floor'],
+        title: 'That Would Be Great', artist: 'Office Space · 1999',
+        imageUrl: 'https://i.imgflip.com/1bh8.jpg',
+        parts: ['Bill\'s passive-aggressive smug grin','his steepled fingers pressed together','his glasses pushed up on his nose','his business casual striped tie','his blue collared shirt','the office cubicle wall background','his eyebrows raised expectantly','his coffee mug held in one hand'],
     },
 ];
 
@@ -281,7 +276,7 @@ function so_startDrawing(room, fakeId) {
     const painting = PAINTINGS[Math.random() * PAINTINGS.length | 0];
     room.strokePainting = painting;
     room.strokePrompt = painting.title;
-    room.strokeTheme = { emoji: '🖼️', theme: painting.title };
+    room.strokeTheme = { emoji: '🤣', theme: painting.title };
     room.strokeFakeId = fakeId;
     room.strokeHistory = [];
     room.strokeVotes = {};
