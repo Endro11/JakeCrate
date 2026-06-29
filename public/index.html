@@ -34,6 +34,12 @@
         .podium-rest-row .pr-score { color:#ffd76b; font-family:monospace; }
         #podium-close { background:#2e7d32; border:none; border-radius:12px; padding:14px 30px; color:#fff; font-weight:bold; font-size:1em; letter-spacing:1px; text-transform:uppercase; cursor:pointer; margin-top:8px; }
 
+        /* ── Sleight of Hands: spotlight points feedback ── */
+        #vp-points-hud.vp-pop { animation: vp-pop 0.35s ease-out; }
+        @keyframes vp-pop { 0%{ transform:scale(1);} 35%{ transform:scale(1.55); color:#fff; text-shadow:0 0 14px rgba(255,235,59,1),1px 1px 2px #000;} 100%{ transform:scale(1);} }
+        .vp-float { position:fixed; top:calc(86px + env(safe-area-inset-top)); right:18px; z-index:11; font-family:monospace; font-weight:900; font-size:1.6em; color:#ffd700; text-shadow:0 0 12px rgba(255,200,0,0.95),1px 1px 2px #000; pointer-events:none; animation: vp-float-up 1.1s ease-out forwards; }
+        @keyframes vp-float-up { 0%{ opacity:0; transform:translateY(0) scale(0.6);} 18%{opacity:1;} 100%{ opacity:0; transform:translateY(-70px) scale(1.35);} }
+
         /* ── Hub landing ── */
         #hub-screen { display:flex; position:absolute; inset:0; z-index:50; background:radial-gradient(circle at 50% 30%, #0d1525, #050508 70%); flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:24px; color:#fff; }
         .hub-logo { font-size:3em; font-weight:900; letter-spacing:4px; color:#ffeb3b; text-shadow:0 0 28px rgba(255,235,59,0.5); }
@@ -93,10 +99,16 @@
         .cam-load { flex:1; background:#37474f; color:#fff; padding:8px 4px; font-size:0.72em; font-weight:bold; text-align:center; border-radius:6px; cursor:pointer; }
         .cam-load:active { background:#455a64; }
         #handBtn { background:#f9a825; color:black; }
+        /* Move/Paint toggle — obvious current state */
+        #modeBtn { flex-grow:1.4; border:2px solid transparent; transition:background .12s; }
+        #modeBtn.mode-paint { background:#2e7d32; color:#fff; border-color:#7CFC9A; box-shadow:0 0 12px rgba(46,160,67,0.6); }
+        #modeBtn.mode-move  { background:#1565c0; color:#fff; border-color:#7CC4FF; box-shadow:0 0 12px rgba(21,101,192,0.6); }
         #colorSwatch { width:45px; height:35px; border:2px solid #fff; border-radius:6px; background:#ff0000; cursor:pointer; box-shadow:0 0 5px rgba(0,0,0,0.5); flex-shrink:0; }
-        .slider-container { display:flex; align-items:center; flex-grow:1; gap:8px; background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:6px; }
-        #brushLabel { color:#fff; font-size:15px; font-weight:bold; font-family:monospace; background:#222; padding:4px 6px; border-radius:4px; min-width:38px; text-align:center; flex-shrink:0; }
-        #brushSize { width:100%; margin:0; }
+        /* Prominent brush row above the controls */
+        #brush-row { background:rgba(0,0,0,0.35); padding:8px 12px; border-radius:8px; gap:12px; }
+        #brush-preview { flex-shrink:0; border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.5); display:inline-block; width:10px; height:10px; }
+        #brushLabel { color:#fff; font-size:15px; font-weight:bold; font-family:monospace; background:#222; padding:5px 8px; border-radius:4px; min-width:44px; text-align:center; flex-shrink:0; }
+        #brushSize { width:100%; margin:0; height:26px; }
         .modal { position:absolute; top:15%; left:50%; transform:translateX(-50%); background:rgba(20,20,25,0.98); padding:20px; border-radius:12px; border:1px solid #555; display:flex; flex-direction:column; align-items:center; gap:15px; z-index:55; box-shadow:0 10px 40px rgba(0,0,0,0.9); width:280px; max-height:90vh; overflow-y:auto; color:white; }
         #scoreboard.in-entry { position:static; top:auto; right:auto; bottom:auto; left:auto; transform:none; min-width:0; width:100%; max-width:360px; box-shadow:none; margin:10px auto 0; background:rgba(0,0,0,0.25); }
         #scoreboard.in-entry #score-list { max-height:26vh; }
@@ -616,6 +628,8 @@
     <div class="setting-row"><span>Hide Time (sec):</span><input type="number" id="hideTime" value="45"></div>
     <div class="setting-row"><span>Seek Time (sec):</span><input type="number" id="seekTime" value="120"></div>
     <div class="setting-row"><span>Wrong pokes allowed:</span><input type="number" id="pokeCount" value="5"></div>
+    <div class="setting-row"><span># of seekers:</span><input type="number" id="seekerCount" value="1" min="1" max="6"></div>
+    <div class="setting-row"><span>Infection (caught → seeker):</span><input type="checkbox" id="infectionToggle" checked style="width:22px;height:22px;"></div>
     <div class="setting-row">
         <span>Seeker:</span>
         <div style="display:flex;gap:6px;align-items:center;">
@@ -654,19 +668,21 @@
 </div>
 
 <div id="ui-bar" style="display:none;">
+    <!-- Brush size — prominent, right above the controls -->
+    <div class="ui-row" id="brush-row">
+        <span id="brush-preview"></span>
+        <span id="brushLabel">10px</span>
+        <input type="range" id="brushSize" min="1" max="30" value="10" style="flex:1;">
+    </div>
     <div class="ui-row">
         <button id="handBtn" onclick="toggleHandMenu()">🖐️ HAND</button>
+        <button id="modeBtn" onclick="toggleMode()">🖌️ PAINTING</button>
         <button id="flipBtn" onclick="flipHand()">↔ FLIP</button>
-        <button id="modeBtn">🖌️ Paint</button>
         <button id="undoBtn" onclick="tsUndo()">↩ UNDO</button>
     </div>
     <div class="ui-row">
         <button id="eyedropperBtn" style="flex-grow:0;width:70px;background:#1565c0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:2px;"><path d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 0 0 5 16v3h3a2 2 0 0 0 1.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 0 0 0-1.41z"/></svg>PICK</button>
         <div id="colorSwatch" onclick="toggleColorModal(true)"></div>
-        <div class="slider-container">
-            <span id="brushLabel">10px</span>
-            <input type="range" id="brushSize" min="1" max="30" value="10">
-        </div>
         <button id="whistleBtn" style="flex-grow:0;width:50px;background:#37474f;">🔔</button>
     </div>
     <div class="ui-row" id="react-row">
@@ -1396,11 +1412,29 @@ socket.on('viewportMap', (map) => {
     wasInViewport = inVp;
 });
 
-socket.on('viewportPoints', (pts) => {
-    selfViewportPoints = (pts && socket.id && pts[socket.id]) ? pts[socket.id] : 0;
+socket.on('viewportPoints', (payload) => {
+    // payload: { totals:{id:pts}, gains:{id:pts} }  (back-compat: flat map)
+    const totals = (payload && payload.totals) ? payload.totals : (payload || {});
+    const gains = (payload && payload.gains) ? payload.gains : {};
+    selfViewportPoints = (socket.id && totals[socket.id]) ? totals[socket.id] : 0;
     const el = document.getElementById('vp-points-val');
+    const hud = document.getElementById('vp-points-hud');
     if (el) el.innerText = selfViewportPoints;
+    const myGain = (socket.id && gains[socket.id]) ? gains[socket.id] : 0;
+    if (myGain > 0 && hud) {
+        // Obvious "points flying up" feedback: pop the HUD + floating +N
+        hud.classList.remove('vp-pop'); void hud.offsetWidth; hud.classList.add('vp-pop');
+        spawnPointFloat('+' + myGain);
+    }
 });
+
+function spawnPointFloat(text) {
+    const f = document.createElement('div');
+    f.className = 'vp-float';
+    f.innerText = text;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 1100);
+}
 
 socket.on('gameState', (state) => {
     const prevPhase = gamePhase;
@@ -1422,10 +1456,10 @@ socket.on('gameState', (state) => {
         setTimeout(() => {
             const entries = Object.values(tsScoreCache || {}).map(s => ({
                 name: s.name,
-                score: (s.survivals || 0) * 100 + (s.catches || 0),
-                scoreLabel: `${s.survivals || 0}🛡 · ${s.catches || 0}🎯`
+                score: (s.survivals || 0) * 100000 + (s.spotlight || 0) * 10 + (s.catches || 0),
+                scoreLabel: `${s.survivals || 0}🛡 · ${s.spotlight || 0}👁 · ${s.catches || 0}🎯`
             }));
-            if (entries.length) showPodium(entries, { title: '🏆 SLEIGHT OF HANDS', sub: 'Most rounds survived wins!' });
+            if (entries.length) showPodium(entries, { title: '🏆 SLEIGHT OF HANDS', sub: 'Survive + bait the seeker for spotlight points!' });
         }, 1500);
     }
 
@@ -1528,7 +1562,8 @@ function applyChromeVisibility() {
     document.getElementById('lobbyDoneBtn').style.display = editing ? 'block' : 'none';
     document.getElementById('seekerBadge').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'inline-block' : 'none';
     document.getElementById('poke-counter').style.display = (isSeeker && gamePhase === 'SEEKING') ? 'block' : 'none';
-    document.getElementById('vp-points-hud').style.display = 'none';
+    document.getElementById('vp-points-hud').style.display =
+        (selectedGame === 'tacostealth' && isJoined && !isSeeker && !isDead && gamePhase === 'SEEKING') ? 'block' : 'none';
 }
 
 let tsScoreCache = {}, soScoreCache = {};
@@ -1664,7 +1699,7 @@ const handMasks = HAND_EMOJIS.map(emoji => {
     const cvs = document.createElement('canvas');
     cvs.width = playerSize; cvs.height = playerSize;
     const c = cvs.getContext('2d');
-    c.font = Math.round(playerSize * 0.92) + 'px serif';
+    c.font = Math.round(playerSize * 0.78) + 'px serif';
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(emoji, playerSize / 2, playerSize / 2);
     return cvs;
@@ -1676,7 +1711,7 @@ const handLuma = HAND_EMOJIS.map(emoji => {
     const cvs = document.createElement('canvas');
     cvs.width = playerSize; cvs.height = playerSize;
     const c = cvs.getContext('2d');
-    c.font = Math.round(playerSize * 0.92) + 'px serif';
+    c.font = Math.round(playerSize * 0.78) + 'px serif';
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(emoji, playerSize / 2, playerSize / 2);
     const img = c.getImageData(0, 0, playerSize, playerSize);
@@ -1790,7 +1825,9 @@ function startGame() {
     const hideTime = parseInt(document.getElementById('hideTime').value)||45;
     const seekTime = parseInt(document.getElementById('seekTime').value)||120;
     const pokeCount = parseInt(document.getElementById('pokeCount').value)||5;
-    socket.emit('startGame', { seekerId, hideTime, seekTime, pokeCount });
+    const seekerCount = parseInt(document.getElementById('seekerCount').value)||1;
+    const infection = document.getElementById('infectionToggle').checked;
+    socket.emit('startGame', { seekerId, hideTime, seekTime, pokeCount, seekerCount, infection });
     toggleSettingsModal(false);
 }
 function randomizeSeeker() { const ids = Object.values(otherPlayers).map(p=>p.id); if(ids.length) document.getElementById('seekerName').value = ids[Math.floor(Math.random()*ids.length)]; }
@@ -1855,7 +1892,25 @@ function deadSlide(e){const t=Math.min(1,e/1200),ease=1-Math.pow(1-t,3),wob=Math
 function meSeeker(){return seekerSocketIds.includes(socket.id);}
 function findMe(){if(isJoined&&!meSeeker()){focusAvatar();selfFlashUntil=Date.now()+2000;}}
 function zoomWhole(){if(meSeeker())focusWholeSpace();}
-function updateUI(){if(!isDead){document.getElementById('modeBtn').innerText=isPaint?'🖌️ Paint':'✋ Move';document.getElementById('modeBtn').style.background=isPaint?'#e57373':'#333';document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';}}
+function updateUI(){
+    if(!isDead){
+        const mb=document.getElementById('modeBtn');
+        mb.innerText=isPaint?'🖌️ PAINTING':'✋ MOVING';
+        mb.classList.toggle('mode-paint', isPaint);
+        mb.classList.toggle('mode-move', !isPaint);
+        document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';
+        document.body.classList.toggle('paint-cursor', isPaint && !isDrop);
+    }
+    updateBrushPreview();
+}
+function toggleMode(){ if(isDead)return; isPaint=!isPaint; isDrop=false; updateUI(); }
+function updateBrushPreview(){
+    const el=document.getElementById('brush-preview'); if(!el)return;
+    const v=parseFloat(document.getElementById('brushSize').value)||10;
+    const d=Math.max(4,Math.min(30,v));
+    el.style.width=d+'px'; el.style.height=d+'px';
+    el.style.background=(typeof activeColor!=='undefined')?activeColor:'#fff';
+}
 function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();handPaintCvs.getContext('2d').putImageData(snap,0,0);handDirty=true;scheduleAvatarSync();}
 function drawNoSignal(){ctx.fillStyle='#0b0b14';ctx.fillRect(0,0,SPACE_W,SPACE_H);ctx.fillStyle='rgba(255,255,255,0.05)';for(let gx=0;gx<SPACE_W;gx+=40)ctx.fillRect(gx,0,1,SPACE_H);}
 function drawNoSignalHud(){if(bg)return;const cx=canvas.width/2,cy=canvas.height/2;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='rgba(255,255,255,0.55)';ctx.font='bold 48px monospace';ctx.fillText('NO SIGNAL',cx,cy-20);ctx.fillStyle='rgba(255,255,255,0.35)';ctx.font='18px monospace';ctx.fillText('Host: load a room photo in ⚙️ HOST',cx,cy+28);ctx.textBaseline='alphabetic';ctx.restore();}
@@ -1883,9 +1938,8 @@ wheelCvs.ontouchstart=(e)=>{e.preventDefault();updateColorFromMath(e.touches[0].
 wheelCvs.onmousedown=(e)=>{updateColorFromMath(e.clientX,e.clientY);};
 wheelCvs.onmousemove=(e)=>{if(e.buttons===1)updateColorFromMath(e.clientX,e.clientY);};
 document.getElementById('brightnessSlider').addEventListener('input',(e)=>{cLight=e.target.value;applyColor();drawWheel();});
-function applyColor(){activeColor=`hsl(${cHue},${cSat}%,${cLight}%)`;document.getElementById('colorSwatch').style.background=activeColor;const sc=document.getElementById('so-color-swatch');if(sc)sc.style.background=activeColor;}
-document.getElementById('brushSize').addEventListener('input',(e)=>{document.getElementById('brushLabel').innerText=e.target.value+'px';showBrushPreview=true;clearTimeout(brushPreviewTimeout);brushPreviewTimeout=setTimeout(()=>showBrushPreview=false,800);});
-document.getElementById('modeBtn').onclick=()=>{if(isDead)return;isPaint=!isPaint;isDrop=false;updateUI();};
+function applyColor(){activeColor=`hsl(${cHue},${cSat}%,${cLight}%)`;document.getElementById('colorSwatch').style.background=activeColor;const sc=document.getElementById('so-color-swatch');if(sc)sc.style.background=activeColor;updateBrushPreview();}
+document.getElementById('brushSize').addEventListener('input',(e)=>{document.getElementById('brushLabel').innerText=e.target.value+'px';updateBrushPreview();showBrushPreview=true;clearTimeout(brushPreviewTimeout);brushPreviewTimeout=setTimeout(()=>showBrushPreview=false,800);});
 document.getElementById('eyedropperBtn').onclick=()=>{if(isDead)return;isDrop=true;isPaint=false;updateUI();};
 document.getElementById('whistleBtn').onclick=()=>{if(!isDead)whistlePulseStart=Date.now();};
 

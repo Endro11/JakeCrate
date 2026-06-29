@@ -40,8 +40,11 @@ function makeRoom(code) {
         seekerSocketId: null,   // initial seeker (compat)
         seekerToken: null,
         seekerSocketIds: [],    // all current seekers (grows via snowball)
+        seekerTokens: [],       // tokens of all seekers (survives reconnects)
         seekerPokes: {},        // socketId -> remaining pokes
+        seekerPokesByToken: {}, // token -> remaining pokes (survives reconnects)
         seekerPokesLeft: 0,     // legacy field kept for compat
+        infection: true,        // caught hiders become seekers (snowball) vs eliminated
         seekerCameras: {},      // socketId -> { x, y, scale, screenW, screenH, name, color }
         viewportPoints: {},     // socketId -> accumulated points
         viewportTick: null,
@@ -165,8 +168,14 @@ function transferHostIfNeeded(room) {
 function ts_tallyScores(room) {
     const hiders = Object.values(room.players).filter(p => !room.seekerSocketIds.includes(p.id));
     hiders.filter(p => !p.isDead).forEach(p => {
-        if (!room.scores[p.name]) room.scores[p.name] = { name: p.name, survivals: 0, catches: 0 };
+        if (!room.scores[p.name]) room.scores[p.name] = { name: p.name, survivals: 0, catches: 0, spotlight: 0 };
         room.scores[p.name].survivals += 1;
+    });
+    // Fold "spotlight" viewport points (being watched without being found) into scores
+    Object.entries(room.viewportPoints || {}).forEach(([sid, pts]) => {
+        const pl = room.players[sid]; if (!pl) return;
+        if (!room.scores[pl.name]) room.scores[pl.name] = { name: pl.name, survivals: 0, catches: 0, spotlight: 0 };
+        room.scores[pl.name].spotlight = (room.scores[pl.name].spotlight || 0) + (pts || 0);
     });
     broadcastScores(room);
 }
@@ -1419,6 +1428,8 @@ io.on('connection', (socket) => {
             delete room.lastReactionTimes[staleId];
             if (room.hostSocketId === staleId) room.hostSocketId = socket.id;
             if (room.seekerSocketId === staleId) room.seekerSocketId = socket.id;
+            room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== staleId);
+            delete room.seekerPokes[staleId]; delete room.seekerCameras[staleId];
             console.log(`🔄 Evicted stale session for ${playerData.name} (${staleId})`);
         }
 
@@ -1437,6 +1448,12 @@ io.on('connection', (socket) => {
         room.playerState[token] = { isDead: restored.isDead };
 
         if (room.seekerToken === token) room.seekerSocketId = socket.id;
+        // Restore seeker status across a reconnect (was the bug where a seeker
+        // who backgrounded the browser came back as a hider and broke the round)
+        if (room.seekerTokens && room.seekerTokens.includes(token)) {
+            if (!room.seekerSocketIds.includes(socket.id)) room.seekerSocketIds.push(socket.id);
+            room.seekerPokes[socket.id] = room.seekerPokesByToken[token] ?? room.seekerPokesLeft ?? 5;
+        }
         if (room.hostToken === token) room.hostSocketId = socket.id;
         isHost(room, socket); // auto-assigns host to first joiner if none set yet
 
@@ -1543,18 +1560,31 @@ io.on('connection', (socket) => {
         if (!room || !isHost(room, socket)) return;
         clearInterval(room.gameTimer);
 
-        // Auto-pick a random seeker if the host didn't choose one (common in
-        // small games where the dropdown was left on "— PICK —").
-        let seeker = room.players[data.seekerId];
-        if (!seeker) {
-            const ids = Object.keys(room.players);
-            if (ids.length) seeker = room.players[ids[Math.floor(Math.random() * ids.length)]];
-        }
         const pokeCount = data.pokeCount || 5;
-        room.seekerSocketId = seeker ? seeker.id : null;
-        room.seekerToken = seeker ? seeker.token : null;
-        room.seekerSocketIds = seeker ? [seeker.id] : [];
-        room.seekerPokes = seeker ? { [seeker.id]: pokeCount } : {};
+        const allIds = Object.keys(room.players);
+        const seekerCount = Math.max(1, Math.min(data.seekerCount || 1, Math.max(1, allIds.length - 1)));
+        room.infection = data.infection !== false; // default ON
+
+        // Build the seeker list: start with the chosen one (or random), then fill
+        // up to seekerCount with random distinct players.
+        const seekerIds = [];
+        const chosen = room.players[data.seekerId];
+        if (chosen) seekerIds.push(chosen.id);
+        const pool = allIds.filter(id => !seekerIds.includes(id));
+        while (seekerIds.length < seekerCount && pool.length) {
+            seekerIds.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        }
+        if (seekerIds.length === 0 && allIds.length) seekerIds.push(allIds[Math.floor(Math.random() * allIds.length)]);
+
+        room.seekerSocketIds = seekerIds;
+        room.seekerSocketId = seekerIds[0] || null;
+        room.seekerToken = seekerIds[0] ? room.players[seekerIds[0]].token : null;
+        room.seekerTokens = seekerIds.map(id => room.players[id].token);
+        room.seekerPokes = {}; room.seekerPokesByToken = {};
+        seekerIds.forEach(id => {
+            room.seekerPokes[id] = pokeCount;
+            room.seekerPokesByToken[room.players[id].token] = pokeCount;
+        });
         room.seekerPokesLeft = pokeCount;
         room.seekerCameras = {};
         room.viewportPoints = {};
@@ -1577,29 +1607,36 @@ io.on('connection', (socket) => {
                 room.timeLeft = room.lastSeekTime;
                 broadcastGameState(room);
 
-                // Tick every 500ms: award viewport points to hiders inside a seeker's view
+                // Tick: award viewport points to hiders inside a seeker's view.
+                // Points stack per watching seeker and scale with how zoomed-in
+                // they are — being stared at, up close, by many = points fly up.
                 room.viewportTick = setInterval(() => {
                     if (room.gamePhase !== 'SEEKING') { clearInterval(room.viewportTick); return; }
                     const cams = Object.values(room.seekerCameras);
                     if (!cams.length) return;
+                    const gains = {};
                     Object.values(room.players).forEach(h => {
                         if (room.seekerSocketIds.includes(h.id) || h.isDead) return;
                         const cx = (h.x || 0) + 37, cy = (h.y || 0) + 37;
-                        let maxZoom = 0;
+                        let gain = 0, watchers = 0;
                         cams.forEach(cam => {
                             if (!cam.scale || !cam.screenW) return;
                             const wx = -cam.x / cam.scale, wy = -cam.y / cam.scale;
                             const ww = cam.screenW / cam.scale, wh = cam.screenH / cam.scale;
-                            if (cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh)
-                                maxZoom = Math.max(maxZoom, cam.scale);
+                            if (cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh) {
+                                watchers++;
+                                gain += Math.max(1, Math.round(cam.scale * 5)); // zoom = faster
+                            }
                         });
-                        if (maxZoom > 0) {
+                        if (watchers > 1) gain = Math.round(gain * (1 + 0.5 * (watchers - 1))); // crowd bonus
+                        if (gain > 0) {
                             if (!room.viewportPoints[h.id]) room.viewportPoints[h.id] = 0;
-                            room.viewportPoints[h.id] += Math.max(1, Math.round(maxZoom * 3));
+                            room.viewportPoints[h.id] += gain;
+                            gains[h.id] = gain;
                         }
                     });
-                    broadcastRoom(room, 'viewportPoints', room.viewportPoints);
-                }, 500);
+                    broadcastRoom(room, 'viewportPoints', { totals: room.viewportPoints, gains });
+                }, 350);
 
                 room.gameTimer = setInterval(() => {
                     room.timeLeft--;
@@ -1628,7 +1665,7 @@ io.on('connection', (socket) => {
         const myPokes = room.seekerPokes[socket.id] ?? 0;
 
         if (validHit) {
-            // Caught! Play the pickle slide-off first, THEN convert to a seeker.
+            // Caught! Play the pickle slide-off.
             best.isDead = true;
             if (best.token) room.playerState[best.token] = { isDead: true };
             const catcher = room.players[socket.id];
@@ -1641,20 +1678,28 @@ io.on('connection', (socket) => {
             io.to(socket.id).emit('pokeResult', { hit: true, name: best.name, pokesLeft: myPokes });
             broadcastScores(room);
 
-            const caughtId = best.id;
-            const nextPokes = Math.max(1, Math.ceil(myPokes / 2));
-            setTimeout(() => {
-                const p = room.players[caughtId];
-                if (!p || room.gamePhase !== 'SEEKING') return;
-                p.isDead = false;
-                if (p.token) room.playerState[p.token] = { isDead: false };
-                if (!room.seekerSocketIds.includes(caughtId)) room.seekerSocketIds.push(caughtId);
-                room.seekerPokes[caughtId] = nextPokes;
-                broadcastRoom(room, 'updatePlayers', room.players);
-                broadcastGameState(room); // sends updated seekerSocketIds
-                io.to(caughtId).emit('nowSeeker', { pokesLeft: nextPokes });
+            if (!room.infection) {
+                // Infection OFF: caught hider is eliminated for good.
                 ts_checkReveal(room);
-            }, 1400);
+            } else {
+                // Infection ON: after the slide, the caught hider becomes a seeker.
+                const caughtId = best.id, caughtToken = best.token;
+                const nextPokes = Math.max(1, Math.ceil(myPokes / 2));
+                setTimeout(() => {
+                    const p = room.players[caughtId];
+                    if (!p || room.gamePhase !== 'SEEKING') return;
+                    p.isDead = false;
+                    if (p.token) room.playerState[p.token] = { isDead: false };
+                    if (!room.seekerSocketIds.includes(caughtId)) room.seekerSocketIds.push(caughtId);
+                    if (caughtToken && !room.seekerTokens.includes(caughtToken)) room.seekerTokens.push(caughtToken);
+                    room.seekerPokes[caughtId] = nextPokes;
+                    if (caughtToken) room.seekerPokesByToken[caughtToken] = nextPokes;
+                    broadcastRoom(room, 'updatePlayers', room.players);
+                    broadcastGameState(room); // sends updated seekerSocketIds
+                    io.to(caughtId).emit('nowSeeker', { pokesLeft: nextPokes });
+                    ts_checkReveal(room);
+                }, 1400);
+            }
         } else {
             if (myPokes <= 0) { io.to(socket.id).emit('pokeResult', { hit: false, pokesLeft: 0, out: true }); return; }
             room.seekerPokes[socket.id] = myPokes - 1;
