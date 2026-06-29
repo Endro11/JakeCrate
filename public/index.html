@@ -112,8 +112,8 @@
         #eyedropperBtn.drop-active { background:#1e88e5; border-color:#90CAF9; }
         /* Persistent bottom dock — brush slider always visible */
         #ui-bar { position:absolute; bottom:calc(8px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:calc(100% - 80px); max-width:380px; display:flex; align-items:center; gap:8px; background:rgba(18,18,28,0.94); padding:8px 14px; border-radius:14px; border:1px solid #3a4a66; z-index:10; box-shadow:0 -2px 14px rgba(0,0,0,0.7); }
-        #brush-preview { border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.5); flex-shrink:0; }
-        #brushLabel { color:#ccc; font-size:12px; font-weight:bold; font-family:monospace; flex-shrink:0; min-width:22px; text-align:right; }
+        #brush-preview { border-radius:50%; background:#fff; box-shadow:0 0 0 2px #000, 0 0 0 4px rgba(255,255,255,0.8); flex-shrink:0; transition:width 0.1s,height 0.1s; }
+        #brushLabel { color:#fff; font-size:14px; font-weight:bold; font-family:monospace; flex-shrink:0; min-width:26px; text-align:right; text-shadow:0 1px 4px rgba(0,0,0,0.9); }
         #brushSize { flex:1; min-width:0; accent-color:#7CC4FF; }
         #drawerToggle { flex-shrink:0; width:36px; height:36px; padding:0; font-size:1.1em; background:#2a3450; border:1px solid #3a4a66; border-radius:8px; }
         /* Slide-up drawer */
@@ -333,6 +333,33 @@
         .pp-clue-display { font-size:1.3em; font-weight:bold; color:#ffeb3b; text-align:center; font-style:italic; padding:8px 16px; background:rgba(255,235,59,0.08); border:1px solid rgba(255,235,59,0.25); border-radius:10px; max-width:340px; }
         .pp-voter-row { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
         .pp-outcome-box { font-size:0.9em; text-align:center; color:#ccc; background:rgba(255,255,255,0.05); border:1px solid #2a3a55; border-radius:8px; padding:10px 14px; max-width:340px; }
+        /* Fan hand */
+        .pp-fan-wrap { position:relative; width:100%; flex-shrink:0; height:170px; }
+        .pp-fan-card { position:absolute; border-radius:10px; overflow:hidden; border:3px solid #1e2e48; cursor:grab; transform-origin:bottom center; transition:transform .13s,border-color .15s,box-shadow .15s; user-select:none; -webkit-user-select:none; }
+        .pp-fan-card.selected { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); }
+        .pp-fan-card:active { cursor:grabbing; }
+        /* Drop zones */
+        .pp-zone { border-radius:12px; min-height:68px; display:flex; align-items:center; justify-content:center; gap:5px; flex-direction:column; padding:8px; transition:all .15s; box-sizing:border-box; }
+        .pp-zone-submit { border:1.5px dashed #2e5a28; background:rgba(46,125,50,0.06); color:#4a8a4a; }
+        .pp-zone-submit.drag-over { border-color:#4caf50; background:rgba(76,175,80,0.15); }
+        .pp-zone-swap { border:1.5px dashed #7a4a0a; background:rgba(230,81,0,0.06); color:#8a6030; }
+        .pp-zone-swap.drag-over { border-color:#ff9800; background:rgba(255,152,0,0.15); }
+        .pp-zone-swap.used { opacity:.35; pointer-events:none; }
+        /* Hold-to-enlarge overlay */
+        #pp-hold-overlay { display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,8,0.90); pointer-events:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+        #pp-hold-overlay img { max-width:90vw; max-height:80vh; border-radius:12px; object-fit:contain; box-shadow:0 12px 60px rgba(0,0,0,0.95); }
+        #pp-hold-overlay .pp-hold-hint { font-family:monospace; font-size:0.72em; color:rgba(255,255,255,0.28); letter-spacing:1px; }
+        /* Vote gallery carousel */
+        #pp-vote-carousel { flex:1; overflow:hidden; width:100%; position:relative; min-height:0; }
+        #pp-vote-slides { display:flex; height:100%; will-change:transform; transition:transform .22s cubic-bezier(.4,0,.2,1); }
+        .pp-vote-slide { min-width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 20px; box-sizing:border-box; gap:8px; }
+        .pp-vote-slide-img { max-width:100%; max-height:260px; border-radius:12px; object-fit:contain; display:block; border:3px solid rgba(255,255,255,0.06); transition:border-color .15s,box-shadow .15s; cursor:pointer; }
+        .pp-vote-slide-img.selected { border-color:#ffeb3b; box-shadow:0 0 22px rgba(255,235,59,0.4); }
+        .pp-vote-slide-img.pp-voted { border-color:#2e7d32; box-shadow:0 0 16px rgba(76,175,80,0.5); }
+        .pp-vote-slide-img.st-card { opacity:.55; cursor:default; }
+        #pp-vote-nav { display:flex; align-items:center; justify-content:center; gap:10px; flex-shrink:0; padding:4px 0; }
+        .pp-nav-btn { width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#ccc; cursor:pointer; font-size:1.1em; display:flex; align-items:center; justify-content:center; transition:background .12s; }
+        .pp-nav-btn:hover { background:rgba(255,255,255,0.12); }
 
         /* ── Rizz or Roast ── */
         .rr-screen { display:none; position:absolute; inset:0; z-index:55; background:radial-gradient(circle at 50% 10%,#1a0a2e,#050508 70%); flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+16px) 16px calc(env(safe-area-inset-bottom)+20px); gap:14px; }
@@ -694,6 +721,7 @@
 <div id="float-tools" style="display:none;">
     <button id="modeBtn" onclick="toggleMode()">🖌️<small>PAINT</small></button>
     <button id="eyedropperBtn" title="Eyedropper — tap the room to copy that color">💧<small>MATCH</small></button>
+    <button id="undoBtn" onclick="tsUndo()">↩<small>UNDO</small></button>
 </div>
 
 <!-- Persistent bottom dock: brush slider (always visible) + tools handle -->
@@ -710,7 +738,6 @@
         <div id="colorSwatch" onclick="toggleColorModal(true);closeDrawer()" title="Pick a color"></div>
         <button id="handBtn" onclick="toggleHandMenu();closeDrawer()">🖐️ HAND</button>
         <button id="flipBtn" onclick="flipHand();closeDrawer()">↔ FLIP</button>
-        <button id="undoBtn" onclick="tsUndo()">↩ UNDO</button>
     </div>
     <div class="ts-drawer-row">
         <button id="whistleBtn">🔔 WHISTLE</button>
@@ -892,6 +919,12 @@
     <button id="pp-lightbox-action" style="display:none;" onclick="ppLightboxAction(event)"></button>
 </div>
 
+<!-- Hold-to-enlarge overlay (global, covers everything) -->
+<div id="pp-hold-overlay">
+    <img id="pp-hold-img" src="">
+    <div class="pp-hold-hint">RELEASE TO DISMISS</div>
+</div>
+
 <!-- Selfie overlay -->
 <div id="pp-selfie-wrap">
     <div style="color:#fff;font-weight:bold;font-size:1.1em;letter-spacing:2px;">📸 SELFIE</div>
@@ -904,12 +937,12 @@
 
 <!-- Clue screen (storyteller) -->
 <div id="pp-clue-screen">
-    <div class="pp-title">📖 YOU'RE THE STORYTELLER</div>
+    <div class="pp-title" style="font-size:1.15em;">📖 YOU'RE THE CURATOR</div>
     <div id="pp-clue-round" class="pp-sub">Round 1 of 3</div>
-    <div class="pp-sub" style="color:#ccc;">Tap to zoom · double-tap (or button) to pick · then write a clue</div>
-    <div id="pp-clue-hand" class="pp-hand"></div>
+    <div class="pp-sub" style="color:#aab;">Hold to preview big · tap to pick · then write a clue</div>
     <input id="pp-clue-input" type="text" placeholder="Your clue…" maxlength="120" autocomplete="off">
     <button id="pp-submit-clue-btn" class="pp-btn pp-btn-green" onclick="ppSubmitClue()" style="width:min(320px,90%);">📤 SEND CLUE</button>
+    <div class="pp-fan-wrap" id="pp-clue-fan"></div>
 </div>
 
 <!-- Wait screen -->
@@ -922,26 +955,50 @@
 
 <!-- Submit screen (other players pick their card) -->
 <div id="pp-submit-screen">
-    <div class="pp-title">🃏 PICK A CARD</div>
-    <div id="pp-submit-round-label" class="pp-sub">Storyteller's clue:</div>
+    <div class="pp-title" style="font-size:1.15em;">🃏 PICK A CARD</div>
+    <div id="pp-submit-round-label" class="pp-sub">Curator's clue:</div>
     <div id="pp-submit-clue-display" class="pp-clue-display">"…"</div>
-    <div class="pp-sub">Tap to zoom · double-tap (or use the button) to pick</div>
-    <div id="pp-submit-hand" class="pp-hand"></div>
-    <div style="display:flex;gap:8px;width:min(320px,90%);">
-        <button id="pp-confirm-btn" class="pp-btn pp-btn-green" onclick="ppConfirmCard()" style="display:none;flex:1;">✅ SUBMIT CARD</button>
-        <button id="pp-swap-btn" class="pp-btn pp-btn-yellow" onclick="ppSwapCard()" style="display:none;flex:0 0 auto;">🔄 SWAP</button>
+    <!-- Drop zones -->
+    <div style="display:flex;gap:8px;width:min(360px,94%);">
+        <div id="pp-drop-zone" class="pp-zone pp-zone-submit" style="flex:2;"
+             ondragover="event.preventDefault();ppDZOver('pp-drop-zone',true)"
+             ondragleave="ppDZOver('pp-drop-zone',false)"
+             ondrop="ppDropSubmit(event)">
+            <div style="font-size:1.4em;">📩</div>
+            <div style="font-size:0.7em;letter-spacing:.8px;font-family:monospace;text-align:center;line-height:1.4;">DRAG TO SUBMIT</div>
+        </div>
+        <div id="pp-swap-zone" class="pp-zone pp-zone-swap" style="flex:1;"
+             ondragover="event.preventDefault();ppDZOver('pp-swap-zone',true)"
+             ondragleave="ppDZOver('pp-swap-zone',false)"
+             ondrop="ppDropSwap(event)">
+            <div style="font-size:1.3em;">🔄</div>
+            <div id="pp-swap-label" style="font-size:0.68em;font-family:monospace;text-align:center;line-height:1.4;">SWAP<br><span style="opacity:.6;">(once)</span></div>
+        </div>
     </div>
     <div id="pp-submit-timer" class="pp-timer-big" style="font-size:1.6em;"></div>
     <div id="pp-submit-count" style="font-family:monospace;color:#556;font-size:0.82em;"></div>
+    <!-- Fan of cards (fills remaining space, anchored to bottom) -->
+    <div class="pp-fan-wrap" id="pp-submit-fan" style="margin-top:auto;"></div>
+    <!-- Hidden stubs so existing JS refs don't crash -->
+    <button id="pp-confirm-btn" style="display:none;" onclick="ppConfirmCard()"></button>
+    <button id="pp-swap-btn" style="display:none;" onclick="ppSwapCard()"></button>
 </div>
 
 <!-- Vote screen -->
 <div id="pp-vote-screen">
-    <div class="pp-title">🗳️ VOTE</div>
-    <div class="pp-sub">Which card did the storyteller play?</div>
-    <div id="pp-vote-clue" class="pp-clue-display">"…"</div>
-    <div id="pp-vote-hint" class="pp-sub" style="color:#ccc;"></div>
-    <div id="pp-vote-grid"></div>
+    <div class="pp-title" style="font-size:1.1em;">🗳️ DETECTIVE TIME</div>
+    <div id="pp-vote-clue" class="pp-clue-display" style="font-size:1.1em;">"…"</div>
+    <div id="pp-vote-hint" class="pp-sub" style="color:#aab;"></div>
+    <!-- Gallery carousel -->
+    <div id="pp-vote-carousel">
+        <div id="pp-vote-slides"></div>
+    </div>
+    <!-- Nav row -->
+    <div id="pp-vote-nav">
+        <button class="pp-nav-btn" onclick="ppGalNav(-1)">‹</button>
+        <div id="pp-vote-dots" style="display:flex;gap:5px;align-items:center;"></div>
+        <button class="pp-nav-btn" onclick="ppGalNav(1)">›</button>
+    </div>
     <div id="pp-vote-voters" class="pp-voter-row"></div>
     <div id="pp-vote-timer" class="pp-timer-big" style="font-size:1.6em;"></div>
 </div>
@@ -1494,7 +1551,7 @@ socket.on('gameState', (state) => {
                 scoreLabel: `${s.survivals || 0}🛡 · ${s.spotlight || 0}👁 · ${s.catches || 0}🎯`
             }));
             if (entries.length) showPodium(entries, { title: '🏆 SLEIGHT OF HANDS', sub: 'Survive + bait the seeker for spotlight points!' });
-        }, 1500);
+        }, 12000);
     }
 
     // Show hub → room lobby transition
@@ -1734,7 +1791,7 @@ const handMasks = HAND_EMOJIS.map(emoji => {
     const cvs = document.createElement('canvas');
     cvs.width = playerSize; cvs.height = playerSize;
     const c = cvs.getContext('2d');
-    c.font = Math.round(playerSize * 0.78) + 'px serif';
+    c.font = Math.round(playerSize * 0.78) + "px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(emoji, playerSize / 2, playerSize / 2);
     return cvs;
@@ -1746,7 +1803,7 @@ const handLuma = HAND_EMOJIS.map(emoji => {
     const cvs = document.createElement('canvas');
     cvs.width = playerSize; cvs.height = playerSize;
     const c = cvs.getContext('2d');
-    c.font = Math.round(playerSize * 0.78) + 'px serif';
+    c.font = Math.round(playerSize * 0.78) + "px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(emoji, playerSize / 2, playerSize / 2);
     const img = c.getImageData(0, 0, playerSize, playerSize);
@@ -1952,7 +2009,7 @@ function toggleMode(){ if(isDead||tsLocked)return; isPaint=!isPaint; isDrop=fals
 function updateBrushPreview(){
     const el=document.getElementById('brush-preview'); if(!el)return;
     const v=parseFloat(document.getElementById('brushSize').value)||10;
-    const d=Math.max(4,Math.min(22,v));
+    const d=Math.max(6,Math.min(30,v));
     el.style.width=d+'px'; el.style.height=d+'px';
     el.style.background=(typeof activeColor!=='undefined')?activeColor:'#fff';
 }
@@ -2102,6 +2159,7 @@ function loop(){
         else if(_rv){ctx.filter='drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.5))';}
         else if(_wA){const _pr=_wEl/800;ctx.filter=`drop-shadow(0 0 ${Math.round(16*(1-_pr))}px rgba(255,255,255,${(0.85*(1-_pr)).toFixed(2)}))`;}
         ctx.drawImage(handComposed,0,0);ctx.filter='none';
+        if(_rv){const _rp=0.5+0.5*Math.sin(_n/300);ctx.save();ctx.strokeStyle=`rgba(255,235,59,${(0.7+0.3*_rp).toFixed(2)})`;ctx.lineWidth=3.5;ctx.setLineDash([8,5]);ctx.strokeRect(-14,-14,playerSize+28,playerSize+28);ctx.setLineDash([]);ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(-14,-38,playerSize+28,24);ctx.fillStyle='#FFE040';ctx.font='bold 11px monospace';ctx.textAlign='center';const _rvPts=(tsScoreCache[playerName]||{}).spotlight||0;ctx.fillText(`⭐ ${playerName} · ${_rvPts}👁`,playerSize/2,-20);ctx.restore();}
         // Move-mode outline so you know dragging will move (not paint) the hand
         if(!isDead&&!isPaint&&!isDrop&&(gamePhase==='HIDING'||gamePhase==='SEEKING')){
             const _mp=0.5+0.5*Math.sin(_n/260);
@@ -2125,10 +2183,11 @@ function loop(){
         ctx.save();ctx.translate(px+playerSize/2+slide.x,py+playerSize/2+slide.y);ctx.rotate(slide.rot);ctx.translate(-playerSize/2,-playerSize/2);
         const av=otherAvatars[op.id];
         if(gamePhase==='REVEAL'&&!op.isDead){ctx.filter='drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.5))';}
-        if(av){ctx.drawImage(av,0,0);}else{ctx.font=Math.round(playerSize*0.88)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🖐️',playerSize/2,playerSize/2);}
+        if(av){ctx.drawImage(av,0,0);}else{ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fillRect(0,0,playerSize,playerSize);ctx.fillStyle='#fff';ctx.font=Math.round(playerSize*0.88)+"px 'Apple Color Emoji','Segoe UI Emoji',serif";ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🖐️',playerSize/2,playerSize/2);}
         ctx.filter='none';
+        if(gamePhase==='REVEAL'&&!op.isDead){const _rp=0.5+0.5*Math.sin(Date.now()/300);ctx.save();ctx.strokeStyle=`rgba(255,235,59,${(0.7+0.3*_rp).toFixed(2)})`;ctx.lineWidth=3.5;ctx.setLineDash([8,5]);ctx.strokeRect(-14,-14,playerSize+28,playerSize+28);ctx.setLineDash([]);ctx.fillStyle='rgba(0,0,0,0.85)';ctx.fillRect(-14,-38,playerSize+28,24);ctx.fillStyle='#FFE040';ctx.font='bold 11px monospace';ctx.textAlign='center';const _rvPts=(tsScoreCache[op.name]||{}).spotlight||0;ctx.fillText(`${op.name} · ${_rvPts}👁`,playerSize/2,-20);ctx.restore();}
         if(revealHead){const _rh=hashHue(op.token||'');ctx.save();ctx.beginPath();ctx.arc(playerSize/2,-20,11,0,Math.PI*2);ctx.fillStyle=`hsl(${_rh},62%,42%)`;ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((op.name||'?')[0].toUpperCase(),playerSize/2,-20);ctx.restore();}
-        if(op.isDead||gamePhase!=='SEEKING'){ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(-2,-18,playerSize+4,16);ctx.fillStyle='#FFF';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(op.name,playerSize/2,-5);}
+        if(op.isDead||(gamePhase!=='SEEKING'&&gamePhase!=='REVEAL')){ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(-2,-18,playerSize+4,16);ctx.fillStyle='#FFF';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(op.name,playerSize/2,-5);}
         if(op.isDead){ctx.strokeStyle='#000';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(27,10);ctx.lineTo(35,16);ctx.moveTo(35,10);ctx.lineTo(27,16);ctx.stroke();ctx.beginPath();ctx.moveTo(39,10);ctx.lineTo(47,16);ctx.moveTo(47,10);ctx.lineTo(39,16);ctx.stroke();}
         ctx.restore();
     });
@@ -2697,6 +2756,8 @@ function ppCleanup() {
     if (ppCameraStream) { ppCameraStream.getTracks().forEach(t => t.stop()); ppCameraStream = null; }
     ppMyPhotos = []; ppMyHand = []; ppSubUsed = false;
     ppStorytellerId = null; ppSelectedCardId = null; ppPhase = 'LOBBY';
+    ppFtueDone = false; ppVoteFtueDone = false;
+    ppEndHold(); ppVoteCards = []; ppGalIdx = 0; ppVoteSelectedId = null;
 }
 
 function ppShow(id) { ppCloseLightbox(); PP_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; }); const t = document.getElementById(id); if (t) t.style.display = 'flex'; }
@@ -2828,14 +2889,180 @@ function ppRenderHand(containerId, cards, selectable) {
     }).join('');
 }
 
+// ── Fan hand rendering ──
+let ppDragCardId = null, ppHoldTimer = null, ppHoldFired = false, ppFtueDone = false, ppVoteFtueDone = false;
+
+function ppFanPositions(n) {
+    const spread = Math.min(42, Math.max(22, n * 8));
+    return Array.from({length: n}, (_, i) => {
+        const t = n > 1 ? i / (n - 1) : 0.5;
+        return {
+            angle: ((-spread / 2) + t * spread).toFixed(1),
+            leftPct: (10 + t * 80).toFixed(1),
+            yDrop: Math.round(Math.abs(t - 0.5) * 2 * 20)
+        };
+    });
+}
+
+// mode: 'select' = tap to select (clue screen), 'drag' = drag to zone (submit screen)
+function ppRenderFan(containerId, cards, mode) {
+    const el = document.getElementById(containerId); if (!el) return;
+    const pos = ppFanPositions(cards.length);
+    const n = cards.length;
+    el.innerHTML = cards.map((c, i) => {
+        const url = c.photoUrl.replace(/'/g, "\\'");
+        const p = pos[i];
+        const isSel = c.cardId === ppSelectedCardId;
+        const tapHandler = mode === 'select'
+            ? `onpointerup="if(!ppHoldFired)ppSelectCard('${c.cardId}');ppEndHold();" onpointercancel="ppEndHold();"`
+            : `onpointerup="ppEndHold();" onpointercancel="ppEndHold();"`;
+        return `<div class="pp-fan-card${isSel ? ' selected' : ''}" data-cid="${c.cardId}"
+            style="left:calc(${p.leftPct}% - 36px);bottom:${p.yDrop}px;width:72px;height:100px;transform:rotate(${p.angle}deg);z-index:${n - i};"
+            draggable="${mode === 'drag' ? 'true' : 'false'}"
+            ondragstart="ppDragCardId='${c.cardId}';event.dataTransfer.setData('text/plain','${c.cardId}');ppEndHold();"
+            ondragend="ppDragCardId=null;"
+            onmouseenter="ppFanHov(this,true,${p.angle})"
+            onmouseleave="ppFanHov(this,false,${p.angle})"
+            onpointerdown="ppBegHold('${url}',event,this)"
+            ${tapHandler}>
+            <img src="${c.photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" draggable="false">
+        </div>`;
+    }).join('');
+}
+
+function ppFanHov(el, on, angle) {
+    el.style.transform = on ? `rotate(${(angle * 0.3).toFixed(1)}deg) translateY(-16px)` : `rotate(${angle}deg)`;
+    el.style.zIndex = on ? 20 : '';
+}
+
+function ppBegHold(src, e, el) {
+    ppEndHold();
+    ppHoldFired = false;
+    const sx = e.clientX, sy = e.clientY;
+    let moved = false;
+    function onMove(ev) {
+        if (!moved && (Math.abs(ev.clientX - sx) > 10 || Math.abs(ev.clientY - sy) > 10)) {
+            moved = true; ppEndHold(); el.removeEventListener('pointermove', onMove);
+        }
+    }
+    el.addEventListener('pointermove', onMove);
+    ppHoldTimer = setTimeout(() => {
+        if (!moved) {
+            ppHoldFired = true;
+            document.getElementById('pp-hold-img').src = src;
+            document.getElementById('pp-hold-overlay').style.display = 'flex';
+        }
+    }, 220);
+}
+
+function ppEndHold() {
+    clearTimeout(ppHoldTimer); ppHoldTimer = null;
+    document.getElementById('pp-hold-overlay').style.display = 'none';
+    ppHoldFired = false;
+}
+
+// ── Drag-to-zone handlers ──
+function ppDZOver(id, on) {
+    const el = document.getElementById(id); if (el) el.classList.toggle('drag-over', on);
+}
+
+function ppDropSubmit(e) {
+    e.preventDefault(); ppDZOver('pp-drop-zone', false);
+    const cardId = e.dataTransfer.getData('text/plain') || ppDragCardId;
+    if (!cardId) return;
+    ppSelectedCardId = cardId;
+    ppConfirmCard();
+}
+
+function ppDropSwap(e) {
+    e.preventDefault(); ppDZOver('pp-swap-zone', false);
+    if (ppSubUsed) { showToast('Swap already used!'); return; }
+    const cardId = e.dataTransfer.getData('text/plain') || ppDragCardId;
+    if (!cardId) return;
+    ppSelectedCardId = cardId;
+    ppSwapCard();
+}
+
+// ── Vote gallery carousel ──
+let ppGalIdx = 0, ppVoteCards = [], ppVoteSelectedId = null;
+
+function ppRenderGallery(cards, amST) {
+    ppGalIdx = 0; ppVoteSelectedId = null; ppVoteCards = cards;
+    const slides = document.getElementById('pp-vote-slides'); if (!slides) return;
+    slides.innerHTML = cards.map((c, i) => {
+        const url = c.photoUrl.replace(/'/g, "\\'");
+        const imgClass = amST ? 'pp-vote-slide-img st-card' : 'pp-vote-slide-img';
+        const clickAttr = amST ? '' : `onclick="ppGalSelect('${c.cardId}',${i})"`;
+        return `<div class="pp-vote-slide">
+            <div style="position:relative;display:inline-flex;justify-content:center;width:100%;">
+                <img src="${c.photoUrl}" class="${imgClass}" id="pp-vsimg-${i}"
+                    ${clickAttr}
+                    onpointerdown="ppBegHold('${url}',event,this)"
+                    onpointerup="ppEndHold()" onpointercancel="ppEndHold()">
+                <button id="pp-vsbtn-${i}" class="pp-btn pp-btn-green" onclick="ppVoteConfirm('${c.cardId}')"
+                    style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+                    padding:11px 22px;font-size:0.85em;letter-spacing:1px;box-shadow:0 4px 18px rgba(0,0,0,0.7);white-space:nowrap;">
+                    ✅ VOTE THIS CARD</button>
+            </div>
+            <div style="font-size:0.72em;color:#445;font-family:monospace;">card ${i + 1} of ${cards.length}</div>
+        </div>`;
+    }).join('');
+    ppUpdateGallery();
+    // Pointer swipe on carousel
+    const car = document.getElementById('pp-vote-carousel');
+    let swX = null;
+    car.onpointerdown = ev => { swX = ev.clientX; };
+    car.onpointerup = ev => {
+        if (swX === null) return;
+        const d = ev.clientX - swX; swX = null;
+        if (d < -40 && ppGalIdx < ppVoteCards.length - 1) { ppGalIdx++; ppUpdateGallery(); }
+        else if (d > 40 && ppGalIdx > 0) { ppGalIdx--; ppUpdateGallery(); }
+    };
+    car.onpointercancel = () => { swX = null; };
+}
+
+function ppGalSelect(cardId, idx) {
+    if (ppVoteSelectedId) {
+        const prev = ppVoteCards.findIndex(c => c.cardId === ppVoteSelectedId);
+        if (prev >= 0) {
+            const pi = document.getElementById('pp-vsimg-' + prev);
+            const pb = document.getElementById('pp-vsbtn-' + prev);
+            if (pi) pi.classList.remove('selected');
+            if (pb) pb.style.display = 'none';
+        }
+    }
+    if (ppVoteSelectedId === cardId) { ppVoteSelectedId = null; return; }
+    ppVoteSelectedId = cardId;
+    const img = document.getElementById('pp-vsimg-' + idx);
+    const btn = document.getElementById('pp-vsbtn-' + idx);
+    if (img) img.classList.add('selected');
+    if (btn) btn.style.display = 'block';
+}
+
+function ppVoteConfirm(cardId) {
+    ppVote(cardId);
+}
+
+function ppGalNav(dir) {
+    ppGalIdx = Math.max(0, Math.min(ppVoteCards.length - 1, ppGalIdx + dir));
+    ppUpdateGallery();
+}
+
+function ppUpdateGallery() {
+    const slides = document.getElementById('pp-vote-slides');
+    if (slides) slides.style.transform = `translateX(-${ppGalIdx * 100}%)`;
+    const dots = document.getElementById('pp-vote-dots'); if (!dots) return;
+    dots.innerHTML = ppVoteCards.map((_, i) =>
+        `<div onclick="ppGalIdx=${i};ppUpdateGallery();" style="width:${i===ppGalIdx?16:7}px;height:7px;border-radius:4px;
+        background:${i===ppGalIdx?'#ffeb3b':'#2a3a55'};cursor:pointer;transition:all .18s;"></div>`
+    ).join('');
+}
+
 function ppSelectCard(cardId) {
     const alreadySelected = ppSelectedCardId === cardId;
     ppSelectedCardId = alreadySelected ? null : cardId;
-    document.querySelectorAll('.pp-card.selectable').forEach(el => el.classList.toggle('selected', el.dataset.cid === ppSelectedCardId));
-    const cb = document.getElementById('pp-confirm-btn');
-    if (cb) cb.style.display = ppSelectedCardId ? 'block' : 'none';
-    const sb = document.getElementById('pp-swap-btn');
-    if (sb) sb.style.display = (ppSelectedCardId && !ppSubUsed) ? 'block' : 'none';
+    // Handle both grid cards (clue screen) and fan cards (clue screen fan)
+    document.querySelectorAll('.pp-card.selectable,.pp-fan-card').forEach(el => el.classList.toggle('selected', el.dataset.cid === ppSelectedCardId));
 }
 
 function ppSubmitClue() {
@@ -2851,10 +3078,18 @@ function ppSubmitClue() {
 function ppConfirmCard() {
     if (!ppSelectedCardId) return;
     socket.emit('ppSubmitCard', { cardId: ppSelectedCardId });
+    const submitted = ppSelectedCardId;
     ppSelectedCardId = null;
-    document.getElementById('pp-confirm-btn').style.display = 'none';
-    document.getElementById('pp-swap-btn').style.display = 'none';
-    document.querySelectorAll('#pp-submit-hand .pp-card').forEach(el => { el.classList.remove('selectable','selected'); el.onclick = null; });
+    // Show submitted card thumbnail in drop zone
+    const card = ppMyHand.find(c => c.cardId === submitted);
+    const dz = document.getElementById('pp-drop-zone');
+    if (dz && card) {
+        dz.style.cssText = 'flex:2;border-radius:12px;min-height:68px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid #2e7d32;background:rgba(46,125,50,0.1);box-sizing:border-box;';
+        dz.innerHTML = `<img src="${card.photoUrl}" style="width:46px;height:46px;object-fit:cover;border-radius:7px;flex-shrink:0;">
+            <div><div style="font-size:0.7em;color:#3a9a4a;letter-spacing:1px;font-family:monospace;">SUBMITTED ✓</div></div>`;
+    }
+    // Freeze fan
+    document.querySelectorAll('#pp-submit-fan .pp-fan-card').forEach(el => { el.draggable = false; el.style.opacity = '0.4'; el.onpointerdown = null; });
     showToast('Card submitted!');
 }
 
@@ -2878,10 +3113,21 @@ function ppVoteTap(cardId, url) {
 
 function ppVote(cardId) {
     socket.emit('ppVote', { cardId });
-    document.querySelectorAll('#pp-vote-grid .pp-vote-img').forEach(el => { el.onclick = null; el.style.opacity = '0.5'; });
-    const voted = document.querySelector(`#pp-vote-grid [data-cid="${cardId}"] .pp-vote-img`);
-    if (voted) { voted.classList.add('pp-voted'); voted.style.opacity = '1'; }
-    showToast('✅ Voted! (double-tap = vote)');
+    // Dim all slide images, hide all vote buttons
+    ppVoteCards.forEach((_, i) => {
+        const img = document.getElementById('pp-vsimg-' + i);
+        const btn = document.getElementById('pp-vsbtn-' + i);
+        if (img) { img.style.opacity = '0.45'; img.onclick = null; img.classList.remove('selected'); }
+        if (btn) btn.style.display = 'none';
+    });
+    // Highlight voted card
+    const idx = ppVoteCards.findIndex(c => c.cardId === cardId);
+    if (idx >= 0) {
+        const img = document.getElementById('pp-vsimg-' + idx);
+        if (img) { img.style.opacity = '1'; img.classList.add('pp-voted'); }
+    }
+    ppVoteSelectedId = null;
+    showToast('✅ Vote cast!');
 }
 
 function ppReturnToLobby() {
@@ -2916,11 +3162,11 @@ socket.on('ppRoundStart', ({ round, totalRounds, storytellerId, storytellerName,
     const amST = socket.id === storytellerId;
     if (amST) {
         ppShow('pp-clue-screen');
-        document.getElementById('pp-clue-round').innerText = `Round ${round} of ${totalRounds} — You're the storyteller!`;
+        document.getElementById('pp-clue-round').innerText = `Round ${round} of ${totalRounds} — You're the Curator!`;
         document.getElementById('pp-clue-input').value = ''; document.getElementById('pp-clue-input').disabled = false;
         document.getElementById('pp-submit-clue-btn').disabled = false;
-        document.getElementById('pp-confirm-btn').style.display = 'none';
-        ppRenderHand('pp-clue-hand', hand, true);
+        ppRenderFan('pp-clue-fan', hand, 'select');
+        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Hold any card to preview it big!'), 900); }
     } else {
         ppShow('pp-wait-screen');
         document.getElementById('pp-wait-label').innerText = `Round ${round} of ${totalRounds} — ${storytellerName} is choosing a clue…`;
@@ -2928,6 +3174,20 @@ socket.on('ppRoundStart', ({ round, totalRounds, storytellerId, storytellerName,
         document.getElementById('pp-wait-sub').innerText = '';
     }
 });
+
+function ppResetDropZone() {
+    const dz = document.getElementById('pp-drop-zone');
+    if (dz) {
+        dz.className = 'pp-zone pp-zone-submit';
+        dz.style.cssText = 'flex:2;';
+        dz.innerHTML = '<div style="font-size:1.4em;">📩</div><div style="font-size:0.7em;letter-spacing:.8px;font-family:monospace;text-align:center;line-height:1.4;">DRAG TO SUBMIT</div>';
+        dz.ondragover = e => { e.preventDefault(); ppDZOver('pp-drop-zone', true); };
+        dz.ondragleave = () => ppDZOver('pp-drop-zone', false);
+        dz.ondrop = ppDropSubmit;
+    }
+    const sz = document.getElementById('pp-swap-zone');
+    if (sz) { sz.classList.toggle('used', ppSubUsed); }
+}
 
 socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
     ppPhase = 'SUBMIT';
@@ -2941,12 +3201,12 @@ socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
         ppShow('pp-submit-screen');
         document.getElementById('pp-submit-round-label').innerText = `${storytellerName}'s clue:`;
         document.getElementById('pp-submit-clue-display').innerText = `"${clue}"`;
-        document.getElementById('pp-confirm-btn').style.display = 'none';
-        document.getElementById('pp-swap-btn').style.display = ppSubUsed ? 'none' : 'none'; // shown after card selected
         document.getElementById('pp-submit-timer').innerText = '';
         document.getElementById('pp-submit-count').innerText = '';
         ppSelectedCardId = null;
-        ppRenderHand('pp-submit-hand', ppMyHand, true);
+        ppResetDropZone();
+        ppRenderFan('pp-submit-fan', ppMyHand, 'drag');
+        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Hold to preview · Drag to submit!'), 900); }
     }
 });
 
@@ -2959,10 +3219,9 @@ socket.on('ppSubmissionCount', ({ submitted, total }) => {
 
 socket.on('ppHandUpdate', ({ hand, subUsed }) => {
     ppMyHand = hand; ppSubUsed = subUsed; ppSelectedCardId = null;
-    ppRenderHand('pp-submit-hand', hand, true);
-    document.getElementById('pp-confirm-btn').style.display = 'none';
-    document.getElementById('pp-swap-btn').style.display = 'none';
-    showToast('🔄 Card swapped!');
+    ppResetDropZone();
+    ppRenderFan('pp-submit-fan', hand, 'drag');
+    showToast('🔄 Card swapped! Now drag to submit.');
 });
 
 socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
@@ -2972,19 +3231,12 @@ socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
     document.getElementById('pp-vote-timer').innerText = timeLeft;
     document.getElementById('pp-vote-voters').innerHTML = '';
     const amST = socket.id === storytellerId;
-    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap to enlarge · Double-tap to vote!';
-    const grid = document.getElementById('pp-vote-grid');
-    grid.innerHTML = cards.map(c => {
-        const url = c.photoUrl.replace(/'/g, "\\'");
-        return `<div class="pp-vote-card-wrap" data-cid="${c.cardId}">
-            <img src="${c.photoUrl}" class="pp-vote-img"
-                ${amST
-                    ? `style="opacity:.5;cursor:default;" onclick="ppLightbox('${url}')"`
-                    : `onclick="ppVoteTap('${c.cardId}','${url}')" `}>
-        </div>`;
-    }).join('');
-    // reset tap state
-    window._ppLastTap = null;
+    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap a card to select · hold to preview large · swipe to browse';
+    ppRenderGallery(cards, amST);
+    if (!amST && !ppVoteFtueDone) {
+        ppVoteFtueDone = true;
+        setTimeout(() => showToast('Tap card to select it, then vote!'), 900);
+    }
 });
 
 socket.on('ppUploadError', ({ msg }) => { showToast('⚠️ ' + msg); });
