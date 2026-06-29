@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const Matter = require('matter-js');
+const { Engine, Bodies, Body, Composite, Constraint, Events } = Matter;
 
 const app = express();
 const server = http.createServer(app);
@@ -49,23 +51,26 @@ function makeRoom(code) {
         viewportPoints: {},     // socketId -> accumulated points
         viewportTick: null,
         gamePhase: 'LOBBY',   // LOBBY | HIDING | SEEKING | REVEAL
-        selectedGame: null,   // 'tacostealth' | 'strokeoff'
-        strokePainting: null, // selected PAINTINGS entry
+        selectedGame: null,
         timeLeft: 0,
         lastHideTime: 45,
         lastSeekTime: 120,
         gameTimer: null,
         gameVotes: {},      // socketId -> gameId (lobby preference votes)
-        // Stroke Off state
-        strokePrompt: null,
-        strokeTheme: null,
-        strokeFakeId: null,
-        strokeHistory: [],
-        strokeVotes: {},        // voterId -> suspectId
-        strokePlayerParts: {},  // socketId -> part string
-        strokePhase: 'LOBBY',
-        soScores: {},           // name -> { name, correct, fakeWins }
-        revealTimer: null,
+        // Doodle Duel state
+        fdPhase: 'LOBBY',
+        fdPrompt: null,
+        fdMoveType: 'charge',
+        fdDrawings: {},
+        fdHistory: {},
+        fdMatchups: [],
+        fdCurrentMatchup: -1,
+        fdFightEngine: null,
+        fdFightInterval: null,
+        fdFightTick: 0,
+        fdHP: {},
+        fdScores: {},
+        fdDrawTimer: null,
         // Stroke Off (squiggle) state
         sqRound: 0,
         sqPhase: 'LOBBY',
@@ -142,7 +147,8 @@ function evictPlayer(room, id) {
 }
 
 function clearAndDeleteRoom(room) {
-    clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
+    clearInterval(room.gameTimer);
+    clearInterval(room.fdFightInterval); clearInterval(room.fdDrawTimer);
     clearInterval(room.sqTimer);   clearTimeout(room.sqTimer);
     clearInterval(room.ppTimer);   clearTimeout(room.ppTimer);
     clearInterval(room.rrTimer);   clearTimeout(room.rrTimer);
@@ -208,6 +214,7 @@ function rekeySocketState(room, oldId, newId) {
         'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
         'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
         'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
+        'fdDrawings', 'fdHistory', 'fdScores',
     ];
     maps.forEach(key => {
         if (room[key] && Object.prototype.hasOwnProperty.call(room[key], oldId)) {
@@ -246,6 +253,16 @@ function rekeySocketState(room, oldId, newId) {
         });
     }
     if (room.scPyroId === oldId) room.scPyroId = newId;
+    if (Array.isArray(room.fdMatchups)) {
+        room.fdMatchups.forEach(m => {
+            if (m.p1Id === oldId) m.p1Id = newId;
+            if (m.p2Id === oldId) m.p2Id = newId;
+            if (m.winner === oldId) m.winner = newId;
+        });
+    }
+    if (room.fdHP && Object.prototype.hasOwnProperty.call(room.fdHP, oldId)) {
+        room.fdHP[newId] = room.fdHP[oldId]; delete room.fdHP[oldId];
+    }
 }
 
 // Builds a snapshot of where this player is in the active round.
@@ -259,13 +276,13 @@ function buildFullSnapshot(room, socket) {
                 isDead: !!(room.players[socket.id] && room.players[socket.id].isDead),
                 pokesLeft: room.seekerPokes[socket.id] ?? room.seekerPokesLeft,
             }};
-        case 'strokeoff':
-            return { ...base, so: {
-                phase: room.strokePhase,
-                theme: room.strokeTheme,
-                painting: room.strokePainting,
-                myPart: room.strokePlayerParts[socket.id] || null,
-                hasVoted: !!room.strokeVotes[socket.id],
+        case 'doodleduel':
+            return { ...base, fd: {
+                phase: room.fdPhase,
+                prompt: room.fdPrompt,
+                hasSubmitted: !!room.fdDrawings[socket.id],
+                matchup: room.fdCurrentMatchup,
+                scores: room.fdScores,
             }};
         case 'squiggle': {
             const matchup = (room.sqMatchups || [])[room.sqCurrentMatchup] || null;
@@ -414,243 +431,221 @@ function ts_startSeeking(room) {
     }, 1000);
 }
 
-// ─── Stroke Off game logic ────────────────────────────────────────────────────
+// ─── Doodle Duel game logic ───────────────────────────────────────────────────
 
-const PAINTINGS = [
-    {
-        title: 'Distracted Boyfriend', artist: 'Antonio Guillem · 2017',
-        imageUrl: 'https://i.imgflip.com/1ur9b0.jpg',
-        parts: ['the boyfriend turning his head to look','his girlfriend\'s horrified expression beside him','the attractive woman he\'s looking at','the boyfriend\'s outstretched arm','the woman\'s red outfit','the background street and parked cars','the girlfriend\'s hand on her hip','the boyfriend\'s blue t-shirt'],
-    },
-    {
-        title: 'Drake Approving / Disapproving', artist: 'Hotline Bling · 2016',
-        imageUrl: 'https://i.imgflip.com/30b1gx.jpg',
-        parts: ['top panel: Drake\'s dismissive hand wave','top panel: Drake\'s disgusted side-eye','bottom panel: Drake\'s pointing finger','bottom panel: Drake\'s approving smile','Drake\'s turtleneck and chain','the warm yellow-brown background','the horizontal dividing line between panels','Drake\'s relaxed body language (bottom)'],
-    },
-    {
-        title: 'Woman Yelling at Cat', artist: 'Real Housewives · 2019',
-        imageUrl: 'https://i.imgflip.com/345v97.jpg',
-        parts: ['the blonde woman pointing and yelling','the woman behind her gesturing','the white cat sitting at the dinner table','the cat\'s flat unimpressed face','the salad plate in front of the cat','the split-screen dividing line','the women\'s dramatic expressions','the cat\'s small front paws on the table'],
-    },
-    {
-        title: 'This Is Fine', artist: 'K.C. Green · 2013',
-        imageUrl: 'https://i.imgflip.com/wx5xt.jpg',
-        parts: ['the dog sitting calmly at the table','the coffee mug in the dog\'s hand/paw','the orange flames surrounding the room','the burning chair the dog sits on','the dog\'s little hat','the dog\'s calm smiling face','the room\'s flaming walls and ceiling','the open window with fire outside'],
-    },
-    {
-        title: 'Two Buttons', artist: 'Jake Clark · 2016',
-        imageUrl: 'https://i.imgflip.com/1g8my4.jpg',
-        parts: ['the sweating man\'s panicked face','the left red button','the right red button','the man\'s hovering uncertain hand','the sweat dripping down his forehead','the man\'s wide stressed eyes','the button panel and controls','the man\'s collared shirt'],
-    },
-    {
-        title: 'Spider-Man Pointing', artist: 'Spider-Man TV · 1967',
-        imageUrl: 'https://i.imgflip.com/1yxkcp.jpg',
-        parts: ['left Spider-Man pointing to the right','right Spider-Man pointing to the left','the web-shooter on left Spidey\'s wrist','the web-shooter on right Spidey\'s wrist','the two pointing index fingers','the red-and-blue costumes','the background setting','both Spideys\' face lenses'],
-    },
-    {
-        title: 'Change My Mind', artist: 'Steven Crowder · 2018',
-        imageUrl: 'https://i.imgflip.com/24y43o.jpg',
-        parts: ['the man sitting at the folding table','the printed sign on the table','the man\'s crossed arms','the man\'s baseball cap','the outdoor street background','the folding table metal legs','the coffee cup to the side','the man\'s challenging expression'],
-    },
-    {
-        title: 'Surprised Pikachu', artist: 'Pokémon Anime · 2018',
-        imageUrl: 'https://i.imgflip.com/3oevdk.jpg',
-        parts: ['Pikachu\'s wide-open O-shaped mouth','Pikachu\'s huge round black eyes','the red circle cheek patches','the yellow pointed ears with black tips','Pikachu\'s small stubby arms raised','the pudgy yellow body','the brown stripe markings on back','the blank background'],
-    },
-    {
-        title: 'Gru\'s Plan', artist: 'Despicable Me · 2010',
-        imageUrl: 'https://i.imgflip.com/26am.jpg',
-        parts: ['Gru pointing approvingly at panel 1','Gru pointing approvingly at panel 2','Gru\'s confused stare at panel 3 (same as panel 1)','the plan board with written steps','Gru\'s yellow scarf','Gru\'s long bald elongated head','Gru\'s overalls and boots','the four-panel grid layout'],
-    },
-    {
-        title: 'Expanding Brain', artist: 'Internet · 2017',
-        imageUrl: 'https://i.imgflip.com/1jwhww.jpg',
-        parts: ['the small dim brain in panel 1','the slightly glowing brain in panel 2','the brightly lit brain in panel 3','the massive galaxy-filled brain in panel 4','the glowing light halo effects','the panel borders and layout','the text area beside each brain','the increasing radiance from top to bottom'],
-    },
-    {
-        title: 'Disaster Girl', artist: 'Dave Roth · 2007',
-        imageUrl: 'https://i.imgflip.com/23ls.jpg',
-        parts: ['the young girl\'s evil sideways smirk','the girl looking directly at the camera','the burning house in the background','the firefighters battling the blaze','the fire hose and water stream','the orange flames on the house','the suburban street setting','the girl\'s braided pigtails'],
-    },
-    {
-        title: 'Doge', artist: 'Kabosu the Shiba · 2013',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/en/5/5f/Original_Doge_meme.jpg',
-        parts: ['the dog\'s iconic sideways glance','the dog\'s fluffy ruff around the face','the multicolored Comic Sans text floating around','the dog\'s perky pointed ears','the blurry couch/furniture background','the dog\'s visible front paws','the dog\'s small black nose and snout','the dog\'s fluffy body and coat'],
-    },
-    {
-        title: 'One Does Not Simply', artist: 'Lord of the Rings · 2001',
-        imageUrl: 'https://i.imgflip.com/1bij.jpg',
-        parts: ['Boromir\'s serious stern face','his hand raised in a cautionary gesture','his dark wavy hair','his chainmail and armor','his brown travel cloak','his beard and facial features','the dark stone background of Rivendell','his wide-set earnest eyes'],
-    },
-    {
-        title: 'Success Kid', artist: 'Sammy Griner · 2007',
-        imageUrl: 'https://i.imgflip.com/1bhf.jpg',
-        parts: ['the baby\'s triumphant raised fist','the sand clenched in his little fist','the baby\'s determined scrunched expression','his furrowed chubby brow','the beach sand in the background','the ocean water behind him','the baby\'s round chubby cheeks','his tiny clenched fingers'],
-    },
-    {
-        title: 'Bad Luck Brian', artist: 'Kyle Craven · 2012',
-        imageUrl: 'https://i.imgflip.com/1bik.jpg',
-        parts: ['Brian\'s awkward wide forced smile','his large gap-toothed grin','his plaid vest over a collared shirt','his wild reddish hair','his thick-rimmed glasses','the school photo blue background','his braces visible in the smile','his overall dorky yearbook expression'],
-    },
-    {
-        title: 'That Would Be Great', artist: 'Office Space · 1999',
-        imageUrl: 'https://i.imgflip.com/1bh8.jpg',
-        parts: ['Bill\'s passive-aggressive smug grin','his steepled fingers pressed together','his glasses pushed up on his nose','his business casual striped tie','his blue collared shirt','the office cubicle wall background','his eyebrows raised expectantly','his coffee mug held in one hand'],
-    },
+const FD_PROMPTS = [
+    { text: 'Draw the HEAVIEST fighter you can', move: 'charge' },
+    { text: 'Draw a fighter that wins with HEADBUTTS', move: 'headbutt' },
+    { text: 'Draw a fighter with MASSIVE ARMS', move: 'windmill' },
+    { text: 'Draw a fighter that SPINS to win', move: 'spin' },
+    { text: 'Draw a fighter with BIG KICKS', move: 'kick' },
+    { text: 'Draw the most BOTTOM-HEAVY fighter', move: 'charge' },
+    { text: 'Draw a fighter with a GIANT HEAD', move: 'headbutt' },
+    { text: 'Draw the SKINNIEST fighter possible', move: 'charge' },
+    { text: 'Draw a fighter who does the BELLY FLOP', move: 'bellyflop' },
+    { text: 'Draw a fighter shaped like a TRIANGLE', move: 'charge' },
+    { text: 'Draw a fighter with WINDMILL arms', move: 'windmill' },
+    { text: 'Draw a fighter who NEVER skips leg day', move: 'kick' },
+    { text: 'Draw a fighter that is DEFINITELY a circle', move: 'spin' },
+    { text: "Draw your fighter's FINAL FORM — go!", move: 'charge' },
+    { text: 'Draw a fighter who fights DIRTY', move: 'headbutt' },
 ];
 
-const MEMORIZE_SECONDS = 20;
-const DRAW_SECONDS = 75;
-
-function so_startDrawing(room, fakeId) {
-    const painting = PAINTINGS[Math.random() * PAINTINGS.length | 0];
-    room.strokePainting = painting;
-    room.strokePrompt = painting.title;
-    room.strokeTheme = { emoji: '🤣', theme: painting.title };
-    room.strokeFakeId = fakeId;
-    room.strokeHistory = [];
-    room.strokeVotes = {};
-    room.strokePhase = 'MEMORIZE';
-    room.strokePlayerParts = {};
-
-    // Assign one part per real player; wrap if more players than parts
-    let partIndex = 0;
-    Object.keys(room.players).forEach(sid => {
-        if (sid === fakeId) { room.strokePlayerParts[sid] = '???'; }
-        else { room.strokePlayerParts[sid] = painting.parts[partIndex++ % painting.parts.length]; }
-    });
-
-    // Send painting + individual part to each player
-    Object.keys(room.players).forEach(sid => {
-        io.to(sid).emit('soShowPainting', {
-            imageUrl: painting.imageUrl,
-            title: painting.title,
-            artist: painting.artist,
-            yourPart: room.strokePlayerParts[sid],
-            memorizeSeconds: MEMORIZE_SECONDS,
-        });
-    });
-
-    // After memorize window, start the actual drawing phase
-    room.revealTimer = setTimeout(() => so_beginDrawing(room), MEMORIZE_SECONDS * 1000);
+function fd_createRagdoll(x, startY, masses) {
+    const head      = Bodies.circle(x, startY - 70, 20, { mass: masses.head * 2, label: 'head', frictionAir: 0.01 });
+    const torso     = Bodies.rectangle(x, startY, 28, 50, { mass: masses.torso * 5, label: 'torso', frictionAir: 0.01 });
+    const lUpperArm = Bodies.rectangle(x - 24, startY - 18, 10, 26, { mass: masses.lArm * 1.2, label: 'lUpperArm', frictionAir: 0.01 });
+    const lForearm  = Bodies.rectangle(x - 24, startY + 12, 9, 24, { mass: masses.lArm * 0.8, label: 'lForearm', frictionAir: 0.01 });
+    const rUpperArm = Bodies.rectangle(x + 24, startY - 18, 10, 26, { mass: masses.rArm * 1.2, label: 'rUpperArm', frictionAir: 0.01 });
+    const rForearm  = Bodies.rectangle(x + 24, startY + 12, 9, 24, { mass: masses.rArm * 0.8, label: 'rForearm', frictionAir: 0.01 });
+    const lLeg      = Bodies.rectangle(x - 10, startY + 42, 11, 34, { mass: masses.legs * 2, label: 'lLeg', frictionAir: 0.01 });
+    const rLeg      = Bodies.rectangle(x + 10, startY + 42, 11, 34, { mass: masses.legs * 2, label: 'rLeg', frictionAir: 0.01 });
+    const constraints = [
+        Constraint.create({ bodyA: head,      bodyB: torso,     pointA:{x:0,y:18},   pointB:{x:0,y:-23},  stiffness:0.9,  length:4 }),
+        Constraint.create({ bodyA: torso,     bodyB: lUpperArm, pointA:{x:-14,y:-14},pointB:{x:0,y:-12},  stiffness:0.9,  length:4 }),
+        Constraint.create({ bodyA: lUpperArm, bodyB: lForearm,  pointA:{x:0,y:12},   pointB:{x:0,y:-11},  stiffness:0.75, length:4 }),
+        Constraint.create({ bodyA: torso,     bodyB: rUpperArm, pointA:{x:14,y:-14}, pointB:{x:0,y:-12},  stiffness:0.9,  length:4 }),
+        Constraint.create({ bodyA: rUpperArm, bodyB: rForearm,  pointA:{x:0,y:12},   pointB:{x:0,y:-11},  stiffness:0.75, length:4 }),
+        Constraint.create({ bodyA: torso,     bodyB: lLeg,      pointA:{x:-8,y:24},  pointB:{x:0,y:-16},  stiffness:0.9,  length:3 }),
+        Constraint.create({ bodyA: torso,     bodyB: rLeg,      pointA:{x:8,y:24},   pointB:{x:0,y:-16},  stiffness:0.9,  length:3 }),
+    ];
+    return Composite.create({ bodies:[head,torso,lUpperArm,lForearm,rUpperArm,rForearm,lLeg,rLeg], constraints });
 }
 
-function so_beginDrawing(room) {
-    clearTimeout(room.revealTimer);
-    room.strokePhase = 'DRAWING';
-    room.timeLeft = DRAW_SECONDS;
-
-    Object.keys(room.players).forEach(sid => {
-        io.to(sid).emit('soBeginDrawing', {
-            prompt: room.strokePrompt,
-            part: room.strokePlayerParts[sid] || '???',
-        });
-    });
-
-    broadcastRoom(room, 'strokePhaseChange', { phase: 'DRAWING', timeLeft: DRAW_SECONDS });
-    room.gameTimer = setInterval(() => {
-        room.timeLeft--;
-        broadcastRoom(room, 'strokePhaseChange', { phase: 'DRAWING', timeLeft: room.timeLeft });
-        if (room.timeLeft <= 0) { clearInterval(room.gameTimer); so_startReveal(room); }
-    }, 1000);
+function fd_captureFrame(composite) {
+    return Composite.allBodies(composite).map(b => ({
+        x: b.position.x, y: b.position.y, angle: b.angle, label: b.label,
+        w: (b.bounds.max.x - b.bounds.min.x), h: (b.bounds.max.y - b.bounds.min.y),
+        r: b.circleRadius || null,
+    }));
 }
 
-const SO_REVEAL_MS = 4500; // per-player reveal window
-
-function so_startReveal(room) {
-    clearInterval(room.gameTimer);
-    clearTimeout(room.revealTimer);
-    room.strokePhase = 'REVEAL';
-
-    const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
-    broadcastRoom(room, 'soRevealBegin', {
-        history: room.strokeHistory,
-        players,
-        prompt: room.strokePrompt,
-        emoji: room.strokeTheme ? room.strokeTheme.emoji : '',
-    });
-
-    let idx = 0;
-    function sendNext() {
-        if (idx >= players.length) { so_openVoting(room); return; }
-        broadcastRoom(room, 'soRevealNext', { player: players[idx], idx, total: players.length });
-        idx++;
-        room.revealTimer = setTimeout(sendNext, SO_REVEAL_MS);
-    }
-    room.revealTimer = setTimeout(sendNext, 700);
-}
-
-const SO_VOTE_DURATION = 20;
-
-function so_openVoting(room) {
-    clearTimeout(room.revealTimer);
-    room.strokePhase = 'VOTE';
-    room.strokeVotes = {};
-    room.timeLeft = SO_VOTE_DURATION;
-
-    const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
-    broadcastRoom(room, 'soVoteOpen', { players, prompt: room.strokePrompt, emoji: room.strokeTheme ? room.strokeTheme.emoji : '', timeLeft: SO_VOTE_DURATION });
-
-    room.gameTimer = setInterval(() => {
-        room.timeLeft--;
-        broadcastRoom(room, 'strokePhaseChange', { phase: 'VOTE', timeLeft: room.timeLeft });
-        if (room.timeLeft <= 0) { clearInterval(room.gameTimer); so_resolveVotes(room); }
-    }, 1000);
-}
-
-function so_resolveVotes(room) {
-    clearInterval(room.gameTimer);
-    clearTimeout(room.revealTimer);
-    room.strokePhase = 'RESULT';
-
-    const tallies = {};
-    Object.values(room.strokeVotes).forEach(id => { tallies[id] = (tallies[id] || 0) + 1; });
-
-    let maxVotes = 0, mostVotedId = null;
-    Object.entries(tallies).forEach(([id, count]) => { if (count > maxVotes) { maxVotes = count; mostVotedId = id; } });
-
-    const fakeId = room.strokeFakeId;
-    const fakeCaught = mostVotedId === fakeId && maxVotes > 0;
-
-    // Update persistent SO scores
-    Object.values(room.players).forEach(p => {
-        if (!room.soScores[p.name]) room.soScores[p.name] = { name: p.name, correct: 0, fakeWins: 0 };
-        if (p.id === fakeId) {
-            if (!fakeCaught) room.soScores[p.name].fakeWins++;
-        } else {
-            if (room.strokeVotes[p.id] === fakeId) room.soScores[p.name].correct++;
+function fd_applyMove(f1bodies, f2bodies, moveType) {
+    const f1torso = f1bodies.find(b => b.label === 'torso');
+    const f2torso = f2bodies.find(b => b.label === 'torso');
+    if (!f1torso || !f2torso) return;
+    switch (moveType) {
+        case 'headbutt': {
+            const f1head = f1bodies.find(b => b.label === 'head');
+            const f2head = f2bodies.find(b => b.label === 'head');
+            Body.applyForce(f1torso, f1torso.position, { x:  0.08, y: -0.03 });
+            Body.applyForce(f2torso, f2torso.position, { x: -0.08, y: -0.03 });
+            if (f1head) Body.applyForce(f1head, f1head.position, { x:  0.05, y: 0 });
+            if (f2head) Body.applyForce(f2head, f2head.position, { x: -0.05, y: 0 });
+            break;
         }
-    });
-
-    const players = Object.values(room.players).map(p => ({ id: p.id, name: p.name, token: p.token }));
-    broadcastRoom(room, 'soVoteResult', {
-        fakeId,
-        fakeName: room.players[fakeId] ? room.players[fakeId].name : '???',
-        fakeCaught,
-        tallies,
-        players,
-        soScores: Object.values(room.soScores),
-    });
-
-    room.revealTimer = setTimeout(() => so_returnToLobby(room), 9000);
+        case 'windmill': {
+            const f1arms = f1bodies.filter(b => b.label.includes('Arm'));
+            const f2arms = f2bodies.filter(b => b.label.includes('Arm'));
+            f1arms.forEach((b, i) => Body.setAngularVelocity(b, (i % 2 === 0 ? 1 : -1) * 6));
+            f2arms.forEach((b, i) => Body.setAngularVelocity(b, (i % 2 === 0 ? -1 : 1) * 6));
+            break;
+        }
+        case 'kick': {
+            const f1leg = f1bodies.find(b => b.label === 'rLeg');
+            const f2leg = f2bodies.find(b => b.label === 'lLeg');
+            if (f1leg) Body.applyForce(f1leg, f1leg.position, { x:  0.15, y: -0.04 });
+            if (f2leg) Body.applyForce(f2leg, f2leg.position, { x: -0.15, y: -0.04 });
+            break;
+        }
+        case 'spin':
+            Body.setAngularVelocity(f1torso,  8);
+            Body.setAngularVelocity(f2torso, -8);
+            break;
+        case 'bellyflop':
+            Body.applyForce(f1torso, f1torso.position, { x: 0, y: -0.15 });
+            Body.applyForce(f2torso, f2torso.position, { x: 0, y: -0.15 });
+            break;
+        default:
+            Body.applyForce(f1torso, f1torso.position, { x:  0.07, y: -0.02 });
+            Body.applyForce(f2torso, f2torso.position, { x: -0.07, y: -0.02 });
+    }
 }
 
-function so_returnToLobby(room) {
-    clearTimeout(room.revealTimer);
-    clearInterval(room.gameTimer);
-    room.strokePhase = 'LOBBY';
-    room.strokePrompt = null;
-    room.strokeTheme = null;
-    room.strokeFakeId = null;
-    room.strokePainting = null;
-    room.strokeHistory = [];
-    room.strokeVotes = {};
-    room.strokePlayerParts = {};
+function fd_startGame(room) {
+    const pick = FD_PROMPTS[Math.floor(Math.random() * FD_PROMPTS.length)];
+    room.fdPhase = 'DRAW';
+    room.fdPrompt = pick.text;
+    room.fdMoveType = pick.move;
+    room.fdDrawings = {};
+    room.fdHistory = {};
+    room.fdScores = {};
+    Object.keys(room.players).forEach(id => { room.fdScores[id] = 0; });
+    room.gamePhase = 'PLAYING';
+    broadcastRoom(room, 'fdDrawPhase', { prompt: pick.text, moveType: pick.move, timeLeft: 45 });
+    let t = 45;
+    room.fdDrawTimer = setInterval(() => {
+        t--;
+        broadcastRoom(room, 'fdPhaseChange', { timeLeft: t });
+        if (t <= 0) { clearInterval(room.fdDrawTimer); fd_endDraw(room); }
+    }, 1000);
+}
+
+function fd_endDraw(room) {
+    room.fdPhase = 'FIGHTING';
+    broadcastRoom(room, 'fdProcessing', {});
+    const ids = Object.keys(room.players);
+    room.fdMatchups = [];
+    for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++)
+            room.fdMatchups.push({ p1Id: ids[i], p2Id: ids[j], winner: null });
+    room.fdCurrentMatchup = -1;
+    setTimeout(() => fd_nextMatchup(room), 2500);
+}
+
+function fd_nextMatchup(room) {
+    room.fdCurrentMatchup++;
+    if (room.fdCurrentMatchup >= room.fdMatchups.length) { fd_gameOver(room); return; }
+    const { p1Id, p2Id } = room.fdMatchups[room.fdCurrentMatchup];
+    const p1 = room.players[p1Id], p2 = room.players[p2Id];
+    if (!p1 || !p2) { fd_nextMatchup(room); return; }
+    const d1 = room.fdDrawings[p1Id] || { dataUrl: null, masses: { head:1, torso:1, lArm:1, rArm:1, legs:1 } };
+    const d2 = room.fdDrawings[p2Id] || { dataUrl: null, masses: { head:1, torso:1, lArm:1, rArm:1, legs:1 } };
+    broadcastRoom(room, 'fdFightStart', {
+        matchup: room.fdCurrentMatchup, total: room.fdMatchups.length,
+        p1Id, p2Id, p1Name: p1.name, p2Name: p2.name,
+        p1Drawing: d1.dataUrl, p2Drawing: d2.dataUrl,
+    });
+    setTimeout(() => fd_runFight(room, p1Id, p2Id, d1.masses, d2.masses), 1500);
+}
+
+function fd_runFight(room, p1Id, p2Id, m1, m2) {
+    const engine = Engine.create({ gravity: { y: 2 } });
+    const ground = Bodies.rectangle(400, 470, 800, 20, { isStatic: true, label: 'ground' });
+    const wallL  = Bodies.rectangle(5,   250, 10,  500, { isStatic: true });
+    const wallR  = Bodies.rectangle(795, 250, 10,  500, { isStatic: true });
+    Composite.add(engine.world, [ground, wallL, wallR]);
+    const c1 = fd_createRagdoll(160, 320, m1);
+    const c2 = fd_createRagdoll(640, 320, m2);
+    Composite.add(engine.world, [c1, c2]);
+    const f1torso = Composite.allBodies(c1).find(b => b.label === 'torso');
+    const f2torso = Composite.allBodies(c2).find(b => b.label === 'torso');
+    if (f1torso) Body.setVelocity(f1torso, { x:  4, y: -1 });
+    if (f2torso) Body.setVelocity(f2torso, { x: -4, y: -1 });
+    room.fdFightEngine = engine;
+    room.fdFightTick = 0;
+    room.fdHP = { [p1Id]: 100, [p2Id]: 100 };
+    const c1bodies = Composite.allBodies(c1);
+    const c2bodies = Composite.allBodies(c2);
+    Events.on(engine, 'collisionStart', (ev) => {
+        ev.pairs.forEach(pair => {
+            const { bodyA, bodyB } = pair;
+            if (bodyA.isStatic || bodyB.isStatic) return;
+            const rv = Math.hypot(bodyA.velocity.x - bodyB.velocity.x, bodyA.velocity.y - bodyB.velocity.y);
+            if (rv > 4) {
+                const dmg = Math.min(10, (rv - 4) * 1.5);
+                const aInC1 = c1bodies.includes(bodyA), bInC1 = c1bodies.includes(bodyB);
+                const aInC2 = c2bodies.includes(bodyA), bInC2 = c2bodies.includes(bodyB);
+                if ((aInC1 && bInC2) || (aInC2 && bInC1)) {
+                    room.fdHP[p1Id] = Math.max(0, room.fdHP[p1Id] - dmg);
+                    room.fdHP[p2Id] = Math.max(0, room.fdHP[p2Id] - dmg);
+                }
+            }
+        });
+    });
+    room.fdFightInterval = setInterval(() => {
+        Engine.update(engine, 1000 / 60);
+        room.fdFightTick++;
+        if (room.fdFightTick % 90 === 45) {
+            fd_applyMove(Composite.allBodies(c1), Composite.allBodies(c2), room.fdMoveType);
+        }
+        if (room.fdFightTick % 2 === 0) {
+            broadcastRoom(room, 'fdFrame', {
+                f1: fd_captureFrame(c1), f2: fd_captureFrame(c2),
+                f1hp: room.fdHP[p1Id], f2hp: room.fdHP[p2Id],
+            });
+        }
+        if (room.fdFightTick >= 900 || room.fdHP[p1Id] <= 0 || room.fdHP[p2Id] <= 0) {
+            clearInterval(room.fdFightInterval);
+            room.fdFightInterval = null;
+            const winnerId = room.fdHP[p1Id] >= room.fdHP[p2Id] ? p1Id : p2Id;
+            fd_endFight(room, winnerId);
+        }
+    }, 1000 / 60);
+}
+
+function fd_endFight(room, winnerId) {
+    room.fdMatchups[room.fdCurrentMatchup].winner = winnerId;
+    if (room.players[winnerId]) room.fdScores[winnerId] = (room.fdScores[winnerId] || 0) + 2;
+    const winnerName = room.players[winnerId]?.name || '?';
+    broadcastRoom(room, 'fdFightResult', {
+        winnerId, winnerName,
+        scores: fd_buildScoreboard(room),
+    });
+    setTimeout(() => fd_nextMatchup(room), 5000);
+}
+
+function fd_gameOver(room) {
+    room.fdPhase = 'LOBBY';
     room.gamePhase = 'LOBBY';
+    broadcastRoom(room, 'fdGameOver', { scores: fd_buildScoreboard(room) });
     broadcastGameState(room);
-    if (Object.keys(room.soScores).length > 0) {
-        broadcastRoom(room, 'updateSoScores', Object.values(room.soScores));
-    }
+}
+
+function fd_buildScoreboard(room) {
+    return Object.entries(room.fdScores)
+        .map(([id, wins]) => ({ id, name: room.players[id]?.name || '?', wins }))
+        .sort((a, b) => b.wins - a.wins);
 }
 
 // ─── Stroke Off (squiggle) game logic ─────────────────────────────────────────
@@ -1682,9 +1677,6 @@ io.on('connection', (socket) => {
         broadcastRoom(room, 'updatePlayers', room.players);
         broadcastGameState(room);
         broadcastScores(room);
-        if (Object.keys(room.soScores).length > 0) {
-            socket.emit('updateSoScores', Object.values(room.soScores));
-        }
         if (Object.keys(room.gameVotes).length > 0) {
             socket.emit('gameVotes', { votes: room.gameVotes, players: room.players });
         }
@@ -1911,56 +1903,54 @@ io.on('connection', (socket) => {
         broadcastRoom(room, 'viewportMap', room.seekerCameras);
     });
 
-    // ── Stroke Off events ─────────────────────────────────────────────────────
+    // ── Doodle Duel events ────────────────────────────────────────────────────
 
-    socket.on('soStartGame', ({ fakeId }) => {
+    socket.on('fdStartGame', () => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
-        room.selectedGame = 'strokeoff';
-        room.gamePhase = 'PLAYING';
+        room.selectedGame = 'doodleduel';
         room.gameVotes = {};
-        so_startDrawing(room, fakeId);
+        fd_startGame(room);
     });
 
-    socket.on('soStroke', (stroke) => {
+    socket.on('fdStroke', (s) => {
         const room = socketRoom(socket);
-        if (!room || room.strokePhase !== 'DRAWING') return;
-        const s = { socketId: socket.id, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2, color: stroke.color, size: stroke.size, t: Date.now(), gid: stroke.gid || 0 };
-        room.strokeHistory.push(s);
-        socket.broadcast.to(room.code).emit('soStroke', s);
+        if (!room || room.fdPhase !== 'DRAW') return;
+        if (!room.fdHistory[socket.id]) room.fdHistory[socket.id] = [];
+        room.fdHistory[socket.id].push(s);
+        socket.broadcast.to(room.code).emit('fdStroke', { ...s, socketId: socket.id });
     });
 
-    socket.on('soUndo', ({ gid }) => {
+    socket.on('fdUndo', ({ gid }) => {
         const room = socketRoom(socket);
-        if (!room || room.strokePhase !== 'DRAWING') return;
-        const prev = room.strokeHistory.length;
-        room.strokeHistory = room.strokeHistory.filter(s => !(s.socketId === socket.id && s.gid === gid));
-        if (room.strokeHistory.length < prev) {
-            broadcastRoom(room, 'soRedraw', { history: room.strokeHistory });
-        }
+        if (!room || !room.fdHistory[socket.id]) return;
+        const before = room.fdHistory[socket.id].length;
+        room.fdHistory[socket.id] = room.fdHistory[socket.id].filter(s => s.gid !== gid);
+        if (room.fdHistory[socket.id].length !== before)
+            socket.emit('fdRedraw', { history: room.fdHistory[socket.id] });
     });
 
-    socket.on('soVote', ({ suspectId }) => {
+    socket.on('fdSubmitFighter', ({ dataUrl, masses }) => {
         const room = socketRoom(socket);
-        if (!room || room.strokePhase !== 'VOTE') return;
-        if (room.strokeVotes[socket.id]) return; // already voted
-        room.strokeVotes[socket.id] = suspectId;
-
-        const voterNames = Object.keys(room.strokeVotes)
-            .map(id => room.players[id] ? room.players[id].name : null)
-            .filter(Boolean);
-        broadcastRoom(room, 'soVoterUpdate', { voterNames });
-
-        if (Object.keys(room.strokeVotes).length >= Object.keys(room.players).length) {
-            clearInterval(room.gameTimer);
-            so_resolveVotes(room);
-        }
+        if (!room || room.fdPhase !== 'DRAW') return;
+        room.fdDrawings[socket.id] = { dataUrl, masses };
+        broadcastRoom(room, 'fdSubmitted', {
+            name: room.players[socket.id]?.name,
+            count: Object.keys(room.fdDrawings).length,
+            total: Object.keys(room.players).length,
+        });
     });
 
-    socket.on('soReturnToLobby', () => {
+    socket.on('fdReturnToLobby', () => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
-        so_returnToLobby(room);
+        clearInterval(room.fdFightInterval); clearInterval(room.fdDrawTimer);
+        room.fdFightInterval = null; room.fdDrawTimer = null;
+        room.fdPhase = 'LOBBY'; room.fdDrawings = {}; room.fdHistory = {};
+        room.fdMatchups = []; room.fdCurrentMatchup = -1;
+        room.gamePhase = 'LOBBY';
+        broadcastRoom(room, 'fdLobby', {});
+        broadcastGameState(room);
     });
 
     // ── Stroke Off (squiggle) events ──────────────────────────────────────────

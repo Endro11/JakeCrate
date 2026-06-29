@@ -185,19 +185,7 @@
         #lobbyDoneBtn { display:none; position:absolute; top:calc(12px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:17; padding:12px 30px; font-size:1em; font-weight:bold; letter-spacing:1px; color:#fff; background:#2e7d32; border:none; border-radius:30px; box-shadow:0 4px 16px rgba(0,0,0,0.5); text-transform:uppercase; cursor:pointer; }
         #framer-modal { display:none; width:300px; top:50%; transform:translate(-50%,-50%); z-index:65; }
 
-        /* ── Stroke Off UI — mobile-first ── */
-        #so-memorize-screen { display:none; position:absolute; inset:0; z-index:55; background:#000; flex-direction:column; align-items:center; overflow:hidden; touch-action:none; }
-        #so-mem-header { width:100%; display:flex; align-items:center; gap:10px; padding:calc(8px + env(safe-area-inset-top)) 14px 8px; background:rgba(0,0,0,0.9); flex-shrink:0; flex-wrap:wrap; }
-        #so-mem-countdown { font-family:monospace; font-size:2.2em; font-weight:900; color:#ffeb3b; min-width:52px; text-shadow:0 0 12px rgba(255,235,59,0.6); }
-        #so-mem-info { flex:1; min-width:0; }
-        #so-mem-title { font-weight:bold; font-size:0.95em; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        #so-mem-artist { font-size:0.72em; color:#888; }
-        #so-mem-part { font-family:monospace; font-size:0.82em; color:#ffeb3b; background:rgba(255,235,59,0.1); border:1px solid rgba(255,235,59,0.3); border-radius:6px; padding:4px 12px; white-space:nowrap; flex-shrink:0; }
-        #so-mem-img-wrap { flex:1; width:100%; overflow:hidden; min-height:0; position:relative; cursor:grab; }
-        #so-mem-img-wrap:active { cursor:grabbing; }
-        #so-mem-img { display:block; transform-origin:0 0; touch-action:none; user-select:none; -webkit-user-select:none; position:absolute; }
-        #so-mem-zoom-hint { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); color:#888; font-size:0.72em; padding:3px 10px; border-radius:20px; pointer-events:none; white-space:nowrap; }
-        #so-mem-footer { width:100%; text-align:center; color:#555; font-size:0.75em; padding:6px; flex-shrink:0; }
+        /* ── Stroke Off / Squiggle / Doodle Duel shared drawing UI ── */
         .kick-btn { background:none !important; border:none !important; color:#e57373 !important; cursor:pointer; padding:0 4px !important; font-size:0.8em !important; font-weight:bold; flex-grow:0 !important; min-width:0 !important; opacity:0.7; }
         .kick-btn:hover { opacity:1; }
         #so-screen { display:none; position:absolute; inset:0; z-index:45; background:#050508; overflow:hidden; }
@@ -230,20 +218,6 @@
             #so-hud-top { gap:6px; }
         }
         .pavt { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; font-size:0.78em; font-weight:900; color:#fff; vertical-align:middle; flex-shrink:0; }
-        /* Reveal screen */
-        #so-reveal-screen { display:none; position:absolute; inset:0; z-index:46; background:#050508; overflow:hidden; }
-        #so-reveal-canvas { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#111; }
-        #so-reveal-hud { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:0; right:0; display:flex; flex-direction:column; align-items:center; gap:4px; z-index:2; pointer-events:none; color:#fff; font-family:monospace; }
-        .so-reveal-player { font-size:1.1em; font-weight:bold; color:#ffeb3b; letter-spacing:2px; }
-        #so-reveal-hint { font-size:0.8em; color:#556; }
-        /* Vote screen */
-        #so-vote-screen { display:none; position:absolute; inset:0; z-index:47; background:rgba(5,5,8,0.95); flex-direction:column; align-items:center; justify-content:center; gap:12px; color:#fff; padding:20px; overflow-y:auto; }
-        #so-vote-timer { font-family:monospace; font-size:2em; font-weight:bold; color:#ffeb3b; }
-        #so-vote-list { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:440px; }
-        .so-vote-btn { padding:14px 20px; background:rgba(255,255,255,0.07); border:2px solid #444; border-radius:10px; font-weight:bold; font-size:0.9em; cursor:pointer; color:#fff; text-transform:uppercase; transition:background .15s,border-color .15s; }
-        .so-vote-btn:not(:disabled):hover,.so-vote-btn:not(:disabled):active { background:rgba(198,40,40,0.3); border-color:#c62828; }
-        .so-vote-btn:disabled { opacity:0.5; cursor:default; }
-        #so-voters-status { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
         .so-voter-chip { background:rgba(46,125,50,0.25); border:1px solid #2e7d32; border-radius:12px; padding:3px 10px; color:#81c784; }
         /* ── Stroke Off (squiggle) battle + results screens ── */
         #sq-battle-screen { display:none; position:absolute; inset:0; z-index:46; background:#050508; flex-direction:column; align-items:center; overflow:hidden; touch-action:none; }
@@ -577,12 +551,12 @@
                 <div class="gc-voters" id="gv-ts"></div>
             </div>
         </div>
-        <div class="game-card" id="gc-so" onclick="pickGame('strokeoff')">
-            <div class="gc-icon">🖌️</div>
+        <div class="game-card" id="gc-pp" onclick="pickGame('pikpic')">
+            <div class="gc-icon">📸</div>
             <div class="gc-info">
-                <div class="gc-name">MasterPieced</div>
-                <div class="gc-desc">Draw a famous painting from memory — one player is the fake</div>
-                <div class="gc-voters" id="gv-so"></div>
+                <div class="gc-name">PikPic</div>
+                <div class="gc-desc">Upload your photos, deal a deck, give clues — Dixit with your camera roll</div>
+                <div class="gc-voters" id="gv-pp"></div>
             </div>
         </div>
         <div class="game-card" id="gc-sq" onclick="pickGame('squiggle')">
@@ -593,12 +567,12 @@
                 <div class="gc-voters" id="gv-sq"></div>
             </div>
         </div>
-        <div class="game-card" id="gc-pp" onclick="pickGame('pikpic')">
-            <div class="gc-icon">📸</div>
+        <div class="game-card" id="gc-fd" onclick="pickGame('doodleduel')">
+            <div class="gc-icon">🥊</div>
             <div class="gc-info">
-                <div class="gc-name">PikPic</div>
-                <div class="gc-desc">Upload your photos, deal a deck, give clues — Dixit with your camera roll</div>
-                <div class="gc-voters" id="gv-pp"></div>
+                <div class="gc-name">Doodle Duel</div>
+                <div class="gc-desc">Draw your fighter — physics decides who wins</div>
+                <div class="gc-voters" id="gv-fd"></div>
             </div>
         </div>
         <div class="game-card" id="gc-rr" onclick="pickGame('rizzorroast')">
@@ -635,10 +609,8 @@
         <div class="sb-header">
             <span style="width:22px;"></span>
             <span style="flex:1;">PLAYER</span>
-            <span class="sb-col" title="Paint or Poke — rounds survived">🫥</span>
-            <span class="sb-col" title="Paint or Poke — players caught">👁️</span>
-            <span class="sb-col" title="MasterPieced — correctly ID'd fake">✅</span>
-            <span class="sb-col" title="MasterPieced — faked them out">🥷</span>
+            <span class="sb-col" title="Sleight of Hands — rounds survived">🫥</span>
+            <span class="sb-col" title="Sleight of Hands — players caught">👁️</span>
         </div>
         <div id="unified-score-list"><div class="sb-empty" style="color:#444;font-size:0.8em;text-align:center;padding:6px 0;">Play a round to see standings</div></div>
     </div>
@@ -771,7 +743,7 @@
         <div class="so-part-box">YOUR PART: <span id="so-part-text">???</span></div>
     </div>
     <div id="so-timer">60</div>
-    <button id="so-host-end-btn" onclick="soHostEnd()">⏹ END ROUND</button>
+    <button id="so-host-end-btn" style="display:none">⏹ END ROUND</button>
     <div id="so-ref-strip">
         <img id="so-ref-img" src="" alt="" onclick="soPickFromThumb(event)" onerror="this.parentElement.style.display='none';soResizeCanvas();">
         <div id="so-ref-part-label"></div>
@@ -788,20 +760,6 @@
 </div>
 
 <!-- ════════════════════ GAME RULES OVERLAYS ════════════════════ -->
-<div class="game-rules-overlay" id="so-rules-overlay">
-    <div class="game-rules-box">
-        <div class="rules-game-title">🎨 MASTERPIECED</div>
-        <ul class="rules-list">
-            <li>A famous painting is revealed — everyone has a few seconds to study it</li>
-            <li>Each player is assigned a specific <strong style="color:#ffeb3b;">part</strong> to draw from memory</li>
-            <li>One player is <strong style="color:#ef9a9a;">THE FAKE</strong> — they don't know their assigned part</li>
-            <li>After drawing, everyone votes on who the fake is</li>
-            <li>Fake wins by blending in · Everyone else wins by catching them</li>
-        </ul>
-        <button class="rules-skip-btn" onclick="soSkipRules()">GOT IT — LET'S GO ✓</button>
-    </div>
-</div>
-
 <div class="game-rules-overlay" id="ts-rules-overlay">
     <div class="game-rules-box">
         <div class="rules-game-title">🖐️ SLEIGHT OF HANDS</div>
@@ -816,48 +774,38 @@
     </div>
 </div>
 
-<!-- ════════════════════ STROKE OFF MEMORIZE SCREEN ════════════════════ -->
-<div id="so-memorize-screen">
-    <div id="so-mem-header">
-        <div id="so-mem-countdown">20</div>
-        <div id="so-mem-info">
-            <div id="so-mem-title"></div>
-            <div id="so-mem-artist"></div>
-        </div>
-        <div id="so-mem-part">YOUR PART: ???</div>
-    </div>
-    <div id="so-mem-img-wrap">
-        <img id="so-mem-img" src="" alt="meme" draggable="false">
-        <div id="so-mem-zoom-hint">Pinch to zoom · drag to pan · double-tap to reset</div>
-    </div>
-    <div id="so-mem-footer">Memorize your part — only a small reference shown while drawing</div>
+<!-- ════════════════════ DOODLE DUEL SCREENS ════════════════════ -->
+<div id="fd-prompt-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#060c18;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:20px">
+    <div style="font-size:3em">🥊</div>
+    <div style="font-size:1.4em;font-weight:700;max-width:340px;line-height:1.3" id="fd-prompt-text">…</div>
+    <div style="font-size:0.9em;color:#7a9ccc">Drawing starts in <span id="fd-prompt-countdown">3</span></div>
+    <div style="font-size:0.75em;color:#4a6a8a;max-width:320px">Fill canvas regions heavily to add mass.<br>Heavier head = better headbutt · Heavier legs = better kicks</div>
 </div>
 
-<!-- ════════════════════ STROKE OFF REVEAL SCREEN ════════════════════ -->
-<div id="so-reveal-screen">
-    <canvas id="so-reveal-canvas" width="450" height="800"></canvas>
-    <div id="so-reveal-hud">
-        <div class="so-reveal-player" id="so-reveal-player-name"></div>
-        <div id="so-reveal-hint">Get ready…</div>
-    </div>
+<div id="fd-wait-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#060c18;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:18px">
+    <div style="font-size:2.5em">⚙️</div>
+    <div style="font-size:1.2em;font-weight:700">Processing fighters…</div>
+    <div id="fd-wait-status" style="font-size:0.85em;color:#7a9ccc">Waiting for everyone</div>
 </div>
 
-<!-- ════════════════════ STROKE OFF VOTE SCREEN ════════════════════ -->
-<div id="so-vote-screen">
-    <div style="font-size:1.3em;font-weight:bold;color:#ffeb3b;letter-spacing:2px;">WHO'S THE FAKE?</div>
-    <div style="display:flex;align-items:center;gap:12px;">
-        <span id="so-vote-emoji" style="font-size:2.8em;line-height:1;"></span>
-        <div>
-            <div style="font-family:monospace;color:#7a8fa8;font-size:0.78em;letter-spacing:1px;">THEME</div>
-            <div id="so-real-prompt" style="font-weight:bold;font-size:1.05em;color:#fff;"></div>
-        </div>
-        <img id="so-vote-snap" style="height:80px;border-radius:6px;border:1px solid #333;flex-shrink:0;" src="" alt="">
+<div id="fd-arena-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#060c18;flex-direction:column;align-items:center;justify-content:center;gap:8px">
+    <div id="fd-vs-banner" style="display:flex;gap:16px;align-items:center;font-weight:700;font-size:1.1em;color:#fff">
+        <span id="fd-p1-name" style="color:#3a9eff">P1</span>
+        <span style="color:#888">VS</span>
+        <span id="fd-p2-name" style="color:#ff5a5a">P2</span>
     </div>
-    <div id="so-vote-timer" style="font-family:monospace;font-size:1.6em;font-weight:bold;color:#ffeb3b;"></div>
-    <div id="so-vote-list"></div>
-    <div id="so-voters-status"></div>
-    <div id="so-vote-result" style="display:none;font-family:monospace;font-size:0.92em;color:#ffeb3b;text-align:center;padding:10px;max-width:380px;line-height:1.6;"></div>
-    <button id="so-lobby-btn" onclick="soReturnToLobby()" style="display:none;padding:12px 28px;background:#2e7d32;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:0.95em;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">BACK TO LOBBY</button>
+    <div style="display:flex;gap:10px;width:min(400px,90%)">
+        <div style="flex:1;height:10px;background:#1a2a3a;border-radius:5px;overflow:hidden"><div id="fd-hp-p1" style="height:100%;background:#3a9eff;width:100%;transition:width .1s"></div></div>
+        <div style="flex:1;height:10px;background:#1a2a3a;border-radius:5px;overflow:hidden"><div id="fd-hp-p2" style="height:100%;background:#ff5a5a;width:100%;transition:width .1s"></div></div>
+    </div>
+    <canvas id="fd-arena-canvas" width="800" height="460" style="max-width:100%;max-height:55vh;border-radius:8px;background:#0a1220"></canvas>
+    <div id="fd-match-info" style="font-size:0.8em;color:#4a6a8a">Match <span id="fd-match-num">1</span> of <span id="fd-match-total">?</span></div>
+</div>
+
+<div id="fd-result-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#060c18;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;text-align:center">
+    <div style="font-size:1.6em;font-weight:700">🏆 <span id="fd-winner-name">?</span></div>
+    <div id="fd-result-scores" style="font-size:0.85em;color:#7a9ccc;line-height:1.8"></div>
+    <button id="fd-lobby-btn" style="display:none;margin-top:10px;padding:12px 28px;background:#2e7d32;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:0.95em;cursor:pointer;text-transform:uppercase;letter-spacing:1px" onclick="socket.emit('fdReturnToLobby')">BACK TO LOBBY</button>
 </div>
 
 <!-- ════════════════════ STROKE OFF (SQUIGGLE) SCREENS ════════════════════ -->
@@ -1288,9 +1236,8 @@ function rlStartGame() {
     if (!isRoomHost || !selectedGame) return;
     const pCount = Object.keys(otherPlayers).length;
     if (selectedGame === 'tacostealth' && pCount < 1) { showToast('Need at least 2 players to start'); return; }
-    if (selectedGame === 'strokeoff' && pCount < 2) { showToast('Need at least 3 players for MasterPieced'); return; }
     if (selectedGame === 'tacostealth') toggleSettingsModal(true);
-    else if (selectedGame === 'strokeoff') soPickFakeAndStart();
+    else if (selectedGame === 'doodleduel') socket.emit('fdStartGame');
     else if (selectedGame === 'squiggle') socket.emit('sqStartGame');
     else if (selectedGame === 'pikpic') socket.emit('ppStartGame');
     else if (selectedGame === 'rizzorroast') socket.emit('rrStartGame');
@@ -1320,6 +1267,7 @@ function leaveRoom() {
     hidePodium();
     // Tear down every game's UI/state
     try { soCleanup(); } catch (e) {}
+    try { fdCleanup(); } catch (e) {}
     try { tsSkipRules(); } catch (e) {}
     try { ppCleanup(); ppCloseLightbox(); } catch (e) {}
     try { rrCleanup(); } catch (e) {}
@@ -1338,7 +1286,8 @@ function leaveRoom() {
 function hideAllGameChrome() {
     drawerOpen = false;
     ['monitor-hud','phase-hud','nav-desk','ui-bar','float-tools','ts-drawer','pokeBtn','hand-menu',
-     'so-screen','so-memorize-screen','so-reveal-screen','so-vote-screen',
+     'so-screen',
+     'fd-prompt-screen','fd-wait-screen','fd-arena-screen','fd-result-screen',
      'sq-battle-screen','sq-results-screen'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
@@ -1731,7 +1680,7 @@ function applyChromeVisibility() {
         (selectedGame === 'tacostealth' && isJoined && !isSeeker && !isDead && gamePhase === 'SEEKING') ? 'block' : 'none';
 }
 
-let tsScoreCache = {}, soScoreCache = {};
+let tsScoreCache = {};
 
 socket.on('updateScores', (scoreData) => {
     tsScoreCache = {};
@@ -1747,15 +1696,17 @@ socket.on('gameVotes', ({ votes, players }) => {
         if (p) byGame[gid].push(playerBadge(p.token, p.name));
     });
     const tsEl = document.getElementById('gv-ts');
-    const soEl = document.getElementById('gv-so');
+    const fdEl = document.getElementById('gv-fd');
     const sqEl = document.getElementById('gv-sq');
-    if (tsEl) tsEl.innerHTML = (byGame['tacostealth'] || []).join('');
-    if (soEl) soEl.innerHTML = (byGame['strokeoff'] || []).join('');
-    if (sqEl) sqEl.innerHTML = (byGame['squiggle'] || []).join('');
     const ppEl = document.getElementById('gv-pp');
-    if (ppEl) ppEl.innerHTML = (byGame['pikpic'] || []).join('');
     const rrEl = document.getElementById('gv-rr');
+    const scEl = document.getElementById('gv-sc');
+    if (tsEl) tsEl.innerHTML = (byGame['tacostealth'] || []).join('');
+    if (fdEl) fdEl.innerHTML = (byGame['doodleduel'] || []).join('');
+    if (sqEl) sqEl.innerHTML = (byGame['squiggle'] || []).join('');
+    if (ppEl) ppEl.innerHTML = (byGame['pikpic'] || []).join('');
     if (rrEl) rrEl.innerHTML = (byGame['rizzorroast'] || []).join('');
+    if (scEl) scEl.innerHTML = (byGame['splitcrew'] || []).join('');
 });
 
 // ── Taco Stealth ──────────────────────────────────────────────────────────
@@ -1765,8 +1716,6 @@ const ctx = canvas.getContext('2d');
 // ── Stroke Off canvases (declared here to avoid TDZ crash in resize()) ────
 const soCanvas = document.getElementById('so-canvas');
 const soCtx = soCanvas.getContext('2d');
-const soRevealCanvas = document.getElementById('so-reveal-canvas');
-const soRevealCtx = soRevealCanvas.getContext('2d');
 
 let SPACE_W = 1600, SPACE_H = 900;
 let bg = null, bgName = 'TACO BELL';
@@ -2311,8 +2260,6 @@ function loop(){
 
 // ── Stroke Off ─────────────────────────────────────────────────────────────
 let soDrawing = false, soLastPt = null;
-let soRevealHistory = null, soRevealPlayers = null, soRevealAnimInterval = null;
-
 // Canvas input — wired at init so they work regardless of which server event starts the round
 soCanvas.ontouchstart = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); if (soEyedropMode) { soLoupeLastPt = pt; drawSOLoupe(pt); return; } soGestureId++; soLastPt = pt; soEmitStroke(pt, pt); };
 soCanvas.ontouchmove  = (e) => { e.preventDefault(); const pt = soPoint(e.touches[0]); if (soEyedropMode) { soLoupeLastPt = pt; drawSOLoupe(pt); return; } if (soLastPt) soEmitStroke(soLastPt, pt); soLastPt = pt; };
@@ -2353,8 +2300,6 @@ function soResizeCanvas() {
     }
     soCanvas.style.width  = dispW + 'px';
     soCanvas.style.height = dispH + 'px';
-    soRevealCanvas.style.width  = dispW + 'px';
-    soRevealCanvas.style.height = dispH + 'px';
     // Sync loupe canvas position and size
     const loupeEl = document.getElementById('so-loupe-canvas');
     if (loupeEl) {
@@ -2407,169 +2352,11 @@ function soPickColorFromCanvas(pt) {
     } catch(e) { showToast('Could not pick color'); }
 }
 
-function soPickFakeAndStart() {
-    const players = Object.values(otherPlayers);
-    if (players.length < 2) { alert('Need at least 2 players!'); return; }
-    const fake = players[Math.floor(Math.random() * players.length)];
-    socket.emit('soStartGame', { fakeId: fake.id });
-}
-
-let soMemTimer = null, soCurrentPaintingUrl = '', soRulesCallback = null;
-
-socket.on('soShowPainting', ({ imageUrl, title, artist, yourPart, memorizeSeconds }) => {
-    hide('room-lobby');
-    soCurrentPaintingUrl = imageUrl || '';
-    const rulesEl = document.getElementById('so-rules-overlay');
-    rulesEl.style.display = 'flex';
-    soRulesCallback = () => showMemorize(imageUrl, title, artist, yourPart, memorizeSeconds);
-    rulesEl._timer = setTimeout(soSkipRules, 8000);
-});
-
-function soSkipRules() {
-    const rulesEl = document.getElementById('so-rules-overlay');
-    clearTimeout(rulesEl._timer);
-    rulesEl.style.display = 'none';
-    if (soRulesCallback) { soRulesCallback(); soRulesCallback = null; }
-}
-
-// ── Memorize screen pinch-to-zoom ──────────────────────────────────────────
-function soMemZoomInit() {
-    const wrap = document.getElementById('so-mem-img-wrap');
-    const img  = document.getElementById('so-mem-img');
-    let scale = 1, tx = 0, ty = 0;
-    let lastDist = null, lastMid = null, dragStart = null, pinching = false;
-
-    function clamp(s) { return Math.min(8, Math.max(1, s)); }
-    function applyTransform() {
-        img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
-    }
-    function resetView() {
-        // Fit image inside wrap
-        const ww = wrap.clientWidth, wh = wrap.clientHeight;
-        const iw = img.naturalWidth || ww, ih = img.naturalHeight || wh;
-        const fit = Math.min(ww / iw, wh / ih, 1);
-        scale = fit; tx = (ww - iw * fit) / 2; ty = (wh - ih * fit) / 2;
-        img.style.width = iw + 'px'; img.style.height = ih + 'px';
-        applyTransform();
-    }
-
-    img.onload = resetView;
-    if (img.complete && img.naturalWidth) resetView();
-
-    let lastTap = 0;
-    wrap.addEventListener('touchstart', e => {
-        if (e.touches.length === 2) {
-            pinching = true; dragStart = null;
-            const t0 = e.touches[0], t1 = e.touches[1];
-            lastDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-            lastMid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
-        } else if (e.touches.length === 1) {
-            const now = Date.now();
-            if (now - lastTap < 300) { resetView(); lastTap = 0; return; }
-            lastTap = now;
-            if (!pinching) dragStart = { x: e.touches[0].clientX - tx, y: e.touches[0].clientY - ty };
-        }
-    }, { passive: true });
-
-    wrap.addEventListener('touchmove', e => {
-        e.preventDefault();
-        if (e.touches.length === 2) {
-            const t0 = e.touches[0], t1 = e.touches[1];
-            const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-            const mid  = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
-            const ds = dist / lastDist;
-            const newScale = clamp(scale * ds);
-            const rect = wrap.getBoundingClientRect();
-            const ox = lastMid.x - rect.left, oy = lastMid.y - rect.top;
-            tx = ox - (ox - tx) * (newScale / scale) + (mid.x - lastMid.x);
-            ty = oy - (oy - ty) * (newScale / scale) + (mid.y - lastMid.y);
-            scale = newScale; lastDist = dist; lastMid = mid;
-            applyTransform();
-        } else if (e.touches.length === 1 && dragStart && !pinching) {
-            tx = e.touches[0].clientX - dragStart.x;
-            ty = e.touches[0].clientY - dragStart.y;
-            applyTransform();
-        }
-    }, { passive: false });
-
-    wrap.addEventListener('touchend', e => {
-        if (e.touches.length < 2) { lastDist = null; lastMid = null; }
-        if (e.touches.length === 0) { pinching = false; dragStart = null; }
-    }, { passive: true });
-}
-
 function soZoomRef() {
     const src = document.getElementById('so-ref-img').src;
     if (!src) return;
     ppLightbox(src);
 }
-
-function showMemorize(imageUrl, title, artist, yourPart, memorizeSeconds) {
-    const screen = document.getElementById('so-memorize-screen');
-    screen.style.display = 'flex';
-    document.getElementById('so-mem-img').src = imageUrl;
-    document.getElementById('so-mem-title').innerText = title || '';
-    document.getElementById('so-mem-artist').innerText = artist || '';
-    const isFakePart = yourPart === '???';
-    document.getElementById('so-mem-part').innerText = isFakePart ? '??? — try to blend in!' : `YOUR PART: ${yourPart}`;
-    document.getElementById('so-mem-part').style.color = isFakePart ? '#ef9a9a' : '#ffeb3b';
-    let t = memorizeSeconds || 20;
-    document.getElementById('so-mem-countdown').innerText = t;
-    clearInterval(soMemTimer);
-    soMemTimer = setInterval(() => {
-        t--;
-        document.getElementById('so-mem-countdown').innerText = t > 0 ? t : '⏳';
-        if (t <= 0) clearInterval(soMemTimer);
-    }, 1000);
-}
-
-socket.on('soBeginDrawing', ({ prompt, part }) => {
-    clearInterval(soMemTimer);
-    document.getElementById('so-memorize-screen').style.display = 'none';
-    document.getElementById('so-screen').style.display = 'block';
-    document.getElementById('so-theme-text').innerText = prompt || '???';
-    document.getElementById('so-theme-emoji').innerText = '🖼️';
-    document.getElementById('so-part-text').innerText = part || '???';
-    document.getElementById('so-eyedrop-btn').style.display = '';
-    document.getElementById('so-color-swatch').style.display = 'none';
-    document.querySelector('.so-theme-box').style.whiteSpace = '';
-    soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
-    soGestureId = 0; soDrawing = true;
-    soSetTool('pen');
-    // Painting reference strip
-    if (soCurrentPaintingUrl) {
-        const strip = document.getElementById('so-ref-strip');
-        document.getElementById('so-ref-img').src = soCurrentPaintingUrl;
-        const isFake = part === '???';
-        document.getElementById('so-ref-part-label').innerText = isFake
-            ? '??? — you are THE FAKE — blend in!'
-            : `your part: ${part}`;
-        strip.style.display = 'block';
-    }
-    soResizeCanvas();
-    if (isRoomHost) document.getElementById('so-host-end-btn').style.display = 'block';
-});
-
-// Legacy compatibility shim (unused but keeps old clients from erroring)
-socket.on('strokeStart', ({ theme, emoji, part, isFake, duration }) => {
-    hide('room-lobby');
-    document.getElementById('so-screen').style.display = 'block';
-    document.getElementById('so-theme-text').innerText = theme || '???';
-    document.getElementById('so-theme-emoji').innerText = emoji || '';
-    document.getElementById('so-part-text').innerText = part || '???';
-    soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
-    soDrawing = true;
-
-    let t = duration;
-    const timerEl = document.getElementById('so-timer');
-    timerEl.innerText = t;
-    const ti = setInterval(() => {
-        t--;
-        if (timerEl) timerEl.innerText = t > 0 ? t : '';
-        if (t <= 0) { clearInterval(ti); soDrawing = false; }
-    }, 1000);
-
-});
 
 function soPoint(e) {
     const r = soCanvas.getBoundingClientRect();
@@ -2583,13 +2370,6 @@ function soSetTool(tool) {
     document.getElementById('so-pen-btn').classList.toggle('active', !soEyedropMode);
     const dropBtn = document.getElementById('so-eyedrop-btn'); if (dropBtn) dropBtn.classList.toggle('active', soEyedropMode);
     if (!soEyedropMode) clearSOLoupe();
-}
-
-function soHostEnd() {
-    if (!isRoomHost) return;
-    socket.emit('soReturnToLobby');
-    soCleanup();
-    show('room-lobby'); renderRoomLobby();
 }
 
 function soPickFromThumb(e) {
@@ -2627,7 +2407,8 @@ function soPickFromThumb(e) {
 }
 function soUndo() {
     if (soGestureId <= 0) return;
-    socket.emit(selectedGame === 'squiggle' ? 'sqUndo' : 'soUndo', { gid: soGestureId });
+    const ev = selectedGame === 'squiggle' ? 'sqUndo' : selectedGame === 'doodleduel' ? 'fdUndo' : 'soUndo';
+    socket.emit(ev, { gid: soGestureId });
     soGestureId = Math.max(0, soGestureId - 1);
 }
 
@@ -2635,7 +2416,7 @@ function soEmitStroke(from, to) {
     if (!soDrawing) return;
     const size = soGetBrushSize();
     soDrawLine(soCtx, from.x, from.y, to.x, to.y, activeColor, size);
-    const ev = selectedGame === 'squiggle' ? 'sqStroke' : 'soStroke';
+    const ev = selectedGame === 'squiggle' ? 'sqStroke' : selectedGame === 'doodleduel' ? 'fdStroke' : 'soStroke';
     socket.emit(ev, { x1: from.x, y1: from.y, x2: to.x, y2: to.y, color: activeColor, size, gid: soGestureId });
 }
 
@@ -2645,133 +2426,18 @@ function soDrawLine(c, x1, y1, x2, y2, color, size) {
     c.beginPath(); c.arc(x2, y2, size, 0, 7); c.fillStyle = color; c.fill();
 }
 
-socket.on('soStroke', (s) => { soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size); });
-
-let soCurrentEmoji = '';
-
-// Server-driven reveal
-socket.on('soRevealBegin', ({ history, players, prompt, emoji }) => {
-    soRevealHistory = history; soRevealPlayers = players; soCurrentEmoji = emoji || '';
-    hide('so-screen');
-    soRevealCtx.fillStyle = '#111'; soRevealCtx.fillRect(0, 0, soRevealCanvas.width, soRevealCanvas.height);
-    document.getElementById('so-reveal-player-name').innerText = '';
-    document.getElementById('so-reveal-hint').innerText = 'Get ready…';
-    document.getElementById('so-reveal-screen').style.display = 'block';
-});
-
-socket.on('soRevealNext', ({ player, idx, total }) => {
-    if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
-    // No canvas clear — strokes accumulate to build the full picture
-    document.getElementById('so-reveal-player-name').innerHTML = `${playerBadge(player.token,player.name)} ${player.name}  [${idx + 1}/${total}]`;
-    document.getElementById('so-reveal-hint').innerText = 'Painting…';
-
-    const strokes = (soRevealHistory || []).filter(s => s.socketId === player.id);
-    let i = 0;
-    const speed = Math.max(1, Math.ceil(strokes.length / 200));
-    soRevealAnimInterval = setInterval(() => {
-        for (let j = 0; j < speed && i < strokes.length; j++, i++) {
-            const s = strokes[i]; soDrawLine(soRevealCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size);
-        }
-        if (i >= strokes.length) {
-            clearInterval(soRevealAnimInterval); soRevealAnimInterval = null;
-            document.getElementById('so-reveal-hint').innerText = strokes.length === 0 ? '(drew nothing)' : 'Done!';
-        }
-    }, 16);
-});
-
-socket.on('soVoteOpen', ({ players, prompt, emoji, timeLeft }) => {
-    if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
-    hide('so-reveal-screen');
-    soRevealPlayers = players;
-    document.getElementById('so-real-prompt').innerText = prompt || '???';
-    const emojiEl = document.getElementById('so-vote-emoji');
-    if (emojiEl) emojiEl.innerText = emoji || soCurrentEmoji || '';
-    document.getElementById('so-vote-timer').innerText = timeLeft;
-    document.getElementById('so-voters-status').innerHTML = '';
-    document.getElementById('so-vote-result').style.display = 'none';
-    document.getElementById('so-lobby-btn').style.display = 'none';
-    // Snapshot the finished cumulative painting
-    const snap = document.getElementById('so-vote-snap');
-    if (snap) { try { snap.src = soRevealCanvas.toDataURL('image/jpeg', 0.82); snap.style.display = ''; } catch(e) { snap.style.display = 'none'; } }
-    // Color-coded buttons matching each player's stroke color
-    document.getElementById('so-vote-list').innerHTML = players.map(p => {
-        const color = soGetPlayerColor(p.id);
-        return `<button class="so-vote-btn" onclick="soVote('${p.id}')" data-pid="${p.id}" style="border-color:${color};box-shadow:0 0 0 1px ${color}22 inset;"><span style="color:${color};margin-right:3px;">●</span>${playerBadge(p.token,p.name)} ${p.name}</button>`;
-    }).join('');
-    document.getElementById('so-vote-screen').style.display = 'flex';
-});
-
-socket.on('strokePhaseChange', ({ phase, timeLeft }) => {
-    if (phase === 'DRAWING') { const el = document.getElementById('so-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
-    else if (phase === 'VOTE') { const el = document.getElementById('so-vote-timer'); if (el) el.innerText = timeLeft > 0 ? timeLeft : ''; }
-});
-
-socket.on('soVoterUpdate', ({ voterNames }) => {
-    const el = document.getElementById('so-voters-status');
-    if (el) el.innerHTML = voterNames.map(n => `<span class="so-voter-chip">✓ ${n}</span>`).join('');
-});
-
-socket.on('soRedraw', ({ history }) => {
-    soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
-    (history || []).forEach(s => soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size));
-});
-
-socket.on('soVoteResult', ({ fakeId, fakeName, fakeCaught, tallies, players, soScores }) => {
-    document.querySelectorAll('.so-vote-btn').forEach(b => b.disabled = true);
-    const timerEl = document.getElementById('so-vote-timer'); if (timerEl) timerEl.innerText = '';
-
-    const msg = fakeCaught ? `🎯 ${fakeName} was the fake — CAUGHT!` : `🥷 ${fakeName} was the fake — got away!`;
-    const tallyLines = (players || []).map(p => {
-        const v = tallies[p.id] || 0;
-        return `${playerBadge(p.token,p.name)} ${p.name}${p.id === fakeId ? ' 🥷' : ''} — ${v} vote${v !== 1 ? 's' : ''}`;
-    }).join('\n');
-    const result = document.getElementById('so-vote-result');
-    result.innerHTML = `<div style="font-size:1.15em;margin-bottom:8px;">${msg}</div><div style="color:#aaa;font-size:0.82em;white-space:pre-line;">${tallyLines}</div>`;
-    result.style.display = 'block';
-
-    if (soScores) { soScoreCache = {}; soScores.forEach(s => { soScoreCache[s.name] = s; }); renderUnifiedScoreboard(); }
-    setTimeout(() => { const btn = document.getElementById('so-lobby-btn'); if (btn) btn.style.display = 'block'; }, 3000);
-    if (soScores && soScores.length) {
-        const entries = soScores.map(s => ({
-            name: s.name,
-            score: (s.correct || 0) * 2 + (s.fakeWins || 0) * 3,
-            scoreLabel: `${s.correct || 0}✓ · ${s.fakeWins || 0}🥷`
-        }));
-        const sub = fakeCaught ? `🎯 ${fakeName} was the fake — caught!` : `🥷 ${fakeName} was the fake — got away!`;
-        setTimeout(() => showPodium(entries, { title: '🏆 MASTERPIECED', sub }), 3500);
-    }
-});
-
-function soVote(suspectId) {
-    socket.emit('soVote', { suspectId });
-    document.querySelectorAll('.so-vote-btn').forEach(b => b.disabled = true);
-    showToast('✅ Vote cast!');
-}
-
 function soCleanup() {
-    hide('so-vote-screen'); hide('so-reveal-screen'); hide('so-screen');
-    document.getElementById('so-memorize-screen').style.display = 'none';
-    soSkipRules();
+    hide('so-screen');
     const strip = document.getElementById('so-ref-strip');
     strip.style.display = 'none'; strip.style.height = '0';
-    // Reset canvas and HUD to defaults for reveal screen / next round
     soCanvas.style.top = '50%'; soCanvas.style.transform = 'translate(-50%,-50%)';
     const hudEl = document.getElementById('so-hud-top');
     if (hudEl) hudEl.style.top = '';
     document.getElementById('so-host-end-btn').style.display = 'none';
-    clearInterval(soMemTimer); soMemTimer = null;
-    if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
-    soRevealHistory = null; soRevealPlayers = null;
     soDrawing = false;
     soEyedropMode = false; soLoupeLastPt = null; clearSOLoupe();
     const dropBtn = document.getElementById('so-eyedrop-btn'); if (dropBtn) dropBtn.classList.remove('active');
     const penBtn = document.getElementById('so-pen-btn'); if (penBtn) penBtn.classList.add('active');
-}
-
-function soReturnToLobby() {
-    socket.emit('soReturnToLobby');
-    soCleanup();
-    show('room-lobby'); renderRoomLobby();
 }
 
 function tsSkipRules() {
@@ -2781,40 +2447,199 @@ function tsSkipRules() {
     el.style.display = 'none';
 }
 
-function soGetPlayerColor(playerId) {
-    const stroke = (soRevealHistory || []).find(s => s.socketId === playerId);
-    return stroke ? stroke.color : 'rgba(255,255,255,0.4)';
-}
-
 function renderUnifiedScoreboard() {
     const sb = document.getElementById('unified-scoreboard');
     const list = document.getElementById('unified-score-list');
     if (!sb || !list) return;
-    const allNames = new Set([...Object.keys(tsScoreCache), ...Object.keys(soScoreCache)]);
+    const allNames = new Set(Object.keys(tsScoreCache));
     if (allNames.size === 0) { sb.style.display = 'none'; return; }
     sb.style.display = 'flex';
     const rows = [...allNames].map(name => {
         const ts = tsScoreCache[name] || { survivals: 0, catches: 0 };
-        const so = soScoreCache[name] || { correct: 0, fakeWins: 0 };
-        const total = (ts.survivals || 0) + (ts.catches || 0) * 2 + (so.correct || 0) + (so.fakeWins || 0) * 2;
-        return { name, ts, so, total };
+        return { name, ts, total: (ts.survivals || 0) + (ts.catches || 0) * 2 };
     }).sort((a, b) => b.total - a.total);
     const medals = ['🥇', '🥈', '🥉'];
     list.innerHTML = rows.map((r, i) =>
-        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${r.name}</span><span class="sb-col" style="color:#81c784;">${r.ts.survivals || 0}</span><span class="sb-col" style="color:#ef9a9a;">${r.ts.catches || 0}</span><span class="sb-col" style="color:#80cbc4;">${r.so.correct || 0}</span><span class="sb-col" style="color:#ce93d8;">${r.so.fakeWins || 0}</span></div>`
+        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${r.name}</span><span class="sb-col" style="color:#81c784;">${r.ts.survivals || 0}</span><span class="sb-col" style="color:#ef9a9a;">${r.ts.catches || 0}</span></div>`
     ).join('');
 }
 
-socket.on('updateSoScores', (scoreData) => {
-    soScoreCache = {};
-    (scoreData || []).forEach(s => { soScoreCache[s.name] = s; });
-    renderUnifiedScoreboard();
+// ── Doodle Duel ─────────────────────────────────────────────────────────────
+let fdArenaCanvas = null, fdArenaCtx = null;
+let fdP1Img = null, fdP2Img = null;
+let fdP1Id = null, fdP2Id = null;
+
+function fdShowScreen(id) {
+    ['fd-prompt-screen','fd-wait-screen','fd-arena-screen','fd-result-screen'].forEach(s => {
+        const el = document.getElementById(s);
+        if (el) el.style.display = s === id ? 'flex' : 'none';
+    });
+}
+
+function fdCleanup() {
+    ['fd-prompt-screen','fd-wait-screen','fd-arena-screen','fd-result-screen'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    hide('so-screen'); soDrawing = false;
+    fdP1Img = null; fdP2Img = null;
+    fdArenaCtx = null; fdArenaCanvas = null;
+}
+
+function fdAnalyzeAndSubmit() {
+    const c = soCanvas, ctx = soCtx;
+    function density(y0, y1, x0, x1) {
+        x0 = x0 || 0; x1 = x1 || c.width;
+        const iw = Math.max(1, x1 - x0), ih = Math.max(1, y1 - y0);
+        const d = ctx.getImageData(x0, Math.round(y0), iw, Math.round(ih)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 20 || d[i+1] > 20 || d[i+2] > 20) n++;
+        return n / (iw * ih);
+    }
+    const h = c.height, w = c.width;
+    const masses = {
+        head:  Math.max(0.5, 0.5 + density(0, h*0.22) * 5),
+        torso: Math.max(0.5, 0.5 + density(h*0.22, h*0.55) * 5),
+        lArm:  Math.max(0.3, 0.3 + density(h*0.22, h*0.65, 0, w*0.38) * 4),
+        rArm:  Math.max(0.3, 0.3 + density(h*0.22, h*0.65, w*0.62, w) * 4),
+        legs:  Math.max(0.5, 0.5 + density(h*0.55, h) * 5),
+    };
+    const dataUrl = c.toDataURL('image/jpeg', 0.72);
+    socket.emit('fdSubmitFighter', { dataUrl, masses });
+    soCleanup();
+    fdShowScreen('fd-wait-screen');
+}
+
+function fdRenderFrame(f1Bodies, f2Bodies, f1hp, f2hp) {
+    const ctx = fdArenaCtx;
+    if (!ctx) return;
+    const cw = 800, ch = 460;
+    ctx.fillStyle = '#0a1220'; ctx.fillRect(0, 0, cw, ch);
+    ctx.fillStyle = '#1e3a5f'; ctx.fillRect(30, 450, 740, 18);
+    fdDrawFighter(ctx, f1Bodies, fdP1Img, '#3a9eff');
+    fdDrawFighter(ctx, f2Bodies, fdP2Img, '#ff5a5a');
+    const hp1 = document.getElementById('fd-hp-p1'), hp2 = document.getElementById('fd-hp-p2');
+    if (hp1) hp1.style.width = Math.max(0, f1hp) + '%';
+    if (hp2) hp2.style.width = Math.max(0, f2hp) + '%';
+}
+
+function fdDrawFighter(ctx, bodies, img, color) {
+    const torso = bodies.find(b => b.label === 'torso');
+    bodies.forEach(b => {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.angle);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.8;
+        if (b.r) { ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI*2); ctx.fill(); }
+        else { ctx.fillRect(-b.w/2, -b.h/2, b.w, b.h); }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    });
+    if (torso && img) {
+        ctx.save();
+        ctx.translate(torso.x, torso.y);
+        ctx.rotate(torso.angle);
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(img, -58, -120, 116, 185);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+    }
+}
+
+socket.on('fdDrawPhase', ({ prompt, timeLeft }) => {
+    hide('room-lobby');
+    const ps = document.getElementById('fd-prompt-screen');
+    document.getElementById('fd-prompt-text').innerText = prompt;
+    ps.style.display = 'flex';
+    let cdCount = 3;
+    const cdEl = document.getElementById('fd-prompt-countdown');
+    const cd = setInterval(() => {
+        cdCount--;
+        if (cdEl) cdEl.innerText = cdCount;
+        if (cdCount <= 0) {
+            clearInterval(cd);
+            ps.style.display = 'none';
+            soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
+            soGestureId = 0; soDrawing = true; soSetTool('pen');
+            document.getElementById('so-theme-text').innerText = prompt;
+            document.getElementById('so-theme-emoji').innerText = '🥊';
+            document.getElementById('so-part-text').innerText = 'Draw your fighter!';
+            document.getElementById('so-timer').innerText = timeLeft;
+            soResizeCanvas();
+            show('so-screen');
+        }
+    }, 1000);
 });
+
+socket.on('fdPhaseChange', ({ timeLeft }) => {
+    const el = document.getElementById('so-timer');
+    if (el) el.innerText = timeLeft > 0 ? timeLeft : '';
+    if (timeLeft <= 0 && soDrawing) fdAnalyzeAndSubmit();
+});
+
+socket.on('fdProcessing', () => {
+    if (soDrawing) fdAnalyzeAndSubmit();
+    else { soCleanup(); fdShowScreen('fd-wait-screen'); }
+    document.getElementById('fd-wait-status').innerText = 'Generating fighters…';
+});
+
+socket.on('fdSubmitted', ({ count, total }) => {
+    const el = document.getElementById('fd-wait-status');
+    if (el) el.innerText = `${count}/${total} fighters ready`;
+});
+
+socket.on('fdFightStart', ({ p1Id, p2Id, p1Name, p2Name, p1Drawing, p2Drawing, matchup, total }) => {
+    fdP1Id = p1Id; fdP2Id = p2Id;
+    document.getElementById('fd-p1-name').innerText = p1Name;
+    document.getElementById('fd-p2-name').innerText = p2Name;
+    document.getElementById('fd-match-num').innerText = matchup + 1;
+    document.getElementById('fd-match-total').innerText = total;
+    document.getElementById('fd-hp-p1').style.width = '100%';
+    document.getElementById('fd-hp-p2').style.width = '100%';
+    fdArenaCanvas = document.getElementById('fd-arena-canvas');
+    fdArenaCtx = fdArenaCanvas.getContext('2d');
+    fdP1Img = null; fdP2Img = null;
+    if (p1Drawing) { fdP1Img = new Image(); fdP1Img.src = p1Drawing; }
+    if (p2Drawing) { fdP2Img = new Image(); fdP2Img.src = p2Drawing; }
+    fdShowScreen('fd-arena-screen');
+});
+
+socket.on('fdFrame', ({ f1, f2, f1hp, f2hp }) => { fdRenderFrame(f1, f2, f1hp, f2hp); });
+
+socket.on('fdFightResult', ({ winnerName, scores }) => {
+    fdShowScreen('fd-result-screen');
+    document.getElementById('fd-winner-name').innerText = winnerName + ' wins!';
+    document.getElementById('fd-result-scores').innerHTML = scores.map(s => `<div>${s.name}: ${s.wins}pt</div>`).join('');
+    const btn = document.getElementById('fd-lobby-btn');
+    if (btn) btn.style.display = isRoomHost ? 'inline-block' : 'none';
+    setTimeout(() => fdShowScreen('fd-arena-screen'), 4000);
+});
+
+socket.on('fdGameOver', ({ scores }) => {
+    fdShowScreen('fd-result-screen');
+    document.getElementById('fd-winner-name').innerText = (scores[0]?.name || '?') + ' is champion!';
+    document.getElementById('fd-result-scores').innerHTML = '<b>Final Scores</b><br>' +
+        scores.map((s,i) => `${['🥇','🥈','🥉'][i]||''} ${s.name}: ${s.wins}pt`).join('<br>');
+    const btn = document.getElementById('fd-lobby-btn');
+    if (btn) btn.style.display = isRoomHost ? 'inline-block' : 'none';
+    if (scores.length) {
+        const entries = scores.map(s => ({ name: s.name, score: s.wins, scoreLabel: `${s.wins}pt` }));
+        setTimeout(() => showPodium(entries, { title: '🥊 DOODLE DUEL' }), 2000);
+    }
+});
+
+socket.on('fdStroke', (s) => { soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size); });
+
+socket.on('fdRedraw', ({ history }) => {
+    soCtx.fillStyle = '#111'; soCtx.fillRect(0, 0, soCanvas.width, soCanvas.height);
+    (history || []).forEach(s => soDrawLine(soCtx, s.x1, s.y1, s.x2, s.y2, s.color, s.size));
+});
+
+socket.on('fdLobby', () => { fdCleanup(); show('room-lobby'); renderRoomLobby(); });
 
 applyColor();
 loop();
 soResizeCanvas();
-soMemZoomInit();
 
 // ── PikPic ──────────────────────────────────────────────────────────────────
 
