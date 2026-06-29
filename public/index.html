@@ -103,31 +103,32 @@
         .cam-load { flex:1; background:#37474f; color:#fff; padding:8px 4px; font-size:0.72em; font-weight:bold; text-align:center; border-radius:6px; cursor:pointer; }
         .cam-load:active { background:#455a64; }
 
-        /* Right-side vertical tool rail */
-        #ui-bar { position:absolute; right:calc(6px + env(safe-area-inset-right)); top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:7px; align-items:center; z-index:10; max-height:88vh; }
-        .rail-btn { width:58px; min-height:46px; flex-grow:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:6px 2px; background:rgba(25,25,30,0.92); border:1px solid #555; border-radius:10px; color:#fff; font-size:1.25em; box-shadow:0 2px 8px rgba(0,0,0,0.6); }
-        .rail-btn small { font-size:0.42em; font-weight:bold; letter-spacing:0.5px; opacity:0.85; }
-        .rail-btn:active { background:rgba(60,60,70,0.95); }
-        .rail-pick { background:#1565c0; border-color:#7CC4FF; }
-        .rail-undo { color:#ff8a80; }
-        .rail-hand { background:#f9a825; color:#000; border-color:#ffd54f; }
-        .rail-lock { background:#37474f; }
-        .rail-lock.locked { background:#2e7d32; border-color:#7CFC9A; box-shadow:0 0 12px rgba(46,160,67,0.7); }
-        .rail-swatch { width:50px; height:34px; border:2px solid #fff; border-radius:8px; background:#ff0000; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.6); flex-shrink:0; }
-        .rail-brush { display:flex; flex-direction:column; align-items:center; gap:3px; background:rgba(25,25,30,0.92); border:1px solid #555; border-radius:10px; padding:5px 2px; width:58px; }
-        .rail-mini { flex-grow:0; width:40px; height:30px; padding:0; font-size:1.2em; background:#333; border-radius:6px; }
-        #brush-preview { border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.5); width:10px; height:10px; }
-        #brushLabel { color:#fff; font-size:13px; font-weight:bold; font-family:monospace; }
-        #colorSwatch { width:50px; height:34px; border:2px solid #fff; border-radius:8px; background:#ff0000; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.6); flex-shrink:0; }
-
-        /* Floating Move/Paint toggle that sits on your hand */
-        #modeBtn { position:absolute; z-index:11; flex-grow:0; padding:8px 12px; border:2px solid transparent; border-radius:20px; font-size:0.82em; transform:translate(-50%,-50%); box-shadow:0 2px 10px rgba(0,0,0,0.7); transition:background .12s; white-space:nowrap; }
-        #modeBtn.mode-paint { background:#2e7d32; color:#fff; border-color:#7CFC9A; box-shadow:0 0 14px rgba(46,160,67,0.7); }
-        #modeBtn.mode-move  { background:#1565c0; color:#fff; border-color:#7CC4FF; box-shadow:0 0 14px rgba(21,101,192,0.7); }
-
-        /* Reactions row (toggled) */
-        #react-row { position:absolute; bottom:calc(10px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; gap:6px; background:rgba(25,25,30,0.92); padding:8px 10px; border-radius:12px; z-index:10; border:1px solid #444; }
-        #react-row button { flex-grow:0; width:44px; height:44px; font-size:1.2em; padding:0; }
+        /* Floating right-side action buttons (mid-screen) */
+        #float-tools { position:absolute; right:calc(8px + env(safe-area-inset-right)); top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px; z-index:11; }
+        #float-tools button { width:58px; min-height:52px; flex-grow:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:8px 4px; background:rgba(25,25,30,0.92); border:1px solid #555; border-radius:12px; color:#fff; font-size:1.25em; box-shadow:0 2px 8px rgba(0,0,0,0.6); cursor:pointer; }
+        #float-tools button small { font-size:9px; font-weight:bold; letter-spacing:0.5px; opacity:0.85; line-height:1.5; text-transform:uppercase; }
+        #modeBtn.mode-paint { background:#2e7d32; border-color:#7CFC9A; box-shadow:0 0 14px rgba(46,160,67,0.7); }
+        #modeBtn.mode-move  { background:#1565c0; border-color:#7CC4FF; box-shadow:0 0 14px rgba(21,101,192,0.7); }
+        #eyedropperBtn.drop-active { background:#1e88e5; border-color:#90CAF9; }
+        /* Persistent bottom dock — brush slider always visible */
+        #ui-bar { position:absolute; bottom:calc(8px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:calc(100% - 80px); max-width:380px; display:flex; align-items:center; gap:8px; background:rgba(18,18,28,0.94); padding:8px 14px; border-radius:14px; border:1px solid #3a4a66; z-index:10; box-shadow:0 -2px 14px rgba(0,0,0,0.7); }
+        #brush-preview { border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.5); flex-shrink:0; }
+        #brushLabel { color:#ccc; font-size:12px; font-weight:bold; font-family:monospace; flex-shrink:0; min-width:22px; text-align:right; }
+        #brushSize { flex:1; min-width:0; accent-color:#7CC4FF; }
+        #drawerToggle { flex-shrink:0; width:36px; height:36px; padding:0; font-size:1.1em; background:#2a3450; border:1px solid #3a4a66; border-radius:8px; }
+        /* Slide-up drawer */
+        #ts-drawer { position:absolute; bottom:calc(60px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:calc(100% - 80px); max-width:360px; display:flex; flex-direction:column; gap:8px; background:rgba(10,10,20,0.97); border:1px solid #3a4a66; border-radius:16px; padding:12px; z-index:12; box-shadow:0 -4px 24px rgba(0,0,0,0.8); }
+        .ts-drawer-row { display:flex; gap:7px; align-items:center; }
+        .ts-drawer-row > * { flex:1 1 0; }
+        .ts-drawer-row button { min-height:44px; padding:9px 6px; font-size:0.78em; font-weight:bold; background:rgba(255,255,255,0.07); border:1px solid #3a4a66; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:0.3px; text-transform:uppercase; }
+        .ts-drawer-row button:active { background:rgba(255,255,255,0.15); }
+        #colorSwatch { min-height:44px; border:2px solid #fff; border-radius:10px; background:#ff0000; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.6); }
+        #undoBtn { background:rgba(198,40,40,0.3) !important; border-color:#c62828 !important; color:#ff8a80 !important; }
+        #lockBtn.locked { background:#2e7d32; border-color:#7CFC9A; }
+        /* Reactions inside drawer */
+        #react-row { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+        #react-row > * { flex:0 0 auto; }
+        #react-row button { width:40px; height:40px; font-size:1.1em; padding:0; min-height:0; background:rgba(255,255,255,0.07); border:1px solid #333; border-radius:8px; letter-spacing:0; }
         .modal { position:absolute; top:15%; left:50%; transform:translateX(-50%); background:rgba(20,20,25,0.98); padding:20px; border-radius:12px; border:1px solid #555; display:flex; flex-direction:column; align-items:center; gap:15px; z-index:55; box-shadow:0 10px 40px rgba(0,0,0,0.9); width:280px; max-height:90vh; overflow-y:auto; color:white; }
         #scoreboard.in-entry { position:static; top:auto; right:auto; bottom:auto; left:auto; transform:none; min-width:0; width:100%; max-width:360px; box-shadow:none; margin:10px auto 0; background:rgba(0,0,0,0.25); }
         #scoreboard.in-entry #score-list { max-height:26vh; }
@@ -150,7 +151,7 @@
         .emoji-bubble { position:absolute; display:flex; flex-direction:column; align-items:center; z-index:11; pointer-events:none; font-size:2.2em; animation:eb-float 3s ease-out forwards; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.8)); }
         .eb-name { font-size:0.28em; color:#fff; font-family:monospace; background:rgba(0,0,0,0.75); padding:2px 6px; border-radius:3px; white-space:nowrap; margin-top:2px; letter-spacing:1px; }
         @keyframes eb-float { 0%{opacity:1;transform:translateY(0) scale(1)} 25%{transform:translateY(-30px) scale(1.25)} 80%{opacity:1} 100%{opacity:0;transform:translateY(-220px) scale(0.7)} }
-        #react-row button { background:rgba(255,255,255,0.07); border:1px solid #333; }
+
         #volunteer-toast { display:none; position:absolute; top:calc(92px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:25; background:rgba(21,101,192,0.96); color:#fff; font-family:monospace; padding:10px 22px; border-radius:8px; font-size:0.9em; text-align:center; pointer-events:none; border:1px solid #5090ff; white-space:nowrap; animation:toast-in 0.25s ease-out; }
         @keyframes toast-in { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
         @keyframes btn-wiggle { 0%,88%,100%{transform:rotate(0deg)} 91%{transform:rotate(-3deg)} 95%{transform:rotate(3deg)} 98%{transform:rotate(-1deg)} }
@@ -594,6 +595,8 @@
     <button id="rl-start-btn" onclick="rlStartGame()">🚀 START GAME</button>
     <div id="rl-wait">Waiting for the host to start…</div>
     <button id="rl-volunteer" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
+    <button id="rl-submit-photo" onclick="openSubmitPhoto()" style="display:none;background:#1565c0;border:none;border-radius:10px;padding:11px 22px;color:#fff;font-size:0.88em;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;width:min(280px,88%);">📷 Suggest a Room Photo</button>
+    <input type="file" id="submit-photo-input" accept="image/*" style="display:none;" onchange="onSubmitPhotoChosen(this.files[0])">
     <button id="rl-share-btn" onclick="shareRoom()" style="background:#1565c0;border:none;border-radius:10px;padding:11px 22px;color:#fff;font-size:0.88em;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;width:min(280px,88%);">📤 SHARE ROOM LINK</button>
     <div id="rl-room-actions">
         <button id="rl-leave-btn" onclick="leaveRoom()">← LEAVE ROOM</button>
@@ -661,6 +664,7 @@
         <div class="cam-load" onclick="loadSampleBg('kitchen','TACO BELL')">🌮 USE PRE-MADE TACO BELL ROOM</div>
         <label class="cam-load" style="display:block;margin-top:6px;">📷 LOAD &amp; FRAME YOUR OWN PHOTO<input type="file" accept="image/*" onchange="openFramer(this.files[0]);this.value='';" style="display:none;"></label>
     </div>
+    <div id="suggested-photos-wrap" style="display:none;width:100%;border-top:1px solid #444;padding-top:10px;"></div>
     <button onclick="startGame()" style="width:100%;background:#c62828;padding:12px;color:white;font-size:1em;">🚀 START GAME</button>
     <button onclick="resetGame()" style="width:100%;background:#555;padding:10px;">🔄 RESET TO LOBBY</button>
     <button onclick="toggleSettingsModal(false)" style="width:100%;background:#4CAF50;padding:10px;">SAVE &amp; CLOSE</button>
@@ -686,38 +690,40 @@
     <button onclick="closeFramer()" style="width:100%;background:#555;padding:8px;">CANCEL</button>
 </div>
 
-<!-- Right-side tool rail (frees the photo; bottom is no longer covered) -->
-<div id="ui-bar" style="display:none;">
-    <button id="eyedropperBtn" class="rail-btn rail-pick" title="Eyedropper — tap the room to match its color">
-        <span style="font-size:1.3em;line-height:1;">💧</span><small>MATCH</small>
-    </button>
-    <div id="colorSwatch" class="rail-swatch" onclick="toggleColorModal(true)" title="Pick a color"></div>
-    <div class="rail-brush">
-        <button class="rail-mini" onclick="brushStep(1)">＋</button>
-        <span id="brush-preview"></span>
-        <span id="brushLabel">10</span>
-        <button class="rail-mini" onclick="brushStep(-1)">－</button>
-        <input type="range" id="brushSize" min="1" max="30" value="10" style="display:none;">
-    </div>
-    <button id="undoBtn" class="rail-btn rail-undo" onclick="tsUndo()">↩<small>UNDO</small></button>
-    <button id="flipBtn" class="rail-btn" onclick="flipHand()">↔<small>FLIP</small></button>
-    <button id="handBtn" class="rail-btn rail-hand" onclick="toggleHandMenu()">🖐️<small>HAND</small></button>
-    <button id="whistleBtn" class="rail-btn">🔔</button>
-    <button id="reactBtn" class="rail-btn" onclick="toggleReactRow()">😀</button>
-    <button id="lockBtn" class="rail-btn rail-lock" onclick="toggleLockIn()">🔒<small>LOCK IN</small></button>
+<!-- Floating right-side buttons (mid/lower) — primary actions, away from the hand -->
+<div id="float-tools" style="display:none;">
+    <button id="modeBtn" onclick="toggleMode()">🖌️<small>PAINT</small></button>
+    <button id="eyedropperBtn" title="Eyedropper — tap the room to copy that color">💧<small>MATCH</small></button>
 </div>
 
-<!-- Floating Move/Paint toggle — sits on your hand -->
-<button id="modeBtn" onclick="toggleMode()" style="display:none;">🖌️ PAINTING</button>
+<!-- Persistent bottom dock: brush slider (always visible) + tools handle -->
+<div id="ui-bar" style="display:none;">
+    <span id="brush-preview"></span>
+    <input type="range" id="brushSize" min="1" max="30" value="10">
+    <span id="brushLabel">10</span>
+    <button id="drawerToggle" onclick="toggleDrawer()">🧰</button>
+</div>
 
-<!-- Reactions (toggled from the rail) -->
-<div id="react-row" style="display:none;">
-    <button onclick="sendReaction('👀')">👀</button>
-    <button onclick="sendReaction('😱')">😱</button>
-    <button onclick="sendReaction('🎉')">🎉</button>
-    <button onclick="sendReaction('🫵')">🫵</button>
-    <button onclick="sendReaction('💀')">💀</button>
-    <button onclick="sendReaction('🤡')">🤡</button>
+<!-- Slide-up drawer with the rest of the tools (auto-hides after a selection) -->
+<div id="ts-drawer" style="display:none;">
+    <div class="ts-drawer-row">
+        <div id="colorSwatch" onclick="toggleColorModal(true);closeDrawer()" title="Pick a color"></div>
+        <button id="handBtn" onclick="toggleHandMenu();closeDrawer()">🖐️ HAND</button>
+        <button id="flipBtn" onclick="flipHand();closeDrawer()">↔ FLIP</button>
+        <button id="undoBtn" onclick="tsUndo()">↩ UNDO</button>
+    </div>
+    <div class="ts-drawer-row">
+        <button id="whistleBtn">🔔 WHISTLE</button>
+        <button id="lockBtn" onclick="toggleLockIn();closeDrawer()">🔒 LOCK IN</button>
+    </div>
+    <div class="ts-drawer-row" id="react-row">
+        <button onclick="sendReaction('👀')">👀</button>
+        <button onclick="sendReaction('😱')">😱</button>
+        <button onclick="sendReaction('🎉')">🎉</button>
+        <button onclick="sendReaction('🫵')">🫵</button>
+        <button onclick="sendReaction('💀')">💀</button>
+        <button onclick="sendReaction('🤡')">🤡</button>
+    </div>
 </div>
 
 <div id="hand-menu"></div>
@@ -1255,12 +1261,14 @@ function leaveRoom() {
     isJoined = false; isRoomHost = false; currentRoomCode = null;
     otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
     seekerSocketIds = []; seekerSocketId = null;
+    suggestedPhotos = [];
     syncGlobalLeave();
 }
 
 // Hide all in-game HUDs/overlays (used on leave + when kicked/closed)
 function hideAllGameChrome() {
-    ['monitor-hud','phase-hud','nav-desk','ui-bar','pokeBtn','hand-menu',
+    drawerOpen = false;
+    ['monitor-hud','phase-hud','nav-desk','ui-bar','float-tools','ts-drawer','pokeBtn','hand-menu',
      'so-screen','so-memorize-screen','so-reveal-screen','so-vote-screen',
      'sq-battle-screen','sq-results-screen'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = 'none';
@@ -1366,6 +1374,7 @@ function renderRoomLobby() {
     document.getElementById('rl-wait').style.display = (canHost && selectedGame) ? 'none' : (canHost ? 'block' : 'block');
     document.getElementById('rl-wait').innerText = canHost ? (selectedGame ? '' : 'Pick a game above to start') : 'Waiting for the host to start…';
     document.getElementById('rl-volunteer').style.display = (isRoomHost || selectedGame !== 'tacostealth') ? 'none' : 'block';
+    document.getElementById('rl-submit-photo').style.display = (!isRoomHost && selectedGame === 'tacostealth') ? 'block' : 'none';
     document.getElementById('rl-close-btn').style.display = isRoomHost ? 'block' : 'none';
 
     document.querySelectorAll('.game-card:not(.soon)').forEach(el => el.classList.remove('selected'));
@@ -1378,7 +1387,7 @@ function renderRoomLobby() {
 // ── Shared socket events ───────────────────────────────────────────────────
 socket.on('selfState', ({ isDead: dead }) => {
     isDead = !!dead;
-    if (isDead) { deadAt = Date.now(); document.getElementById('modeBtn').innerText = '💀 DEAD'; document.getElementById('modeBtn').style.background = '#000'; }
+    if (isDead) { deadAt = Date.now(); const _mb=document.getElementById('modeBtn'); _mb.innerHTML='💀<small>DEAD</small>'; _mb.style.background='#1a0000'; _mb.style.borderColor='#333'; }
     updateUI();
 });
 
@@ -1844,6 +1853,7 @@ function toggleSettingsModal(show) {
         sel.innerHTML = '<option value="">— PICK —</option>' + list.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         if (prev && list.some(p => p.id === prev)) sel.value = prev;
         if (!bg) loadSampleBg('kitchen', 'TACO BELL');
+        renderPhotoPool();
     }
 }
 function startGame() {
@@ -1891,7 +1901,7 @@ socket.on('pokeResult',({hit,name,pokesLeft,out})=>{
     else if(out) showToast('🚫 Out of wrong pokes — aim carefully!');
     else { showToast('❌ Missed — ('+pokesLeft+' left)'); flashScreen('rgba(198,40,40,0.20)'); }
 });
-socket.on('triggerPickleSlide',()=>{ isDead=true; deadAt=Date.now(); document.getElementById('modeBtn').innerText='💀 DEAD'; document.getElementById('modeBtn').style.background='#000'; updateUI(); });
+socket.on('triggerPickleSlide',()=>{ isDead=true; deadAt=Date.now(); const _mb=document.getElementById('modeBtn'); _mb.innerHTML='💀<small>DEAD</small>'; _mb.style.background='#1a0000'; _mb.style.borderColor='#333'; updateUI(); });
 socket.on('loadMap',({dataUrl,name})=>{ const img=new Image(); img.onload=()=>setBackground(img,name); img.src=dataUrl; });
 
 function hiderDown(sx,sy){const _hm=document.getElementById('hand-menu');if(_hm&&_hm.style.display==='block'){_hm.style.display='none';return;}if(tsLocked){panLast={x:sx,y:sy};dragMode='pan';return;}if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if(isPaint&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=handPaintCvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
@@ -1930,10 +1940,10 @@ function zoomWhole(){if(meSeeker())focusWholeSpace();}
 function updateUI(){
     if(!isDead){
         const mb=document.getElementById('modeBtn');
-        mb.innerText=isPaint?'🖌️ PAINTING':'✋ MOVING';
+        mb.innerHTML=isPaint?'🖌️<small>PAINT</small>':'✋<small>MOVE</small>';
         mb.classList.toggle('mode-paint', isPaint);
         mb.classList.toggle('mode-move', !isPaint);
-        document.getElementById('eyedropperBtn').style.background=isDrop?'#1e88e5':'#1565c0';
+        document.getElementById('eyedropperBtn').classList.toggle('drop-active',isDrop);
         document.body.classList.toggle('paint-cursor', isPaint && !isDrop);
     }
     updateBrushPreview();
@@ -1952,6 +1962,9 @@ function brushStep(d){
     s.value=v; const lbl=document.getElementById('brushLabel'); if(lbl)lbl.innerText=v;
     updateBrushPreview();
 }
+let drawerOpen=false;
+function toggleDrawer(){ drawerOpen=!drawerOpen; document.getElementById('ts-drawer').style.display=drawerOpen?'flex':'none'; document.getElementById('drawerToggle').textContent=drawerOpen?'✕':'🧰'; }
+function closeDrawer(){ drawerOpen=false; document.getElementById('ts-drawer').style.display='none'; document.getElementById('drawerToggle').textContent='🧰'; }
 function toggleReactRow(){ const r=document.getElementById('react-row'); r.style.display=(r.style.display==='flex')?'none':'flex'; }
 
 let tsLocked=false;
@@ -1971,15 +1984,10 @@ function tsResetLock(){
     if(b){ b.classList.remove('locked'); b.innerHTML='🔒<small>LOCK IN</small>'; }
 }
 function syncFloatMode(){
-    const btn=document.getElementById('modeBtn'); if(!btn)return;
-    const railVisible=getComputedStyle(document.getElementById('ui-bar')).display!=='none';
-    const show=isJoined&&!meSeeker()&&!isDead&&!tsLocked&&railVisible&&(gamePhase==='HIDING'||gamePhase==='SEEKING');
-    if(!show){ btn.style.display='none'; return; }
-    const sx=camera.x+(player.x+playerSize/2)*camera.scale;
-    const sy=camera.y+(player.y)*camera.scale;
-    btn.style.display='block';
-    btn.style.left=Math.max(70,Math.min(window.innerWidth-70,sx))+'px';
-    btn.style.top=Math.max(90,Math.min(window.innerHeight-90,sy-24))+'px';
+    const ft=document.getElementById('float-tools'); if(!ft)return;
+    const uiVisible=getComputedStyle(document.getElementById('ui-bar')).display!=='none';
+    const show=isJoined&&!meSeeker()&&!isDead&&uiVisible&&(gamePhase==='HIDING'||gamePhase==='SEEKING');
+    ft.style.display=show?'flex':'none';
 }
 function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();handPaintCvs.getContext('2d').putImageData(snap,0,0);handDirty=true;scheduleAvatarSync();}
 function drawNoSignal(){ctx.fillStyle='#0b0b14';ctx.fillRect(0,0,SPACE_W,SPACE_H);ctx.fillStyle='rgba(255,255,255,0.05)';for(let gx=0;gx<SPACE_W;gx+=40)ctx.fillRect(gx,0,1,SPACE_H);}
@@ -1996,6 +2004,50 @@ function drawFramer(){const cv=document.getElementById('framerCvs'),g=cv.getCont
 function rotateFramerImg(){const im=framer.img;if(!im)return;const c=document.createElement('canvas');c.width=im.height;c.height=im.width;const cx=c.getContext('2d');cx.translate(c.width/2,c.height/2);cx.rotate(Math.PI/2);cx.drawImage(im,-im.width/2,-im.height/2);framer.img=c;fitFramer();drawFramer();}
 function useFramedPhoto(){if(!framer.img)return;const cv=document.getElementById('framerCvs'),OUT_W=1600,OUT_H=Math.round(OUT_W*cv.height/cv.width),k=OUT_W/cv.width;const out=document.createElement('canvas');out.width=OUT_W;out.height=OUT_H;const g=out.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,OUT_W,OUT_H);g.drawImage(framer.img,framer.ox*k,framer.oy*k,framer.img.width*framer.scale*k,framer.img.height*framer.scale*k);const dataUrl=out.toDataURL('image/jpeg',0.85);const fin=new Image();fin.onload=()=>setBackground(fin,'CUSTOM ROOM');fin.src=dataUrl;socket.emit('hostMap',{feedIndex:0,dataUrl,name:'CUSTOM ROOM'});closeFramer();showToast('📷 Room set (cropped)');}
 function useFullPhoto(){if(!framer.img)return;pushBackground(framer.img,'CUSTOM ROOM',true);closeFramer();showToast('🖼️ Room set (full)');}
+
+// Non-host photo suggestions
+let suggestedPhotos=[];
+function openSubmitPhoto(){ document.getElementById('submit-photo-input').click(); }
+function onSubmitPhotoChosen(file){
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+        const img=new Image();
+        img.onload=()=>{
+            const MAX=1400; let w=img.width,h=img.height;
+            if(w>MAX||h>MAX){const s=Math.min(MAX/w,MAX/h);w=Math.round(w*s);h=Math.round(h*s);}
+            const off=document.createElement('canvas'); off.width=w; off.height=h;
+            off.getContext('2d').drawImage(img,0,0,w,h);
+            socket.emit('suggestPhoto',{dataUrl:off.toDataURL('image/jpeg',0.82),from:playerName});
+            showToast('📸 Photo sent to the host!');
+        };
+        img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    document.getElementById('submit-photo-input').value='';
+}
+function renderPhotoPool(){
+    const el=document.getElementById('suggested-photos-wrap'); if(!el) return;
+    if(!suggestedPhotos.length){ el.style.display='none'; return; }
+    el.style.display='block';
+    el.innerHTML='<div style="font-size:0.74em;color:#9fb0c8;margin-bottom:6px;text-align:center;letter-spacing:1px;">📸 PLAYER PHOTOS — tap to use</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">'
+        +suggestedPhotos.map((p,i)=>`<div onclick="useGuestPhoto(${i})" style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:2px;"><img src="${p.dataUrl}" style="width:72px;height:52px;object-fit:cover;border-radius:6px;border:2px solid #1565c0;"><span style="font-size:0.62em;color:#9fb0c8;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.from}</span></div>`).join('')
+        +'</div>';
+}
+function useGuestPhoto(index){
+    const p=suggestedPhotos[index]; if(!p) return;
+    const img=new Image(); img.onload=()=>pushBackground(img,p.from+"'s photo",true); img.src=p.dataUrl;
+    toggleSettingsModal(false);
+}
+socket.on('photoSuggested',({from,dataUrl})=>{
+    if(!isRoomHost) return;
+    suggestedPhotos.push({from,dataUrl});
+    if(suggestedPhotos.length>4) suggestedPhotos.shift();
+    showToast('📸 '+from+' sent a photo — check ⚙️ HOST');
+    const sm=document.getElementById('settings-modal');
+    if(sm&&sm.style.display!=='none') renderPhotoPool();
+});
 (function(){const cv=document.getElementById('framerCvs');const pt=(e)=>{const r=cv.getBoundingClientRect();const s=(e.touches&&e.touches[0])?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};};const down=(e)=>{if(!framer.img)return;e.preventDefault();framer.drag=pt(e);};const move=(e)=>{if(!framer.drag)return;e.preventDefault();const p=pt(e);framer.ox+=p.x-framer.drag.x;framer.oy+=p.y-framer.drag.y;framer.drag=p;clampFramer();drawFramer();};const up=()=>{framer.drag=null;};cv.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);cv.addEventListener('touchstart',down);cv.addEventListener('touchmove',move);cv.addEventListener('touchend',up);document.getElementById('framerZoom').addEventListener('input',(e)=>{framer.scale=framer.minScale*(1+e.target.value/33);clampFramer();drawFramer();});})();
 
 // Color wheel
@@ -2053,8 +2105,8 @@ function loop(){
         // Move-mode outline so you know dragging will move (not paint) the hand
         if(!isDead&&!isPaint&&!isDrop&&(gamePhase==='HIDING'||gamePhase==='SEEKING')){
             const _mp=0.5+0.5*Math.sin(_n/260);
-            ctx.save();ctx.strokeStyle=`rgba(124,196,255,${(0.55+0.35*_mp).toFixed(2)})`;ctx.lineWidth=2.5;ctx.setLineDash([6,4]);
-            ctx.strokeRect(-3,-3,playerSize+6,playerSize+6);ctx.setLineDash([]);ctx.restore();
+            ctx.save();ctx.strokeStyle=`rgba(124,196,255,${(0.18+0.12*_mp).toFixed(2)})`;ctx.lineWidth=3;ctx.setLineDash([10,7]);
+            ctx.strokeRect(-12,-12,playerSize+24,playerSize+24);ctx.setLineDash([]);ctx.restore();
         }
         if(_fl){ctx.fillStyle=`rgba(255,235,59,${(0.7+0.3*_pu).toFixed(2)})`;ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('▼ YOU',playerSize/2,-8);}
         if(!_wA&&_wEl>=0)whistlePulseStart=0;}

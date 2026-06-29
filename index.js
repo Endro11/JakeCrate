@@ -106,6 +106,7 @@ function makeRoom(code) {
         rrScores: {},
         rrTimer: null,
         rrTimeLeft: 0,
+        suggestedPhotos: [],  // non-host photo suggestions queued for host review
         // Split Crew state
         scPhase: 'LOBBY',
         scTeams: [],
@@ -1597,6 +1598,17 @@ io.on('connection', (socket) => {
         room.feedMaps[feedIndex] = dataUrl;
         if (name) room.feedNames[feedIndex] = name;
         socket.broadcast.to(room.code).emit('loadMap', { feedIndex, dataUrl, name });
+    });
+
+    socket.on('suggestPhoto', ({ dataUrl, from }) => {
+        const room = socketRoom(socket);
+        if (!room || room.gamePhase !== 'LOBBY') return;
+        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/') || dataUrl.length > 2.5 * 1024 * 1024) return;
+        const entry = { dataUrl, from: (from || 'Someone').slice(0, 16) };
+        room.suggestedPhotos.push(entry);
+        if (room.suggestedPhotos.length > 4) room.suggestedPhotos.shift();
+        const hostSock = io.sockets.sockets.get(room.host);
+        if (hostSock) hostSock.emit('photoSuggested', { from: entry.from, dataUrl: entry.dataUrl });
     });
 
     socket.on('startGame', (data) => {
