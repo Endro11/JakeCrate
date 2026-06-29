@@ -841,6 +841,34 @@ function pp_resolveVotes(room) {
     }
 }
 
+// Re-evaluate a PikPic round after a player leaves so it never hangs waiting
+// on someone who's gone. Called from disconnect + leaveRoom.
+function pp_recheckProgress(room) {
+    if (!room) return;
+    const active = ['CLUE', 'SUBMIT', 'VOTE'].includes(room.ppPhase);
+    if (!active) return;
+    // Not enough players left to continue a Dixit-style round → bail to lobby
+    if (Object.keys(room.players).length < 2) { pp_returnToLobby(room); return; }
+
+    if (room.ppPhase === 'CLUE') {
+        if (!room.players[room.ppStorytellerId]) {
+            clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
+            if (room.ppRound >= 3) pp_returnToLobby(room);
+            else pp_startRound(room, room.ppRound + 1);
+        }
+    } else if (room.ppPhase === 'SUBMIT') {
+        // storyteller already played their card; everyone present should submit one
+        if (room.ppTable.length >= Object.keys(room.players).length) {
+            clearInterval(room.ppTimer); pp_openVoting(room);
+        }
+    } else if (room.ppPhase === 'VOTE') {
+        const nonStory = Object.keys(room.players).filter(id => id !== room.ppStorytellerId);
+        if (Object.keys(room.ppVotes).length >= nonStory.length) {
+            clearInterval(room.ppTimer); pp_resolveVotes(room);
+        }
+    }
+}
+
 function pp_returnToLobby(room) {
     clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
     room.ppPhase = 'LOBBY'; room.ppDeck = []; room.ppHands = {}; room.ppRound = 0;
@@ -1934,6 +1962,7 @@ io.on('connection', (socket) => {
         delete room.seekerPokes[socket.id]; delete room.seekerCameras[socket.id];
         broadcastRoom(room, 'updatePlayers', room.players);
         if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
+        pp_recheckProgress(room);
         transferHostIfNeeded(room);
         broadcastGameState(room);
         console.log(`👋 ${name} left room ${room.code}`);
@@ -1970,6 +1999,7 @@ io.on('connection', (socket) => {
             delete room.players[socket.id];
             broadcastRoom(room, 'updatePlayers', room.players);
             if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
+            pp_recheckProgress(room);
         }
         if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
         room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== socket.id);

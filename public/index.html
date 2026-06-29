@@ -11,6 +11,7 @@
         *, *::before, *::after { box-sizing: border-box; }
         body, html { margin:0; padding:0; width:100%; height:100%; background:#050508; overflow:hidden; font-family:sans-serif; overscroll-behavior:none; touch-action:none; }
         canvas { display:block; touch-action:none; cursor:crosshair; }
+        #global-leave { display:none; position:fixed; top:calc(env(safe-area-inset-top) + 6px); left:6px; z-index:250; background:rgba(198,40,40,0.82); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.7em; font-weight:bold; letter-spacing:1px; cursor:pointer; -webkit-user-select:none; user-select:none; }
 
         /* ── Hub landing ── */
         #hub-screen { display:flex; position:absolute; inset:0; z-index:50; background:radial-gradient(circle at 50% 30%, #0d1525, #050508 70%); flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:24px; color:#fff; }
@@ -240,9 +241,11 @@
         .pp-btn { padding:12px 20px; font-weight:bold; font-size:0.85em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; text-align:center; user-select:none; -webkit-user-select:none; display:inline-block; }
         .pp-action-row .pp-btn { flex:1; min-width:120px; }
         /* Lightbox */
-        #pp-lightbox { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.92); align-items:center; justify-content:center; }
-        #pp-lightbox img { max-width:92vw; max-height:88vh; border-radius:10px; object-fit:contain; }
+        #pp-lightbox { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom); }
+        #pp-lightbox img { max-width:92vw; max-height:72vh; border-radius:10px; object-fit:contain; }
         #pp-lightbox.open { display:flex; }
+        #pp-lightbox-close { position:absolute; top:calc(env(safe-area-inset-top) + 10px); right:14px; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.12); border-radius:50%; color:#fff; font-size:1.4em; font-weight:bold; cursor:pointer; }
+        #pp-lightbox-action { background:#2e7d32; color:#fff; border:none; border-radius:12px; padding:15px 28px; font-size:1.05em; font-weight:bold; letter-spacing:1px; text-transform:uppercase; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
         .pp-btn-blue { background:#1565c0; }
         .pp-btn-green { background:#2e7d32; }
         .pp-btn-yellow { background:#e65100; color:#fff; }
@@ -252,15 +255,15 @@
         #pp-selfie-wrap { display:none; position:fixed; inset:0; z-index:70; background:#000; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
         #pp-selfie-video { width:min(320px,90vw); border-radius:10px; }
         /* Hand of cards */
-        .pp-hand { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width:420px; }
-        .pp-card { width:90px; height:90px; border-radius:8px; overflow:hidden; border:3px solid #2a3450; cursor:default; flex-shrink:0; transition:border-color .12s,transform .12s; position:relative; }
+        .pp-hand { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:min(460px,94%); }
+        .pp-card { width:100%; aspect-ratio:1; border-radius:8px; overflow:hidden; border:3px solid #2a3450; cursor:default; transition:border-color .12s,transform .12s; position:relative; }
         .pp-card.selectable { cursor:pointer; }
         .pp-card.selectable:hover { border-color:#7a9fcc; transform:translateY(-3px); }
         .pp-card.selected { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); transform:translateY(-6px); }
         /* Vote grid */
-        #pp-vote-grid { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:420px; }
+        #pp-vote-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:min(460px,94%); }
         .pp-vote-card-wrap { position:relative; }
-        .pp-vote-img { width:100px; height:100px; object-fit:cover; border-radius:8px; border:3px solid #2a3450; cursor:pointer; transition:border-color .12s,transform .12s; display:block; }
+        .pp-vote-img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; border:3px solid #2a3450; cursor:pointer; transition:border-color .12s,transform .12s; display:block; }
         .pp-vote-img:hover { border-color:#ffeb3b; transform:scale(1.06); }
         .pp-vote-img.pp-voted { border-color:#2e7d32; box-shadow:0 0 14px rgba(46,125,50,0.6); }
         /* Result grid */
@@ -450,6 +453,9 @@
     </style>
 </head>
 <body>
+
+<!-- Always-available escape hatch during any game -->
+<button id="global-leave" onclick="leaveRoom()">⎋ LEAVE</button>
 
 <!-- ════════════════════ HUB LANDING ════════════════════ -->
 <div id="hub-screen">
@@ -803,7 +809,11 @@
 </div>
 
 <!-- Lightbox -->
-<div id="pp-lightbox" onclick="ppCloseLightbox()"><img id="pp-lightbox-img" src=""></div>
+<div id="pp-lightbox" onclick="ppCloseLightbox(event)">
+    <div id="pp-lightbox-close" onclick="ppCloseLightbox(event)">✕</div>
+    <img id="pp-lightbox-img" src="" onclick="event.stopPropagation()">
+    <button id="pp-lightbox-action" style="display:none;" onclick="ppLightboxAction(event)"></button>
+</div>
 
 <!-- Selfie overlay -->
 <div id="pp-selfie-wrap">
@@ -819,7 +829,7 @@
 <div id="pp-clue-screen">
     <div class="pp-title">📖 YOU'RE THE STORYTELLER</div>
     <div id="pp-clue-round" class="pp-sub">Round 1 of 3</div>
-    <div class="pp-sub" style="color:#ccc;">Pick a card, then write a clue that hints at it — but not too obviously!</div>
+    <div class="pp-sub" style="color:#ccc;">Tap to zoom · double-tap (or button) to pick · then write a clue</div>
     <div id="pp-clue-hand" class="pp-hand"></div>
     <input id="pp-clue-input" type="text" placeholder="Your clue…" maxlength="120" autocomplete="off">
     <button id="pp-submit-clue-btn" class="pp-btn pp-btn-green" onclick="ppSubmitClue()" style="width:min(320px,90%);">📤 SEND CLUE</button>
@@ -838,7 +848,7 @@
     <div class="pp-title">🃏 PICK A CARD</div>
     <div id="pp-submit-round-label" class="pp-sub">Storyteller's clue:</div>
     <div id="pp-submit-clue-display" class="pp-clue-display">"…"</div>
-    <div class="pp-sub">Pick the card that best fits the clue</div>
+    <div class="pp-sub">Tap to zoom · double-tap (or use the button) to pick</div>
     <div id="pp-submit-hand" class="pp-hand"></div>
     <div style="display:flex;gap:8px;width:min(320px,90%);">
         <button id="pp-confirm-btn" class="pp-btn pp-btn-green" onclick="ppConfirmCard()" style="display:none;flex:1;">✅ SUBMIT CARD</button>
@@ -1158,12 +1168,45 @@ function kickPlayer(targetId) { socket.emit('kickPlayer', { targetId }); }
 
 function leaveRoom() {
     socket.emit('leaveRoom');
-    soCleanup(); tsSkipRules(); ppCleanup(); rrCleanup();
+    // Forget the room so a reconnect doesn't auto-rejoin us back into it
+    localStorage.removeItem('jc_room');
+    // Tear down every game's UI/state
+    try { soCleanup(); } catch (e) {}
+    try { tsSkipRules(); } catch (e) {}
+    try { ppCleanup(); ppCloseLightbox(); } catch (e) {}
+    try { rrCleanup(); } catch (e) {}
+    try { scCleanup(); } catch (e) {}
+    hideAllGameChrome();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
-    inRoom = false; isJoined = false; isRoomHost = false;
-    otherPlayers = {}; selectedGame = null;
+    isJoined = false; isRoomHost = false; currentRoomCode = null;
+    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
+    seekerSocketIds = []; seekerSocketId = null;
+    syncGlobalLeave();
 }
+
+// Hide all in-game HUDs/overlays (used on leave + when kicked/closed)
+function hideAllGameChrome() {
+    ['monitor-hud','phase-hud','nav-desk','ui-bar','pokeBtn','hand-menu',
+     'so-screen','so-memorize-screen','so-reveal-screen','so-vote-screen',
+     'sq-battle-screen','sq-results-screen'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    try { PP_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); } catch (e) {}
+    try { RR_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); } catch (e) {}
+    try { SC_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); } catch (e) {}
+}
+
+// The global LEAVE button is shown whenever we're in a room but not on the
+// hub or the lobby (i.e. inside a game) — a guaranteed escape hatch.
+function syncGlobalLeave() {
+    const btn = document.getElementById('global-leave');
+    if (!btn) return;
+    const hubVis = getComputedStyle(document.getElementById('hub-screen')).display !== 'none';
+    const lobbyVis = getComputedStyle(document.getElementById('room-lobby')).display !== 'none';
+    btn.style.display = (isJoined && currentRoomCode && !hubVis && !lobbyVis) ? 'block' : 'none';
+}
+setInterval(syncGlobalLeave, 600);
 
 function closeRoom() {
     if (!isRoomHost) return;
@@ -1173,11 +1216,14 @@ function closeRoom() {
 }
 
 socket.on('roomClosed', () => {
-    soCleanup(); tsSkipRules(); ppCleanup(); rrCleanup();
+    localStorage.removeItem('jc_room');
+    try { soCleanup(); tsSkipRules(); ppCleanup(); ppCloseLightbox(); rrCleanup(); scCleanup(); } catch (e) {}
+    hideAllGameChrome();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
-    inRoom = false; isJoined = false; isRoomHost = false;
-    otherPlayers = {}; selectedGame = null;
+    isJoined = false; isRoomHost = false; currentRoomCode = null;
+    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
+    syncGlobalLeave();
     showToast('The host closed the room');
 });
 
@@ -1188,11 +1234,18 @@ socket.on('hostChanged', ({ hostSocketId }) => {
     renderRoomLobby();
 });
 
-socket.on('kicked', () => {
-    soCleanup();
+socket.on('kicked', ({ reason } = {}) => {
+    // 'reconnected' = our own duplicate/old socket being evicted; ignore it so
+    // the active tab keeps playing. Real removals send us home.
+    if (reason === 'reconnected') return;
+    localStorage.removeItem('jc_room');
+    try { soCleanup(); tsSkipRules(); ppCleanup(); ppCloseLightbox(); rrCleanup(); scCleanup(); } catch (e) {}
+    hideAllGameChrome();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
-    inRoom = false; isJoined = false;
+    isJoined = false; isRoomHost = false; currentRoomCode = null;
+    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
+    syncGlobalLeave();
     showToast('You were removed from the room');
 });
 
@@ -2386,7 +2439,7 @@ function ppCleanup() {
     ppStorytellerId = null; ppSelectedCardId = null; ppPhase = 'LOBBY';
 }
 
-function ppShow(id) { PP_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; }); const t = document.getElementById(id); if (t) t.style.display = 'flex'; }
+function ppShow(id) { ppCloseLightbox(); PP_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; }); const t = document.getElementById(id); if (t) t.style.display = 'flex'; }
 
 // ── Photo resize helper ──
 function ppResizeToDataUrl(file, cb) {
@@ -2418,12 +2471,26 @@ function ppHandleFiles(files) {
     });
 }
 
-function ppLightbox(url) {
+let ppLbAction = null;
+function ppLightbox(url, action) {
     const lb = document.getElementById('pp-lightbox');
     document.getElementById('pp-lightbox-img').src = url;
+    const btn = document.getElementById('pp-lightbox-action');
+    ppLbAction = action || null;
+    if (action) { btn.textContent = action.label; btn.style.display = 'block'; }
+    else btn.style.display = 'none';
     lb.classList.add('open');
 }
-function ppCloseLightbox() { document.getElementById('pp-lightbox').classList.remove('open'); }
+function ppCloseLightbox(e) { if (e) e.stopPropagation(); document.getElementById('pp-lightbox').classList.remove('open'); ppLbAction = null; }
+function ppLightboxAction(e) { if (e) e.stopPropagation(); const a = ppLbAction; ppCloseLightbox(); if (a && a.fn) a.fn(); }
+// Unified card interaction: single tap = enlarge (zoom), double tap = pick
+function ppCardTap(cardId, url, selectable) {
+    const now = Date.now();
+    const dbl = window._ppCardTap && window._ppCardTap.id === cardId && now - window._ppCardTap.t < 400;
+    if (selectable && dbl) { window._ppCardTap = null; ppSelectCard(cardId); return; }
+    window._ppCardTap = { id: cardId, t: now };
+    ppLightbox(url, selectable ? { label: '✅ Pick this card', fn: () => ppSelectCard(cardId) } : null);
+}
 
 function ppRenderUploadGrid() {
     const grid = document.getElementById('pp-photo-grid'); if (!grid) return;
@@ -2494,9 +2561,9 @@ function ppRenderHand(containerId, cards, selectable) {
     el.innerHTML = cards.map(c => {
         const url = c.photoUrl.replace(/'/g, "\\'");
         return `<div class="pp-card${selectable ? ' selectable' : ''}" data-cid="${c.cardId}"
-            onclick="${selectable ? `ppSelectCard('${c.cardId}')` : `ppLightbox('${url}')`}">
+            onclick="ppCardTap('${c.cardId}','${url}',${selectable ? 'true' : 'false'})">
             <img src="${c.photoUrl}" style="width:100%;height:100%;object-fit:cover;" draggable="false">
-            ${!selectable ? `<div style="position:absolute;bottom:2px;right:3px;font-size:0.65em;opacity:.5;">🔍</div>` : ''}
+            <div style="position:absolute;bottom:2px;right:3px;font-size:0.6em;opacity:.55;">🔍</div>
         </div>`;
     }).join('');
 }
@@ -2543,9 +2610,9 @@ function ppVoteTap(cardId, url) {
         window._ppLastTap = null;
         ppVote(cardId);
     } else {
-        // single tap = enlarge
+        // single tap = enlarge, with a Vote button inside
         window._ppLastTap = { id: cardId, t: now };
-        ppLightbox(url);
+        ppLightbox(url, { label: '🗳️ Vote this card', fn: () => ppVote(cardId) });
     }
 }
 
