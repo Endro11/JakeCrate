@@ -2973,6 +2973,9 @@ const SC_SCREENS = ['sc-role-screen','sc-pit-screen','sc-race-screen','sc-reveal
 let scMyRole = null, scMyTeamIdx = null, scMyTasks = [], scLaneAnimFrames = {}, scRaceInterval = null;
 
 function scShowOnly(id) {
+    // Hide the hub + lobby so their footer (share/leave/close) can't bleed through
+    const hub = document.getElementById('hub-screen'); if (hub) hub.style.display = 'none';
+    const lobby = document.getElementById('room-lobby'); if (lobby) lobby.style.display = 'none';
     SC_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; });
     const target = document.getElementById(id);
     if (target) { target.style.display = 'flex'; target.scrollTop = 0; }
@@ -3430,115 +3433,133 @@ function scStartRaceCanvas() {
 
     const canvas = document.getElementById('sc-race-canvas');
     if (!canvas) return;
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
     const ctx = canvas.getContext('2d');
 
-    const maxSpeed = Math.max(...scRaceTeams.map(t => t.speed || 60), 80);
-    // Track background takes up top ~55% of screen
-    const TRACK_FRAC = 0.54;
+    let cssW = 0, cssH = 0; // current CSS-pixel size of the canvas
+    function ensureSize() {
+        const rect = canvas.getBoundingClientRect();
+        const w = Math.max(1, Math.round(rect.width  || window.innerWidth));
+        const h = Math.max(1, Math.round(rect.height || window.innerHeight));
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        if (w !== cssW || h !== cssH || canvas.width !== Math.round(w * dpr)) {
+            cssW = w; cssH = h;
+            canvas.width  = Math.round(w * dpr);
+            canvas.height = Math.round(h * dpr);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+        }
+    }
+
+    const TRACK_FRAC = 0.5; // top half = track, bottom half = standings lanes
 
     function draw() {
-        const W = canvas.width, H = canvas.height;
+        ensureSize();
+        const W = cssW, H = cssH;
+
+        // Opaque base fill — prevents any bleed-through to screens behind
+        ctx.fillStyle = '#0a0a14';
+        ctx.fillRect(0, 0, W, H);
+
+        const teams = scRaceTeams || [];
+        const n = teams.length;
         const trackH = Math.round(H * TRACK_FRAC);
-        const lanesH  = H - trackH;
-        const n = scRaceTeams.length;
-        const laneH = Math.floor(lanesH / n);
+        const lanesH = H - trackH;
+        const maxSpeed = Math.max(80, ...teams.map(t => t.speed || 0));
 
-        // ── Scrolling track background ──────────────────────────────────────
-        const scrollPx = (maxSpeed / 150) * 2.2;
-        scRaceScrollX = (scRaceScrollX + scrollPx);
-
-        if (scTrackImg.complete && scTrackImg.naturalWidth > 0) {
-            const iw = scTrackImg.naturalWidth;
-            const drawW = Math.round(iw * (trackH / scTrackImg.naturalHeight));
-            scRaceScrollX = scRaceScrollX % drawW;
-            let x = -scRaceScrollX;
-            while (x < W) { ctx.drawImage(scTrackImg, x, 0, drawW, trackH); x += drawW; }
+        // ── Scrolling track background (top) ────────────────────────────────
+        const scrollPx = (maxSpeed / 150) * 2.4;
+        if (scTrackImg && scTrackImg.complete && scTrackImg.naturalWidth > 0) {
+            const drawW = Math.max(1, Math.round(scTrackImg.naturalWidth * (trackH / scTrackImg.naturalHeight)));
+            scRaceScrollX = (scRaceScrollX + scrollPx) % drawW;
+            for (let x = -scRaceScrollX; x < W; x += drawW) {
+                ctx.drawImage(scTrackImg, Math.round(x), 0, drawW, trackH);
+            }
         } else {
             const g = ctx.createLinearGradient(0, 0, 0, trackH);
             g.addColorStop(0, '#5bb8f5'); g.addColorStop(0.55, '#3a8c3a'); g.addColorStop(1, '#555');
             ctx.fillStyle = g; ctx.fillRect(0, 0, W, trackH);
         }
+        // Divider under track
+        ctx.fillStyle = '#000'; ctx.fillRect(0, trackH - 2, W, 2);
 
-        // ── Lane rows ───────────────────────────────────────────────────────
-        scRaceTeams.forEach((team, pos) => {
+        if (n === 0) {
+            ctx.fillStyle = '#888';
+            ctx.font = `14px "Press Start 2P", monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('LINING UP…', W / 2, trackH + lanesH / 2);
+            ctx.textAlign = 'left';
+            scRaceTick++; scRaceRaf = requestAnimationFrame(draw); return;
+        }
+
+        const laneH = lanesH / n;
+
+        teams.forEach((team, pos) => {
             const laneY = trackH + pos * laneH;
-            const isFirst = pos === 0;
+            const isFirst = pos === 0 && !team.crashed;
 
-            // Lane background
-            ctx.fillStyle = team.crashed
-                ? 'rgba(80,0,0,0.85)'
-                : isFirst ? 'rgba(20,16,0,0.92)' : (pos % 2 === 0 ? 'rgba(12,12,20,0.92)' : 'rgba(8,8,16,0.92)');
+            // Lane background (fully opaque)
+            ctx.fillStyle = team.crashed ? '#2a0d0d'
+                : isFirst ? '#1c1805' : (pos % 2 === 0 ? '#0e0e18' : '#0a0a12');
             ctx.fillRect(0, laneY, W, laneH);
-
-            // Gold accent for leader
-            if (isFirst && !team.crashed) {
-                ctx.fillStyle = 'rgba(255,204,0,0.08)';
+            if (isFirst) {
+                ctx.fillStyle = 'rgba(255,204,0,0.10)';
                 ctx.fillRect(0, laneY, W, laneH);
             }
+            // Divider line
+            ctx.fillStyle = isFirst ? 'rgba(255,204,0,0.55)' : 'rgba(255,255,255,0.08)';
+            ctx.fillRect(0, laneY, W, isFirst ? 2 : 1);
 
-            // Top divider
-            ctx.strokeStyle = isFirst ? 'rgba(255,204,0,0.5)' : 'rgba(255,255,255,0.07)';
-            ctx.lineWidth = isFirst ? 2 : 1;
-            ctx.beginPath(); ctx.moveTo(0, laneY); ctx.lineTo(W, laneY); ctx.stroke();
-
-            // ── Car sprite ──────────────────────────────────────────────────
-            const displayH = Math.min(laneH - 10, 58);
+            // ── Car sprite ────────────────────────────────────────────────
+            const displayH = Math.min(laneH - 8, 56);
             const displayW = Math.round(displayH * (SC_CAR_SW / SC_CAR_SH));
             const row = team.teamIdx % SC_CAR_ROWS;
+            const dmg = team.damages ? team.damages.length : 0;
 
             let frame = 0;
-            const dmg = team.damages ? team.damages.length : 0;
-            if (team.crashed) {
-                frame = 2;
-            } else if (dmg >= 2) {
-                frame = Math.floor(scRaceTick / 4) % 2 === 0 ? 1 : 2;
-            } else if (dmg === 1) {
-                frame = Math.floor(scRaceTick / 10) % 2;
-            }
+            if (team.crashed)      frame = 2;
+            else if (dmg >= 2)     frame = (Math.floor(scRaceTick / 4) % 2) ? 1 : 2;
+            else if (dmg === 1)    frame = Math.floor(scRaceTick / 10) % 2;
 
-            // Car x-position reflects relative speed (faster = further right)
-            const maxX = W * 0.58, minX = 10;
+            const maxX = W * 0.50, minX = 6;
             const speedFrac = team.crashed ? 0 : (team.speed || 0) / maxSpeed;
-            const carX = Math.round(minX + speedFrac * (maxX - minX) + Math.sin(scRaceTick * 0.04 + pos) * 3);
-            const carY = laneY + Math.round((laneH - displayH) / 2);
+            const wobble = team.crashed ? 0 : Math.sin(scRaceTick * 0.05 + pos) * 3;
+            const carX = Math.round(minX + speedFrac * (maxX - minX) + wobble);
+            const carY = Math.round(laneY + (laneH - displayH) / 2);
 
-            if (scCarSheet.complete && scCarSheet.naturalWidth > 0) {
-                if (team.crashed) ctx.globalAlpha = 0.45;
-                ctx.drawImage(scCarSheet, frame * SC_CAR_SW, row * SC_CAR_SH, SC_CAR_SW, SC_CAR_SH, carX, carY, displayW, displayH);
+            if (scCarSheet && scCarSheet.complete && scCarSheet.naturalWidth > 0) {
+                ctx.globalAlpha = team.crashed ? 0.4 : 1;
+                ctx.drawImage(scCarSheet, frame * SC_CAR_SW, row * SC_CAR_SH, SC_CAR_SW, SC_CAR_SH,
+                              carX, carY, displayW, displayH);
                 ctx.globalAlpha = 1;
-                // Smoke overlay for damaged cars
                 if (dmg > 0 && !team.crashed) {
-                    ctx.font = `${Math.round(displayH * 0.6)}px serif`;
-                    ctx.fillText('💨', carX + displayW - 4, carY + 4);
+                    ctx.font = `${Math.round(displayH * 0.5)}px serif`;
+                    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+                    ctx.fillText('💨', carX + displayW * 0.55, carY + displayH * 0.4);
                 }
             } else {
                 ctx.fillStyle = team.driver.color || '#888';
                 ctx.fillRect(carX, carY, displayW, displayH);
             }
 
-            // ── Text info ───────────────────────────────────────────────────
-            const textX = Math.round(W * 0.65);
+            // ── Text column (right side) ──────────────────────────────────
+            const textX = Math.round(W * 0.62);
             const midY  = laneY + laneH / 2;
-            const fs    = Math.max(10, Math.round(laneH * 0.3));
+            const fs    = Math.max(10, Math.min(15, Math.round(laneH * 0.26)));
 
-            // Position number
-            ctx.font = `bold ${Math.round(laneH * 0.45)}px "Press Start 2P", monospace`;
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = team.crashed ? '#e57373' : isFirst ? '#ffd700' : '#aaa';
-            ctx.fillText(team.crashed ? '💀' : `#${pos+1}`, textX - 38, midY);
-
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            // Position
+            ctx.font = `${Math.max(11, Math.round(laneH * 0.34))}px "Press Start 2P", monospace`;
+            ctx.fillStyle = team.crashed ? '#e57373' : isFirst ? '#ffd700' : '#9aa';
+            ctx.fillText(team.crashed ? '💀' : `${pos + 1}`, textX, midY);
             // Driver name
             ctx.font = `bold ${fs}px sans-serif`;
             ctx.fillStyle = '#fff';
-            ctx.fillText(`${team.driver.emoji} ${team.driver.name}`, textX + 12, midY - fs * 0.45);
-
+            ctx.fillText(`${team.driver.emoji} ${team.driver.name}`, textX + 34, midY - fs * 0.55);
             // Speed
-            ctx.font = `bold ${Math.round(fs * 0.85)}px monospace`;
+            ctx.font = `bold ${Math.round(fs * 0.9)}px monospace`;
             ctx.fillStyle = team.crashed ? '#ef5350' : '#4fc3f7';
-            ctx.fillText(team.crashed ? '💥 OUT' : `${team.speed} MPH`, textX + 12, midY + fs * 0.6);
+            ctx.fillText(team.crashed ? 'OUT 💥' : `${team.speed} MPH`, textX + 34, midY + fs * 0.7);
         });
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
         scRaceTick++;
         scRaceRaf = requestAnimationFrame(draw);
