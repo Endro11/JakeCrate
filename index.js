@@ -1488,7 +1488,13 @@ io.on('connection', (socket) => {
         if (!room || !isHost(room, socket)) return;
         clearInterval(room.gameTimer);
 
-        const seeker = room.players[data.seekerId];
+        // Auto-pick a random seeker if the host didn't choose one (common in
+        // small games where the dropdown was left on "— PICK —").
+        let seeker = room.players[data.seekerId];
+        if (!seeker) {
+            const ids = Object.keys(room.players);
+            if (ids.length) seeker = room.players[ids[Math.floor(Math.random() * ids.length)]];
+        }
         const pokeCount = data.pokeCount || 5;
         room.seekerSocketId = seeker ? seeker.id : null;
         room.seekerToken = seeker ? seeker.token : null;
@@ -1567,20 +1573,33 @@ io.on('connection', (socket) => {
         const myPokes = room.seekerPokes[socket.id] ?? 0;
 
         if (validHit) {
-            // Caught player becomes a seeker — no death, role swap
-            room.seekerSocketIds.push(best.id);
-            room.seekerPokes[best.id] = Math.max(1, Math.ceil(myPokes / 2));
+            // Caught! Play the pickle slide-off first, THEN convert to a seeker.
+            best.isDead = true;
+            if (best.token) room.playerState[best.token] = { isDead: true };
             const catcher = room.players[socket.id];
             if (catcher) {
                 if (!room.scores[catcher.name]) room.scores[catcher.name] = { name: catcher.name, survivals: 0, catches: 0 };
                 room.scores[catcher.name].catches += 1;
             }
-            broadcastRoom(room, 'updatePlayers', room.players);
-            broadcastGameState(room); // sends updated seekerSocketIds
-            io.to(best.id).emit('nowSeeker', { pokesLeft: room.seekerPokes[best.id] });
+            broadcastRoom(room, 'updatePlayers', room.players); // others see the slide via isDead
+            io.to(best.id).emit('triggerPickleSlide');          // caught player slides off
             io.to(socket.id).emit('pokeResult', { hit: true, name: best.name, pokesLeft: myPokes });
             broadcastScores(room);
-            ts_checkReveal(room);
+
+            const caughtId = best.id;
+            const nextPokes = Math.max(1, Math.ceil(myPokes / 2));
+            setTimeout(() => {
+                const p = room.players[caughtId];
+                if (!p || room.gamePhase !== 'SEEKING') return;
+                p.isDead = false;
+                if (p.token) room.playerState[p.token] = { isDead: false };
+                if (!room.seekerSocketIds.includes(caughtId)) room.seekerSocketIds.push(caughtId);
+                room.seekerPokes[caughtId] = nextPokes;
+                broadcastRoom(room, 'updatePlayers', room.players);
+                broadcastGameState(room); // sends updated seekerSocketIds
+                io.to(caughtId).emit('nowSeeker', { pokesLeft: nextPokes });
+                ts_checkReveal(room);
+            }, 1400);
         } else {
             if (myPokes <= 0) { io.to(socket.id).emit('pokeResult', { hit: false, pokesLeft: 0, out: true }); return; }
             room.seekerPokes[socket.id] = myPokes - 1;
