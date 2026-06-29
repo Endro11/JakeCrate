@@ -329,23 +329,21 @@
         /* Score rows */
         .pp-score-row { display:flex; justify-content:space-between; padding:5px 2px; font-family:monospace; font-size:0.85em; border-bottom:1px solid #1a2030; width:min(320px,90%); }
         /* Clue input */
-        #pp-clue-input { width:min(320px,90%); padding:13px; font-size:1em; text-align:center; border-radius:8px; border:2px solid #2a3a66; background:#0d1525; color:#fff; outline:none; font-weight:bold; }
+        #pp-clue-input { padding:12px; font-size:1em; text-align:center; border-radius:8px; border:2px solid #2a3a66; background:#0d1525; color:#fff; outline:none; font-weight:bold; }
         #pp-clue-input:focus { border-color:#ffeb3b; }
         .pp-clue-display { font-size:1.3em; font-weight:bold; color:#ffeb3b; text-align:center; font-style:italic; padding:8px 16px; background:rgba(255,235,59,0.08); border:1px solid rgba(255,235,59,0.25); border-radius:10px; max-width:340px; }
         .pp-voter-row { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
         .pp-outcome-box { font-size:0.9em; text-align:center; color:#ccc; background:rgba(255,255,255,0.05); border:1px solid #2a3a55; border-radius:8px; padding:10px 14px; max-width:340px; }
-        /* Fan hand */
+        /* Fan hand — polaroid style */
         .pp-fan-wrap { position:relative; width:100%; flex-shrink:0; height:210px; }
-        .pp-fan-card { position:absolute; border-radius:10px; overflow:hidden; border:3px solid #1e2e48; cursor:grab; transform-origin:bottom center; transition:transform .13s,border-color .15s,box-shadow .15s; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
-        .pp-fan-card.selected { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); }
-        .pp-fan-card:active { cursor:grabbing; }
-        /* Drop zones */
-        .pp-zone { border-radius:12px; min-height:52px; display:flex; align-items:center; justify-content:center; gap:5px; flex-direction:column; padding:6px 8px; transition:all .15s; box-sizing:border-box; }
-        .pp-zone-submit { border:1.5px dashed #2e5a28; background:rgba(46,125,50,0.06); color:#4a8a4a; }
-        .pp-zone-submit.drag-over { border-color:#4caf50; background:rgba(76,175,80,0.15); }
-        .pp-zone-swap { border:1.5px dashed #7a4a0a; background:rgba(230,81,0,0.06); color:#8a6030; }
-        .pp-zone-swap.drag-over { border-color:#ff9800; background:rgba(255,152,0,0.15); }
-        .pp-zone-swap.used { opacity:.35; pointer-events:none; }
+        .pp-fan-card { position:absolute; box-sizing:border-box; background:#fff; padding:4px 4px 18px; border-radius:2px; cursor:pointer; transform-origin:bottom center; transition:transform .13s, box-shadow .15s; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none; box-shadow:0 4px 18px rgba(0,0,0,.55), 2px 2px 4px rgba(0,0,0,.25); }
+        .pp-fan-card img { width:100%; height:100%; object-fit:cover; display:block; }
+        .pp-fan-card.selected { box-shadow:0 0 0 3px #ffeb3b, 0 10px 32px rgba(0,0,0,.7); }
+        /* Tap-to-submit row */
+        .pp-pick-row { display:flex; align-items:center; gap:10px; width:min(360px,94%); }
+        .pp-pick-preview { width:52px; height:72px; background:rgba(255,255,255,0.04); border:1.5px dashed #2a3850; border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; }
+        .pp-pick-actions { display:flex; flex-direction:column; gap:6px; flex:1; }
+        .pp-pick-actions .pp-btn { padding:8px 10px; }
         /* Hold-to-enlarge overlay */
         #pp-hold-overlay { display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,8,0.90); pointer-events:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
         #pp-hold-overlay img { max-width:90vw; max-height:80vh; border-radius:12px; object-fit:contain; box-shadow:0 12px 60px rgba(0,0,0,0.95); }
@@ -947,9 +945,11 @@
 <div id="pp-clue-screen">
     <div class="pp-title" style="font-size:1.15em;">📖 YOU'RE THE CURATOR</div>
     <div id="pp-clue-round" class="pp-sub">Round 1 of 3</div>
-    <div class="pp-sub" style="color:#aab;">Hold to preview big · tap to pick · then write a clue</div>
-    <input id="pp-clue-input" type="text" placeholder="Your clue…" maxlength="120" autocomplete="off">
-    <button id="pp-submit-clue-btn" class="pp-btn pp-btn-green" onclick="ppSubmitClue()" style="width:min(320px,90%);">📤 SEND CLUE</button>
+    <div class="pp-sub" style="color:#aab;font-size:0.72em;">Tap a card to pick it · then type your clue</div>
+    <div style="display:flex;gap:8px;width:min(340px,94%);align-items:stretch;">
+        <input id="pp-clue-input" type="text" placeholder="Your clue…" maxlength="120" autocomplete="off" style="flex:1;min-width:0;">
+        <button id="pp-submit-clue-btn" class="pp-btn pp-btn-green" onclick="ppSubmitClue()" style="flex-shrink:0;">📤 SEND</button>
+    </div>
     <div class="pp-fan-wrap" id="pp-clue-fan"></div>
 </div>
 
@@ -966,30 +966,21 @@
     <div class="pp-title" style="font-size:1.15em;">🃏 PICK A CARD</div>
     <div id="pp-submit-round-label" class="pp-sub">Curator's clue:</div>
     <div id="pp-submit-clue-display" class="pp-clue-display">"…"</div>
-    <!-- Drop zones -->
-    <div style="display:flex;gap:8px;width:min(360px,94%);">
-        <div id="pp-drop-zone" class="pp-zone pp-zone-submit" style="flex:2;"
-             ondragover="event.preventDefault();ppDZOver('pp-drop-zone',true)"
-             ondragleave="ppDZOver('pp-drop-zone',false)"
-             ondrop="ppDropSubmit(event)">
-            <div style="font-size:1.4em;">📩</div>
-            <div style="font-size:0.7em;letter-spacing:.8px;font-family:monospace;text-align:center;line-height:1.4;">DRAG TO SUBMIT</div>
+    <!-- Tap-to-submit: polaroid preview + action buttons -->
+    <div class="pp-pick-row">
+        <div id="pp-pick-preview" class="pp-pick-preview">
+            <div style="font-size:1.3em;opacity:.3;">📷</div>
+            <div style="font-size:0.58em;color:#556;font-family:monospace;margin-top:3px;text-align:center;line-height:1.3;">tap a<br>card</div>
         </div>
-        <div id="pp-swap-zone" class="pp-zone pp-zone-swap" style="flex:1;"
-             ondragover="event.preventDefault();ppDZOver('pp-swap-zone',true)"
-             ondragleave="ppDZOver('pp-swap-zone',false)"
-             ondrop="ppDropSwap(event)">
-            <div style="font-size:1.3em;">🔄</div>
-            <div id="pp-swap-label" style="font-size:0.68em;font-family:monospace;text-align:center;line-height:1.4;">SWAP<br><span style="opacity:.6;">(once)</span></div>
+        <div class="pp-pick-actions">
+            <button id="pp-confirm-btn" class="pp-btn pp-btn-green" onclick="ppConfirmCard()" disabled style="opacity:0.4;">✅ SUBMIT</button>
+            <button id="pp-swap-btn" class="pp-btn pp-btn-yellow" onclick="ppSwapCard()" disabled style="opacity:0.4;font-size:0.78em;">🔄 SWAP <span style="opacity:.55;font-size:0.85em;">(once)</span></button>
         </div>
     </div>
     <div id="pp-submit-timer" class="pp-timer-big" style="font-size:1.6em;"></div>
     <div id="pp-submit-count" style="font-family:monospace;color:#556;font-size:0.82em;"></div>
-    <!-- Fan of cards (fills remaining space, anchored to bottom) -->
+    <!-- Fan of polaroid cards -->
     <div class="pp-fan-wrap" id="pp-submit-fan" style="margin-top:auto;"></div>
-    <!-- Hidden stubs so existing JS refs don't crash -->
-    <button id="pp-confirm-btn" style="display:none;" onclick="ppConfirmCard()"></button>
-    <button id="pp-swap-btn" style="display:none;" onclick="ppSwapCard()"></button>
 </div>
 
 <!-- Vote screen -->
@@ -1524,7 +1515,7 @@ function handlePpSnapshot(pp) {
                 ppShow('pp-wait-screen');
                 document.getElementById('pp-wait-label').innerText = `Your clue: "${pp.clue}" — waiting for others…`;
             } else if (!pp.hasSubmitted) {
-                ppSelectedCardId = null; ppResetDropZone();
+                ppSelectedCardId = null; ppResetSubmitUI();
                 ppShow('pp-submit-screen');
                 document.getElementById('pp-submit-clue-display').innerText = `"${pp.clue}"`;
                 ppRenderFan('pp-submit-fan', ppMyHand, 'drag');
@@ -2845,33 +2836,38 @@ function ppCleanup() {
 function ppShow(id) { ppCloseLightbox(); PP_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; }); const t = document.getElementById(id); if (t) t.style.display = 'flex'; }
 
 // ── Photo resize helper ──
-function ppResizeToDataUrl(file, cb) {
-    const reader = new FileReader();
-    reader.onload = ev => {
-        const img = new Image();
-        img.onload = () => {
-            const MAX = 600; let w = img.width, h = img.height;
-            if (w > MAX || h > MAX) { const s = Math.min(MAX/w, MAX/h); w = Math.round(w*s); h = Math.round(h*s); }
-            const c = document.createElement('canvas'); c.width = w; c.height = h;
-            c.getContext('2d').drawImage(img, 0, 0, w, h);
-            cb(c.toDataURL('image/jpeg', 0.82));
+function ppResizeToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('read error'));
+        reader.onload = ev => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('image load error'));
+            img.onload = () => {
+                const MAX = 600; let w = img.width, h = img.height;
+                if (w > MAX || h > MAX) { const s = Math.min(MAX/w, MAX/h); w = Math.round(w*s); h = Math.round(h*s); }
+                const c = document.createElement('canvas'); c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+                resolve(c.toDataURL('image/jpeg', 0.82));
+            };
+            img.src = ev.target.result;
         };
-        img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+    });
 }
 
-function ppHandleFiles(files) {
-    const needed = 7 - ppMyPhotos.length;
-    const toProcess = Array.from(files).slice(0, needed);
-    let done = 0;
-    toProcess.forEach(file => {
-        ppResizeToDataUrl(file, dataUrl => {
-            if (ppMyPhotos.length < 7) ppMyPhotos.push(dataUrl);
-            done++;
-            if (done === toProcess.length) ppRenderUploadGrid();
-        });
-    });
+async function ppHandleFiles(files) {
+    const toProcess = Array.from(files).slice(0, 7 - ppMyPhotos.length);
+    for (const file of toProcess) {
+        if (ppMyPhotos.length >= 7) break;
+        try {
+            const dataUrl = await ppResizeToDataUrl(file);
+            ppMyPhotos.push(dataUrl);
+            ppRenderUploadGrid();
+        } catch (e) {
+            showToast('⚠️ Couldn\'t load a photo — skipped');
+        }
+    }
 }
 
 let ppLbAction = null;
@@ -2972,7 +2968,7 @@ function ppRenderHand(containerId, cards, selectable) {
 }
 
 // ── Fan hand rendering ──
-let ppDragCardId = null, ppHoldTimer = null, ppHoldFired = false, ppFtueDone = false, ppVoteFtueDone = false, ppFanMode = 'select';
+let ppHoldTimer = null, ppHoldFired = false, ppFtueDone = false, ppVoteFtueDone = false, ppFanMode = 'select';
 
 function ppFanPositions(n) {
     const spread = Math.min(42, Math.max(22, n * 8));
@@ -2986,7 +2982,7 @@ function ppFanPositions(n) {
     });
 }
 
-// mode: 'select' = tap to select (clue screen), 'drag' = drag to zone (submit screen)
+// mode: 'select' = clue screen, 'drag' = submit screen (tap-based, no actual drag)
 function ppRenderFan(containerId, cards, mode) {
     ppFanMode = mode;
     const el = document.getElementById(containerId); if (!el) return;
@@ -2996,23 +2992,33 @@ function ppRenderFan(containerId, cards, mode) {
         const url = c.photoUrl.replace(/'/g, "\\'");
         const p = pos[i];
         const isSel = c.cardId === ppSelectedCardId;
-        return `<div class="pp-fan-card${isSel ? ' selected' : ''}" data-cid="${c.cardId}"
+        return `<div class="pp-fan-card${isSel ? ' selected' : ''}" data-cid="${c.cardId}" data-angle="${p.angle}"
             style="left:calc(${p.leftPct}% - 36px);bottom:${p.yDrop}px;width:72px;height:100px;transform:rotate(${p.angle}deg);z-index:${n - i};"
-            draggable="${mode === 'drag' ? 'true' : 'false'}"
-            ondragstart="ppDragCardId='${c.cardId}';event.dataTransfer.setData('text/plain','${c.cardId}');ppEndHold();"
-            ondragend="ppDragCardId=null;"
+            draggable="false"
             onmouseenter="ppFanHov(this,true,${p.angle})"
             onmouseleave="ppFanHov(this,false,${p.angle})"
             oncontextmenu="return false"
             onpointerdown="ppBegHold('${url}',event,this,'${mode}')">
-            <img src="${c.photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" draggable="false">
+            <img src="${c.photoUrl}" draggable="false">
         </div>`;
     }).join('');
+    // Restore selected card visual if any
+    if (ppSelectedCardId) {
+        const selEl = el.querySelector(`[data-cid="${ppSelectedCardId}"]`);
+        if (selEl) ppApplySelectedStyle(selEl);
+    }
 }
 
 function ppFanHov(el, on, angle) {
-    el.style.transform = on ? `rotate(${(angle * 0.3).toFixed(1)}deg) translateY(-16px)` : `rotate(${angle}deg)`;
-    el.style.zIndex = on ? 20 : '';
+    if (el.classList.contains('selected')) return;
+    el.style.transform = on ? `rotate(${(angle * 0.3).toFixed(1)}deg) translateY(-10px)` : `rotate(${angle}deg)`;
+    el.style.zIndex = on ? '15' : '';
+}
+
+function ppApplySelectedStyle(el) {
+    const angle = parseFloat(el.dataset.angle || '0');
+    el.style.transform = `rotate(${(angle * 0.4).toFixed(1)}deg) translateY(-20px) scale(1.1)`;
+    el.style.zIndex = '30';
 }
 
 function ppBegHold(src, e, el, mode) {
@@ -3022,7 +3028,7 @@ function ppBegHold(src, e, el, mode) {
     ppHoldFired = false;
     const cardId = el.dataset.cid;
     const sx = e.clientX, sy = e.clientY;
-    let moved = false, dragging = false, ghost = null;
+    let moved = false;
 
     if (isTouch) { try { el.setPointerCapture(e.pointerId); } catch(_) {} }
 
@@ -3030,42 +3036,15 @@ function ppBegHold(src, e, el, mode) {
         if (!moved && (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8)) {
             moved = true; ppEndHold();
         }
-        if (moved && mode === 'drag' && isTouch) {
-            if (!dragging) {
-                dragging = true; ppDragCardId = cardId;
-                ghost = document.createElement('div');
-                ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:1000;width:72px;height:100px;border-radius:8px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.6);opacity:0.88;transform:translate(-50%,-110%) rotate(5deg);';
-                ghost.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
-                document.body.appendChild(ghost);
-            }
-            ghost.style.left = ev.clientX + 'px';
-            ghost.style.top = ev.clientY + 'px';
-            const dz = document.getElementById('pp-drop-zone');
-            const sz = document.getElementById('pp-swap-zone');
-            if (dz) ppDZOver('pp-drop-zone', ppIsOverEl(ev.clientX, ev.clientY, dz));
-            if (sz) ppDZOver('pp-swap-zone', ppIsOverEl(ev.clientX, ev.clientY, sz));
-        }
     }
-
     function cleanup() {
         el.removeEventListener('pointermove', onMove);
         el.removeEventListener('pointerup', onUp);
         el.removeEventListener('pointercancel', cleanup);
-        ppDZOver('pp-drop-zone', false); ppDZOver('pp-swap-zone', false);
-        if (ghost) { ghost.remove(); ghost = null; }
-        ppDragCardId = null;
     }
-
-    function onUp(ev) {
+    function onUp() {
         cleanup();
-        if (dragging) {
-            const dz = document.getElementById('pp-drop-zone');
-            const sz = document.getElementById('pp-swap-zone');
-            if (dz && ppIsOverEl(ev.clientX, ev.clientY, dz)) { ppSelectedCardId = cardId; ppConfirmCard(); }
-            else if (sz && !ppSubUsed && ppIsOverEl(ev.clientX, ev.clientY, sz)) { ppSelectedCardId = cardId; ppSwapCard(); }
-        } else if (!moved && !ppHoldFired && mode === 'select') {
-            ppSelectCard(cardId);
-        }
+        if (!moved && !ppHoldFired && mode) ppSelectCard(cardId);
         ppEndHold();
     }
 
@@ -3082,38 +3061,12 @@ function ppBegHold(src, e, el, mode) {
     }, 320);
 }
 
-function ppIsOverEl(x, y, el) {
-    const r = el.getBoundingClientRect();
-    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-}
-
 function ppEndHold() {
     clearTimeout(ppHoldTimer); ppHoldTimer = null;
     document.getElementById('pp-hold-overlay').style.display = 'none';
     ppHoldFired = false;
 }
 
-// ── Drag-to-zone handlers ──
-function ppDZOver(id, on) {
-    const el = document.getElementById(id); if (el) el.classList.toggle('drag-over', on);
-}
-
-function ppDropSubmit(e) {
-    e.preventDefault(); ppDZOver('pp-drop-zone', false);
-    const cardId = e.dataTransfer.getData('text/plain') || ppDragCardId;
-    if (!cardId) return;
-    ppSelectedCardId = cardId;
-    ppConfirmCard();
-}
-
-function ppDropSwap(e) {
-    e.preventDefault(); ppDZOver('pp-swap-zone', false);
-    if (ppSubUsed) { showToast('Swap already used!'); return; }
-    const cardId = e.dataTransfer.getData('text/plain') || ppDragCardId;
-    if (!cardId) return;
-    ppSelectedCardId = cardId;
-    ppSwapCard();
-}
 
 // ── Vote gallery carousel ──
 let ppGalIdx = 0, ppVoteCards = [], ppVoteSelectedId = null;
@@ -3194,8 +3147,44 @@ function ppUpdateGallery() {
 function ppSelectCard(cardId) {
     const alreadySelected = ppSelectedCardId === cardId;
     ppSelectedCardId = alreadySelected ? null : cardId;
-    // Handle both grid cards (clue screen) and fan cards (clue screen fan)
-    document.querySelectorAll('.pp-card.selectable,.pp-fan-card').forEach(el => el.classList.toggle('selected', el.dataset.cid === ppSelectedCardId));
+    document.querySelectorAll('.pp-card.selectable,.pp-fan-card').forEach(el => {
+        const isSel = el.dataset.cid === ppSelectedCardId;
+        el.classList.toggle('selected', isSel);
+        if (el.classList.contains('pp-fan-card')) {
+            if (isSel) {
+                ppApplySelectedStyle(el);
+            } else {
+                el.style.transform = `rotate(${el.dataset.angle || 0}deg)`;
+                el.style.zIndex = '';
+            }
+        }
+    });
+    ppUpdateSubmitUI();
+}
+
+function ppUpdateSubmitUI() {
+    const confirmBtn = document.getElementById('pp-confirm-btn');
+    const swapBtn = document.getElementById('pp-swap-btn');
+    const preview = document.getElementById('pp-pick-preview');
+    if (!confirmBtn) return;
+    if (ppSelectedCardId) {
+        const card = ppMyHand.find(c => c.cardId === ppSelectedCardId);
+        if (preview && card) {
+            preview.className = '';
+            preview.style.cssText = 'width:52px;height:72px;box-sizing:border-box;padding:3px 3px 12px;background:#fff;border-radius:2px;box-shadow:0 3px 12px rgba(0,0,0,.5);flex-shrink:0;overflow:hidden;';
+            preview.innerHTML = `<img src="${card.photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+        }
+        confirmBtn.disabled = false; confirmBtn.style.opacity = '1';
+        if (swapBtn) { swapBtn.disabled = !!ppSubUsed; swapBtn.style.opacity = ppSubUsed ? '0.35' : '1'; }
+    } else {
+        if (preview) {
+            preview.className = 'pp-pick-preview';
+            preview.style.cssText = '';
+            preview.innerHTML = '<div style="font-size:1.3em;opacity:.3;">📷</div><div style="font-size:0.58em;color:#556;font-family:monospace;margin-top:3px;text-align:center;line-height:1.3;">tap a<br>card</div>';
+        }
+        confirmBtn.disabled = true; confirmBtn.style.opacity = '0.4';
+        if (swapBtn) { swapBtn.disabled = true; swapBtn.style.opacity = '0.4'; }
+    }
 }
 
 function ppSubmitClue() {
@@ -3213,16 +3202,20 @@ function ppConfirmCard() {
     socket.emit('ppSubmitCard', { cardId: ppSelectedCardId });
     const submitted = ppSelectedCardId;
     ppSelectedCardId = null;
-    // Show submitted card thumbnail in drop zone
+    // Update preview to show submitted polaroid with green check
     const card = ppMyHand.find(c => c.cardId === submitted);
-    const dz = document.getElementById('pp-drop-zone');
-    if (dz && card) {
-        dz.style.cssText = 'flex:2;border-radius:12px;min-height:52px;display:flex;align-items:center;gap:8px;padding:6px 10px;border:1.5px solid #2e7d32;background:rgba(46,125,50,0.1);box-sizing:border-box;';
-        dz.innerHTML = `<img src="${card.photoUrl}" style="width:46px;height:46px;object-fit:cover;border-radius:7px;flex-shrink:0;">
-            <div><div style="font-size:0.7em;color:#3a9a4a;letter-spacing:1px;font-family:monospace;">SUBMITTED ✓</div></div>`;
+    const preview = document.getElementById('pp-pick-preview');
+    if (preview && card) {
+        preview.className = '';
+        preview.style.cssText = 'width:52px;height:72px;box-sizing:border-box;padding:3px 3px 12px;background:#fff;border-radius:2px;box-shadow:0 0 0 2px #2e7d32,0 3px 12px rgba(0,0,0,.5);flex-shrink:0;overflow:hidden;position:relative;';
+        preview.innerHTML = `<img src="${card.photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;"><div style="position:absolute;bottom:0;left:0;right:0;background:#2e7d32;color:#fff;font-size:0.5em;font-family:monospace;text-align:center;padding:2px 0;letter-spacing:1px;">✓ IN</div>`;
     }
-    // Freeze fan
-    document.querySelectorAll('#pp-submit-fan .pp-fan-card').forEach(el => { el.draggable = false; el.style.opacity = '0.4'; el.onpointerdown = null; });
+    const confirmBtn = document.getElementById('pp-confirm-btn');
+    const swapBtn = document.getElementById('pp-swap-btn');
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.innerText = '✓ SUBMITTED'; confirmBtn.style.opacity = '0.55'; }
+    if (swapBtn) { swapBtn.disabled = !!ppSubUsed; swapBtn.style.opacity = ppSubUsed ? '0.35' : '1'; }
+    // Fade out fan
+    document.querySelectorAll('#pp-submit-fan .pp-fan-card').forEach(el => { el.style.opacity = '0.35'; el.onpointerdown = null; });
     showToast('Card submitted!');
 }
 
@@ -3309,19 +3302,16 @@ socket.on('ppRoundStart', ({ round, totalRounds, storytellerId, storytellerName,
     }
 });
 
-function ppResetDropZone() {
-    const dz = document.getElementById('pp-drop-zone');
-    if (dz) {
-        dz.className = 'pp-zone pp-zone-submit';
-        dz.style.cssText = 'flex:2;';
-        dz.innerHTML = '<div style="font-size:1.4em;">📩</div><div style="font-size:0.7em;letter-spacing:.8px;font-family:monospace;text-align:center;line-height:1.4;">DRAG TO SUBMIT</div>';
-        dz.ondragover = e => { e.preventDefault(); ppDZOver('pp-drop-zone', true); };
-        dz.ondragleave = () => ppDZOver('pp-drop-zone', false);
-        dz.ondrop = ppDropSubmit;
-    }
-    const sz = document.getElementById('pp-swap-zone');
-    if (sz) { sz.classList.toggle('used', ppSubUsed); }
+function ppResetSubmitUI() {
+    ppSelectedCardId = null;
+    ppUpdateSubmitUI();
+    // keep swap button disabled state in sync
+    const swapBtn = document.getElementById('pp-swap-btn');
+    if (swapBtn) { swapBtn.disabled = true; swapBtn.style.opacity = '0.4'; }
 }
+
+// legacy alias so any remaining callers don't crash
+function ppResetDropZone() { ppResetSubmitUI(); }
 
 socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
     hideReconnectOverlay();
@@ -3339,9 +3329,9 @@ socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
         document.getElementById('pp-submit-timer').innerText = '';
         document.getElementById('pp-submit-count').innerText = '';
         ppSelectedCardId = null;
-        ppResetDropZone();
+        ppResetSubmitUI();
         ppRenderFan('pp-submit-fan', ppMyHand, 'drag');
-        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Hold to preview · Drag to submit!'), 900); }
+        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Hold to preview large · tap to pick!'), 900); }
     }
 });
 
@@ -3354,9 +3344,9 @@ socket.on('ppSubmissionCount', ({ submitted, total }) => {
 
 socket.on('ppHandUpdate', ({ hand, subUsed }) => {
     ppMyHand = hand; ppSubUsed = subUsed; ppSelectedCardId = null;
-    ppResetDropZone();
+    ppResetSubmitUI();
     ppRenderFan('pp-submit-fan', hand, 'drag');
-    showToast('🔄 Card swapped! Now drag to submit.');
+    showToast('🔄 Card swapped! Tap a card to pick.');
 });
 
 socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
