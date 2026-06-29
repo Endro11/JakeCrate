@@ -217,6 +217,50 @@ function ts_checkReveal(room) {
     if (hiders.length === 0 || hiders.every(p => p.isDead)) ts_enterReveal(room);
 }
 
+// Transition HIDING → SEEKING (from the hide timer or an early all-locked-in)
+function ts_startSeeking(room) {
+    if (room.gamePhase === 'SEEKING') return;
+    clearInterval(room.gameTimer);
+    room.gamePhase = 'SEEKING';
+    room.timeLeft = room.lastSeekTime;
+    broadcastGameState(room);
+
+    clearInterval(room.viewportTick);
+    room.viewportTick = setInterval(() => {
+        if (room.gamePhase !== 'SEEKING') { clearInterval(room.viewportTick); return; }
+        const cams = Object.values(room.seekerCameras);
+        if (!cams.length) return;
+        const gains = {};
+        Object.values(room.players).forEach(h => {
+            if (room.seekerSocketIds.includes(h.id) || h.isDead) return;
+            const cx = (h.x || 0) + 37, cy = (h.y || 0) + 37;
+            let gain = 0, watchers = 0;
+            cams.forEach(cam => {
+                if (!cam.scale || !cam.screenW) return;
+                const wx = -cam.x / cam.scale, wy = -cam.y / cam.scale;
+                const ww = cam.screenW / cam.scale, wh = cam.screenH / cam.scale;
+                if (cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh) {
+                    watchers++;
+                    gain += Math.max(1, Math.round(cam.scale * 5));
+                }
+            });
+            if (watchers > 1) gain = Math.round(gain * (1 + 0.5 * (watchers - 1)));
+            if (gain > 0) {
+                if (!room.viewportPoints[h.id]) room.viewportPoints[h.id] = 0;
+                room.viewportPoints[h.id] += gain;
+                gains[h.id] = gain;
+            }
+        });
+        broadcastRoom(room, 'viewportPoints', { totals: room.viewportPoints, gains });
+    }, 350);
+
+    room.gameTimer = setInterval(() => {
+        room.timeLeft--;
+        if (room.timeLeft <= 0) { ts_enterReveal(room); return; }
+        broadcastGameState(room);
+    }, 1000);
+}
+
 // ─── Stroke Off game logic ────────────────────────────────────────────────────
 
 const PAINTINGS = [
@@ -1599,54 +1643,25 @@ io.on('connection', (socket) => {
         room.timeLeft = room.lastHideTime;
         broadcastGameState(room);
 
+        room.lockedSockets = {};
         room.gameTimer = setInterval(() => {
             room.timeLeft--;
-            if (room.timeLeft <= 0) {
-                clearInterval(room.gameTimer);
-                room.gamePhase = 'SEEKING';
-                room.timeLeft = room.lastSeekTime;
-                broadcastGameState(room);
-
-                // Tick: award viewport points to hiders inside a seeker's view.
-                // Points stack per watching seeker and scale with how zoomed-in
-                // they are — being stared at, up close, by many = points fly up.
-                room.viewportTick = setInterval(() => {
-                    if (room.gamePhase !== 'SEEKING') { clearInterval(room.viewportTick); return; }
-                    const cams = Object.values(room.seekerCameras);
-                    if (!cams.length) return;
-                    const gains = {};
-                    Object.values(room.players).forEach(h => {
-                        if (room.seekerSocketIds.includes(h.id) || h.isDead) return;
-                        const cx = (h.x || 0) + 37, cy = (h.y || 0) + 37;
-                        let gain = 0, watchers = 0;
-                        cams.forEach(cam => {
-                            if (!cam.scale || !cam.screenW) return;
-                            const wx = -cam.x / cam.scale, wy = -cam.y / cam.scale;
-                            const ww = cam.screenW / cam.scale, wh = cam.screenH / cam.scale;
-                            if (cx >= wx && cx <= wx + ww && cy >= wy && cy <= wy + wh) {
-                                watchers++;
-                                gain += Math.max(1, Math.round(cam.scale * 5)); // zoom = faster
-                            }
-                        });
-                        if (watchers > 1) gain = Math.round(gain * (1 + 0.5 * (watchers - 1))); // crowd bonus
-                        if (gain > 0) {
-                            if (!room.viewportPoints[h.id]) room.viewportPoints[h.id] = 0;
-                            room.viewportPoints[h.id] += gain;
-                            gains[h.id] = gain;
-                        }
-                    });
-                    broadcastRoom(room, 'viewportPoints', { totals: room.viewportPoints, gains });
-                }, 350);
-
-                room.gameTimer = setInterval(() => {
-                    room.timeLeft--;
-                    if (room.timeLeft <= 0) { ts_enterReveal(room); return; }
-                    broadcastGameState(room);
-                }, 1000);
-                return;
-            }
+            if (room.timeLeft <= 0) { ts_startSeeking(room); return; }
             broadcastGameState(room);
         }, 1000);
+    });
+
+    socket.on('tsLockIn', ({ locked }) => {
+        const room = socketRoom(socket);
+        if (!room || room.gamePhase !== 'HIDING') return;
+        if (!room.lockedSockets) room.lockedSockets = {};
+        if (locked) room.lockedSockets[socket.id] = true; else delete room.lockedSockets[socket.id];
+        // If every hider has locked in, start the seek phase early (don't reveal
+        // who's locked — that would pressure people to rush).
+        const hiders = Object.values(room.players).filter(p => !room.seekerSocketIds.includes(p.id));
+        if (hiders.length > 0 && hiders.every(p => room.lockedSockets[p.id])) {
+            ts_startSeeking(room);
+        }
     });
 
     socket.on('resetGame', () => {

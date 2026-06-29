@@ -90,25 +90,44 @@
         .nav-btn { padding:7px 12px; background:rgba(25,25,30,0.9); color:white; border:1px solid #555; border-radius:6px; font-weight:bold; font-size:0.8em; cursor:pointer; white-space:nowrap; }
         #phase-hud { position:absolute; top:calc(48px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); display:flex; gap:12px; align-items:center; z-index:10; pointer-events:none; font-family:monospace; color:#fff; font-size:1.3em; font-weight:bold; text-shadow:0 0 8px rgba(255,255,255,0.4),2px 2px 2px #000; }
         #timer-hud { font-size:1.8em; color:#ffeb3b; text-shadow:0 0 12px rgba(255,235,59,0.8),2px 2px 2px #000; }
+        /* Spotlight / poke HUDs — centered below the phase row so nothing overlaps */
+        #poke-counter, #vp-points-hud { position:absolute; top:calc(88px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:10; font-family:monospace; font-weight:bold; pointer-events:none; text-align:center; white-space:nowrap; }
+        #poke-counter { color:#ff5252; font-size:1em; text-shadow:0 0 8px rgba(255,60,60,0.6),1px 1px 2px #000; }
+        #vp-points-hud { color:#ffeb3b; font-size:1.15em; text-shadow:0 0 10px rgba(255,200,0,0.8),1px 1px 2px #000; }
+        /* Find Me — its own button on the right, lower down (out of the top clutter) */
+        #findMeBtn { position:absolute; right:calc(6px + env(safe-area-inset-right)); top:60%; z-index:10; flex-grow:0; padding:9px 12px; background:rgba(25,25,30,0.92); color:#fff; border:1px solid #555; border-radius:10px; font-size:0.78em; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.6); }
 
         /* ── TacoStealth UI ── */
-        #ui-bar { position:absolute; bottom:calc(10px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; align-items:center; background:rgba(25,25,30,0.95); padding:12px 10px; border-radius:12px; box-shadow:0px -4px 20px rgba(0,0,0,0.8); width:95%; max-width:450px; z-index:10; border:1px solid #444; }
-        .ui-row { display:flex; gap:8px; width:100%; align-items:center; justify-content:center; }
         button, .btn-custom { padding:10px; font-weight:bold; cursor:pointer; border:none; border-radius:6px; background:#333; color:#fff; font-size:0.85em; flex-grow:1; text-align:center; text-transform:uppercase; user-select:none; -webkit-user-select:none; }
         .btn-custom { background:#2e7d32; }
         .cam-load { flex:1; background:#37474f; color:#fff; padding:8px 4px; font-size:0.72em; font-weight:bold; text-align:center; border-radius:6px; cursor:pointer; }
         .cam-load:active { background:#455a64; }
-        #handBtn { background:#f9a825; color:black; }
-        /* Move/Paint toggle — obvious current state */
-        #modeBtn { flex-grow:1.4; border:2px solid transparent; transition:background .12s; }
-        #modeBtn.mode-paint { background:#2e7d32; color:#fff; border-color:#7CFC9A; box-shadow:0 0 12px rgba(46,160,67,0.6); }
-        #modeBtn.mode-move  { background:#1565c0; color:#fff; border-color:#7CC4FF; box-shadow:0 0 12px rgba(21,101,192,0.6); }
-        #colorSwatch { width:45px; height:35px; border:2px solid #fff; border-radius:6px; background:#ff0000; cursor:pointer; box-shadow:0 0 5px rgba(0,0,0,0.5); flex-shrink:0; }
-        /* Prominent brush row above the controls */
-        #brush-row { background:rgba(0,0,0,0.35); padding:8px 12px; border-radius:8px; gap:12px; }
-        #brush-preview { flex-shrink:0; border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.5); display:inline-block; width:10px; height:10px; }
-        #brushLabel { color:#fff; font-size:15px; font-weight:bold; font-family:monospace; background:#222; padding:5px 8px; border-radius:4px; min-width:44px; text-align:center; flex-shrink:0; }
-        #brushSize { width:100%; margin:0; height:26px; }
+
+        /* Right-side vertical tool rail */
+        #ui-bar { position:absolute; right:calc(6px + env(safe-area-inset-right)); top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:7px; align-items:center; z-index:10; max-height:88vh; }
+        .rail-btn { width:58px; min-height:46px; flex-grow:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:6px 2px; background:rgba(25,25,30,0.92); border:1px solid #555; border-radius:10px; color:#fff; font-size:1.25em; box-shadow:0 2px 8px rgba(0,0,0,0.6); }
+        .rail-btn small { font-size:0.42em; font-weight:bold; letter-spacing:0.5px; opacity:0.85; }
+        .rail-btn:active { background:rgba(60,60,70,0.95); }
+        .rail-pick { background:#1565c0; border-color:#7CC4FF; }
+        .rail-undo { color:#ff8a80; }
+        .rail-hand { background:#f9a825; color:#000; border-color:#ffd54f; }
+        .rail-lock { background:#37474f; }
+        .rail-lock.locked { background:#2e7d32; border-color:#7CFC9A; box-shadow:0 0 12px rgba(46,160,67,0.7); }
+        .rail-swatch { width:50px; height:34px; border:2px solid #fff; border-radius:8px; background:#ff0000; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.6); flex-shrink:0; }
+        .rail-brush { display:flex; flex-direction:column; align-items:center; gap:3px; background:rgba(25,25,30,0.92); border:1px solid #555; border-radius:10px; padding:5px 2px; width:58px; }
+        .rail-mini { flex-grow:0; width:40px; height:30px; padding:0; font-size:1.2em; background:#333; border-radius:6px; }
+        #brush-preview { border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,0.5); width:10px; height:10px; }
+        #brushLabel { color:#fff; font-size:13px; font-weight:bold; font-family:monospace; }
+        #colorSwatch { width:50px; height:34px; border:2px solid #fff; border-radius:8px; background:#ff0000; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.6); flex-shrink:0; }
+
+        /* Floating Move/Paint toggle that sits on your hand */
+        #modeBtn { position:absolute; z-index:11; flex-grow:0; padding:8px 12px; border:2px solid transparent; border-radius:20px; font-size:0.82em; transform:translate(-50%,-50%); box-shadow:0 2px 10px rgba(0,0,0,0.7); transition:background .12s; white-space:nowrap; }
+        #modeBtn.mode-paint { background:#2e7d32; color:#fff; border-color:#7CFC9A; box-shadow:0 0 14px rgba(46,160,67,0.7); }
+        #modeBtn.mode-move  { background:#1565c0; color:#fff; border-color:#7CC4FF; box-shadow:0 0 14px rgba(21,101,192,0.7); }
+
+        /* Reactions row (toggled) */
+        #react-row { position:absolute; bottom:calc(10px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; gap:6px; background:rgba(25,25,30,0.92); padding:8px 10px; border-radius:12px; z-index:10; border:1px solid #444; }
+        #react-row button { flex-grow:0; width:44px; height:44px; font-size:1.2em; padding:0; }
         .modal { position:absolute; top:15%; left:50%; transform:translateX(-50%); background:rgba(20,20,25,0.98); padding:20px; border-radius:12px; border:1px solid #555; display:flex; flex-direction:column; align-items:center; gap:15px; z-index:55; box-shadow:0 10px 40px rgba(0,0,0,0.9); width:280px; max-height:90vh; overflow-y:auto; color:white; }
         #scoreboard.in-entry { position:static; top:auto; right:auto; bottom:auto; left:auto; transform:none; min-width:0; width:100%; max-width:360px; box-shadow:none; margin:10px auto 0; background:rgba(0,0,0,0.25); }
         #scoreboard.in-entry #score-list { max-height:26vh; }
@@ -131,7 +150,7 @@
         .emoji-bubble { position:absolute; display:flex; flex-direction:column; align-items:center; z-index:11; pointer-events:none; font-size:2.2em; animation:eb-float 3s ease-out forwards; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.8)); }
         .eb-name { font-size:0.28em; color:#fff; font-family:monospace; background:rgba(0,0,0,0.75); padding:2px 6px; border-radius:3px; white-space:nowrap; margin-top:2px; letter-spacing:1px; }
         @keyframes eb-float { 0%{opacity:1;transform:translateY(0) scale(1)} 25%{transform:translateY(-30px) scale(1.25)} 80%{opacity:1} 100%{opacity:0;transform:translateY(-220px) scale(0.7)} }
-        #react-row button { padding:7px 4px; font-size:1.25em; flex-grow:1; background:rgba(255,255,255,0.07); border:1px solid #333; }
+        #react-row button { background:rgba(255,255,255,0.07); border:1px solid #333; }
         #volunteer-toast { display:none; position:absolute; top:calc(92px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:25; background:rgba(21,101,192,0.96); color:#fff; font-family:monospace; padding:10px 22px; border-radius:8px; font-size:0.9em; text-align:center; pointer-events:none; border:1px solid #5090ff; white-space:nowrap; animation:toast-in 0.25s ease-out; }
         @keyframes toast-in { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
         @keyframes btn-wiggle { 0%,88%,100%{transform:rotate(0deg)} 91%{transform:rotate(-3deg)} 95%{transform:rotate(3deg)} 98%{transform:rotate(-1deg)} }
@@ -607,13 +626,13 @@
 <div id="nav-desk" style="display:none;">
     <button class="nav-btn" id="hostBtn" onclick="toggleSettingsModal(true)">⚙️ HOST</button>
     <button class="nav-btn" id="helpBtn" onclick="showOnboarding()" style="display:none;">❓</button>
-    <button class="nav-btn" id="findMeBtn" onclick="findMe()" style="display:none;">📍 FIND ME</button>
     <button class="nav-btn" id="zoomOutBtn" onclick="zoomWhole()" style="display:none;">🔍 WHOLE ROOM</button>
     <button class="nav-btn" id="seekerBadge" style="display:none;background:#c62828;pointer-events:none;letter-spacing:1px;">👁️ SEEKING</button>
 </div>
+<button id="findMeBtn" onclick="findMe()" style="display:none;">📍 FIND ME</button>
 <div id="phase-hud" style="display:none;"><span id="phase-label"></span><span id="timer-hud"></span></div>
-<div id="poke-counter" style="display:none;position:absolute;top:calc(48px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));z-index:10;font-family:monospace;color:#ff4444;font-size:1em;font-weight:bold;text-shadow:0 0 8px rgba(255,60,60,0.6),1px 1px 2px #000;pointer-events:none;">❌ WRONG POKES LEFT: <span id="poke-count">5</span></div>
-<div id="vp-points-hud" style="display:none;position:absolute;top:calc(48px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));z-index:10;font-family:monospace;color:#ffeb3b;font-size:1em;font-weight:bold;text-shadow:0 0 8px rgba(255,200,0,0.7),1px 1px 2px #000;pointer-events:none;text-align:right;">👁 IN VIEW: <span id="vp-points-val">0</span> pts</div>
+<div id="poke-counter" style="display:none;">❌ WRONG POKES LEFT: <span id="poke-count">5</span></div>
+<div id="vp-points-hud" style="display:none;">👁 IN VIEW: <span id="vp-points-val">0</span> pts</div>
 <div id="volunteer-toast">🙋 <span id="volunteer-name">PLAYER</span> wants to be seeker!</div>
 <div id="seeker-overlay">
     <div class="boot-title">📷 BOOTING CAMERAS...</div>
@@ -667,32 +686,38 @@
     <button onclick="closeFramer()" style="width:100%;background:#555;padding:8px;">CANCEL</button>
 </div>
 
+<!-- Right-side tool rail (frees the photo; bottom is no longer covered) -->
 <div id="ui-bar" style="display:none;">
-    <!-- Brush size — prominent, right above the controls -->
-    <div class="ui-row" id="brush-row">
+    <button id="eyedropperBtn" class="rail-btn rail-pick" title="Eyedropper — tap the room to match its color">
+        <span style="font-size:1.3em;line-height:1;">💧</span><small>MATCH</small>
+    </button>
+    <div id="colorSwatch" class="rail-swatch" onclick="toggleColorModal(true)" title="Pick a color"></div>
+    <div class="rail-brush">
+        <button class="rail-mini" onclick="brushStep(1)">＋</button>
         <span id="brush-preview"></span>
-        <span id="brushLabel">10px</span>
-        <input type="range" id="brushSize" min="1" max="30" value="10" style="flex:1;">
+        <span id="brushLabel">10</span>
+        <button class="rail-mini" onclick="brushStep(-1)">－</button>
+        <input type="range" id="brushSize" min="1" max="30" value="10" style="display:none;">
     </div>
-    <div class="ui-row">
-        <button id="handBtn" onclick="toggleHandMenu()">🖐️ HAND</button>
-        <button id="modeBtn" onclick="toggleMode()">🖌️ PAINTING</button>
-        <button id="flipBtn" onclick="flipHand()">↔ FLIP</button>
-        <button id="undoBtn" onclick="tsUndo()">↩ UNDO</button>
-    </div>
-    <div class="ui-row">
-        <button id="eyedropperBtn" style="flex-grow:0;width:70px;background:#1565c0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:2px;"><path d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 0 0 5 16v3h3a2 2 0 0 0 1.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 0 0 0-1.41z"/></svg>PICK</button>
-        <div id="colorSwatch" onclick="toggleColorModal(true)"></div>
-        <button id="whistleBtn" style="flex-grow:0;width:50px;background:#37474f;">🔔</button>
-    </div>
-    <div class="ui-row" id="react-row">
-        <button onclick="sendReaction('👀')">👀</button>
-        <button onclick="sendReaction('😱')">😱</button>
-        <button onclick="sendReaction('🎉')">🎉</button>
-        <button onclick="sendReaction('🫵')">🫵</button>
-        <button onclick="sendReaction('💀')">💀</button>
-        <button onclick="sendReaction('🤡')">🤡</button>
-    </div>
+    <button id="undoBtn" class="rail-btn rail-undo" onclick="tsUndo()">↩<small>UNDO</small></button>
+    <button id="flipBtn" class="rail-btn" onclick="flipHand()">↔<small>FLIP</small></button>
+    <button id="handBtn" class="rail-btn rail-hand" onclick="toggleHandMenu()">🖐️<small>HAND</small></button>
+    <button id="whistleBtn" class="rail-btn">🔔</button>
+    <button id="reactBtn" class="rail-btn" onclick="toggleReactRow()">😀</button>
+    <button id="lockBtn" class="rail-btn rail-lock" onclick="toggleLockIn()">🔒<small>LOCK IN</small></button>
+</div>
+
+<!-- Floating Move/Paint toggle — sits on your hand -->
+<button id="modeBtn" onclick="toggleMode()" style="display:none;">🖌️ PAINTING</button>
+
+<!-- Reactions (toggled from the rail) -->
+<div id="react-row" style="display:none;">
+    <button onclick="sendReaction('👀')">👀</button>
+    <button onclick="sendReaction('😱')">😱</button>
+    <button onclick="sendReaction('🎉')">🎉</button>
+    <button onclick="sendReaction('🫵')">🫵</button>
+    <button onclick="sendReaction('💀')">💀</button>
+    <button onclick="sendReaction('🤡')">🤡</button>
 </div>
 
 <div id="hand-menu"></div>
@@ -1473,7 +1498,7 @@ socket.on('gameState', (state) => {
 
     if (tsActive && !inLobby) {
         hide('room-lobby');
-        document.getElementById('monitor-hud').style.display = 'flex';
+        document.getElementById('monitor-hud').style.display = 'none'; // decluttered top
         document.getElementById('phase-hud').style.display = 'flex';
     } else if (inLobby || !selectedGame) {
         document.getElementById('monitor-hud').style.display = 'none';
@@ -1495,6 +1520,7 @@ socket.on('gameState', (state) => {
                 // Re-init hand with current lobby colour each round
                 (function(){const c=handPaintCvs.getContext('2d');c.fillStyle=activeColor;c.fillRect(0,0,playerSize,playerSize);})();
                 handFlipped=false; handDirty=true; isPaint=false; isDrop=false;
+                tsResetLock(); updateUI();
                 const fb=document.getElementById('flipBtn');if(fb)fb.style.background='#333';
                 scheduleAvatarSync();
                 const snapCamera = () => {
@@ -1868,7 +1894,7 @@ socket.on('pokeResult',({hit,name,pokesLeft,out})=>{
 socket.on('triggerPickleSlide',()=>{ isDead=true; deadAt=Date.now(); document.getElementById('modeBtn').innerText='💀 DEAD'; document.getElementById('modeBtn').style.background='#000'; updateUI(); });
 socket.on('loadMap',({dataUrl,name})=>{ const img=new Image(); img.onload=()=>setBackground(img,name); img.src=dataUrl; });
 
-function hiderDown(sx,sy){const _hm=document.getElementById('hand-menu');if(_hm&&_hm.style.display==='block'){_hm.style.display='none';return;}if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if(isPaint&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=handPaintCvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
+function hiderDown(sx,sy){const _hm=document.getElementById('hand-menu');if(_hm&&_hm.style.display==='block'){_hm.style.display='none';return;}if(tsLocked){panLast={x:sx,y:sy};dragMode='pan';return;}if(isDrop){dropTarget={x:sx,y:sy};dragMode='drop';}else if(isPaint&&onAvatar(sx,sy)){if(!tsPaintingThisGesture){const p=handPaintCvs.getContext('2d');tsUndoStack.push(p.getImageData(0,0,playerSize,playerSize));if(tsUndoStack.length>20)tsUndoStack.shift();tsPaintingThisGesture=true;}paintAt(sx,sy);dragMode='paint';}else if(!isPaint&&onAvatar(sx,sy)){moveStart(sx,sy);dragMode='blob';dragFollowing=true;}else{panLast={x:sx,y:sy};dragMode='pan';}}
 function hiderMove(sx,sy){if(dragMode==='paint')paintAt(sx,sy);else if(dragMode==='blob')moveTo(sx,sy);else if(dragMode==='drop')dropTarget={x:sx,y:sy};else if(dragMode==='pan'){camera.x+=sx-panLast.x;camera.y+=sy-panLast.y;panLast={x:sx,y:sy};clampCamera();}}
 function hiderUp(){if(dragMode==='drop'&&dropTarget&&!isDead){pickColorAt(dropTarget.x,dropTarget.y);isPaint=true;isDrop=false;updateUI();}dragMode=null;dragFollowing=false;moveLast=null;paintLast=null;tsPaintingThisGesture=false;}
 
@@ -1890,7 +1916,16 @@ function moveStart(sx,sy){moveLast={x:sx,y:sy};}
 function moveTo(sx,sy){if(!moveLast){moveLast={x:sx,y:sy};return;}player.x+=(sx-moveLast.x)/camera.scale;player.y+=(sy-moveLast.y)/camera.scale;moveLast={x:sx,y:sy};clampPlayerToSpace();}
 function deadSlide(e){const t=Math.min(1,e/1200),ease=1-Math.pow(1-t,3),wob=Math.sin(e/80)*(1-Math.min(1,e/600))*8;return{x:wob,y:ease*1500,rot:ease*1.5};}
 function meSeeker(){return seekerSocketIds.includes(socket.id);}
-function findMe(){if(isJoined&&!meSeeker()){focusAvatar();selfFlashUntil=Date.now()+2000;}}
+function findMe(){
+    if(isJoined&&!meSeeker()){
+        // Gentler zoom than focusAvatar so you don't get yanked in too close
+        camera.scale=Math.min(canvas.width,canvas.height)*0.32/playerSize;
+        camera.x=canvas.width/2-(player.x+playerSize/2)*camera.scale;
+        camera.y=canvas.height/2-(player.y+playerSize/2)*camera.scale;
+        clampCamera();
+        selfFlashUntil=Date.now()+2800;
+    }
+}
 function zoomWhole(){if(meSeeker())focusWholeSpace();}
 function updateUI(){
     if(!isDead){
@@ -1903,13 +1938,48 @@ function updateUI(){
     }
     updateBrushPreview();
 }
-function toggleMode(){ if(isDead)return; isPaint=!isPaint; isDrop=false; updateUI(); }
+function toggleMode(){ if(isDead||tsLocked)return; isPaint=!isPaint; isDrop=false; updateUI(); }
 function updateBrushPreview(){
     const el=document.getElementById('brush-preview'); if(!el)return;
     const v=parseFloat(document.getElementById('brushSize').value)||10;
-    const d=Math.max(4,Math.min(30,v));
+    const d=Math.max(4,Math.min(22,v));
     el.style.width=d+'px'; el.style.height=d+'px';
     el.style.background=(typeof activeColor!=='undefined')?activeColor:'#fff';
+}
+function brushStep(d){
+    const s=document.getElementById('brushSize');
+    let v=(parseInt(s.value)||10)+d*2; v=Math.max(1,Math.min(30,v));
+    s.value=v; const lbl=document.getElementById('brushLabel'); if(lbl)lbl.innerText=v;
+    updateBrushPreview();
+}
+function toggleReactRow(){ const r=document.getElementById('react-row'); r.style.display=(r.style.display==='flex')?'none':'flex'; }
+
+let tsLocked=false;
+function toggleLockIn(){
+    if(isDead)return;
+    tsLocked=!tsLocked;
+    socket.emit('tsLockIn',{locked:tsLocked});
+    const b=document.getElementById('lockBtn');
+    if(b){ b.classList.toggle('locked',tsLocked); b.innerHTML = tsLocked?'🔓<small>LOCKED</small>':'🔒<small>LOCK IN</small>'; }
+    if(tsLocked){ isDrop=false; }
+    showToast(tsLocked?'🔒 Locked in — your spot & paint are safe. Tap to edit again.':'🔓 Unlocked — you can edit again.');
+    updateUI();
+}
+function tsResetLock(){
+    tsLocked=false;
+    const b=document.getElementById('lockBtn');
+    if(b){ b.classList.remove('locked'); b.innerHTML='🔒<small>LOCK IN</small>'; }
+}
+function syncFloatMode(){
+    const btn=document.getElementById('modeBtn'); if(!btn)return;
+    const railVisible=getComputedStyle(document.getElementById('ui-bar')).display!=='none';
+    const show=isJoined&&!meSeeker()&&!isDead&&!tsLocked&&railVisible&&(gamePhase==='HIDING'||gamePhase==='SEEKING');
+    if(!show){ btn.style.display='none'; return; }
+    const sx=camera.x+(player.x+playerSize/2)*camera.scale;
+    const sy=camera.y+(player.y)*camera.scale;
+    btn.style.display='block';
+    btn.style.left=Math.max(70,Math.min(window.innerWidth-70,sx))+'px';
+    btn.style.top=Math.max(90,Math.min(window.innerHeight-90,sy-24))+'px';
 }
 function tsUndo(){if(tsUndoStack.length===0)return;const snap=tsUndoStack.pop();handPaintCvs.getContext('2d').putImageData(snap,0,0);handDirty=true;scheduleAvatarSync();}
 function drawNoSignal(){ctx.fillStyle='#0b0b14';ctx.fillRect(0,0,SPACE_W,SPACE_H);ctx.fillStyle='rgba(255,255,255,0.05)';for(let gx=0;gx<SPACE_W;gx+=40)ctx.fillRect(gx,0,1,SPACE_H);}
@@ -1939,8 +2009,8 @@ wheelCvs.onmousedown=(e)=>{updateColorFromMath(e.clientX,e.clientY);};
 wheelCvs.onmousemove=(e)=>{if(e.buttons===1)updateColorFromMath(e.clientX,e.clientY);};
 document.getElementById('brightnessSlider').addEventListener('input',(e)=>{cLight=e.target.value;applyColor();drawWheel();});
 function applyColor(){activeColor=`hsl(${cHue},${cSat}%,${cLight}%)`;document.getElementById('colorSwatch').style.background=activeColor;const sc=document.getElementById('so-color-swatch');if(sc)sc.style.background=activeColor;updateBrushPreview();}
-document.getElementById('brushSize').addEventListener('input',(e)=>{document.getElementById('brushLabel').innerText=e.target.value+'px';updateBrushPreview();showBrushPreview=true;clearTimeout(brushPreviewTimeout);brushPreviewTimeout=setTimeout(()=>showBrushPreview=false,800);});
-document.getElementById('eyedropperBtn').onclick=()=>{if(isDead)return;isDrop=true;isPaint=false;updateUI();};
+document.getElementById('brushSize').addEventListener('input',(e)=>{document.getElementById('brushLabel').innerText=e.target.value;updateBrushPreview();showBrushPreview=true;clearTimeout(brushPreviewTimeout);brushPreviewTimeout=setTimeout(()=>showBrushPreview=false,800);});
+document.getElementById('eyedropperBtn').onclick=()=>{if(isDead||tsLocked)return;isDrop=true;isPaint=false;showToast('💧 Tap the room to copy that color');updateUI();};
 document.getElementById('whistleBtn').onclick=()=>{if(!isDead)whistlePulseStart=Date.now();};
 
 // Onboarding
@@ -1980,6 +2050,12 @@ function loop(){
         else if(_rv){ctx.filter='drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 0 10px rgba(255,255,255,0.5))';}
         else if(_wA){const _pr=_wEl/800;ctx.filter=`drop-shadow(0 0 ${Math.round(16*(1-_pr))}px rgba(255,255,255,${(0.85*(1-_pr)).toFixed(2)}))`;}
         ctx.drawImage(handComposed,0,0);ctx.filter='none';
+        // Move-mode outline so you know dragging will move (not paint) the hand
+        if(!isDead&&!isPaint&&!isDrop&&(gamePhase==='HIDING'||gamePhase==='SEEKING')){
+            const _mp=0.5+0.5*Math.sin(_n/260);
+            ctx.save();ctx.strokeStyle=`rgba(124,196,255,${(0.55+0.35*_mp).toFixed(2)})`;ctx.lineWidth=2.5;ctx.setLineDash([6,4]);
+            ctx.strokeRect(-3,-3,playerSize+6,playerSize+6);ctx.setLineDash([]);ctx.restore();
+        }
         if(_fl){ctx.fillStyle=`rgba(255,235,59,${(0.7+0.3*_pu).toFixed(2)})`;ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('▼ YOU',playerSize/2,-8);}
         if(!_wA&&_wEl>=0)whistlePulseStart=0;}
         if(revealHead){const _rh=hashHue(myToken);ctx.save();ctx.beginPath();ctx.arc(playerSize/2,-20,11,0,Math.PI*2);ctx.fillStyle=`hsl(${_rh},62%,42%)`;ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((playerName||'?')[0].toUpperCase(),playerSize/2,-20);ctx.restore();}
@@ -2044,14 +2120,8 @@ function loop(){
     if(!scanlinePattern){const sc=document.createElement('canvas');sc.width=1;sc.height=3;const sx=sc.getContext('2d');sx.fillStyle='rgba(0,0,0,0.06)';sx.fillRect(0,0,1,1);scanlinePattern=ctx.createPattern(sc,'repeat');}
     ctx.fillStyle=scanlinePattern;ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    if(gamePhase==='SEEKING'&&meSeeker()){
-        const now=Date.now(),rx=seekerReticle.x,ry=seekerReticle.y,cooldownActive=now<seekerReticle.pokeCooldownUntil,coolProg=cooldownActive?1-(seekerReticle.pokeCooldownUntil-now)/700:1;
-        ctx.save();ctx.strokeStyle=cooldownActive?'rgba(255,200,0,0.6)':'rgba(255,255,255,0.82)';ctx.lineWidth=1.5;
-        const arm=20,gap=11;ctx.beginPath();ctx.moveTo(rx-arm-gap,ry);ctx.lineTo(rx-gap,ry);ctx.moveTo(rx+gap,ry);ctx.lineTo(rx+arm+gap,ry);ctx.moveTo(rx,ry-arm-gap);ctx.lineTo(rx,ry-gap);ctx.moveTo(rx,ry+gap);ctx.lineTo(rx,ry+arm+gap);ctx.stroke();
-        const b=13,bl=5;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(rx-b,ry-b+bl);ctx.lineTo(rx-b,ry-b);ctx.lineTo(rx-b+bl,ry-b);ctx.moveTo(rx+b-bl,ry-b);ctx.lineTo(rx+b,ry-b);ctx.lineTo(rx+b,ry-b+bl);ctx.moveTo(rx-b,ry+b-bl);ctx.lineTo(rx-b,ry+b);ctx.lineTo(rx-b+bl,ry+b);ctx.moveTo(rx+b-bl,ry+b);ctx.lineTo(rx+b,ry+b);ctx.lineTo(rx+b,ry+b-bl);ctx.stroke();
-        if(cooldownActive){ctx.strokeStyle='rgba(255,200,0,0.55)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(rx,ry,22,-Math.PI/2,-Math.PI/2+coolProg*Math.PI*2);ctx.stroke();}
-        ctx.restore();
-    }
+    // (Seeker crosshair removed — seekers just tap a hider to poke, no aiming.)
+    syncFloatMode();
     requestAnimationFrame(loop);
 }
 
