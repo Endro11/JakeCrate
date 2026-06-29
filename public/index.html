@@ -335,7 +335,7 @@
         .sc-sub   { font-size:0.78em; color:#aaa; text-align:center; letter-spacing:1px; }
         /* Role reveal */
         #sc-driver-card { background:rgba(0,0,0,0.45); border:2px solid rgba(255,204,0,0.5); border-radius:18px; padding:18px 24px; width:min(340px,90%); display:flex; flex-direction:column; align-items:center; gap:8px; }
-        #sc-driver-emoji { font-size:3.5em; }
+        #sc-driver-emoji { display:flex; justify-content:center; }
         #sc-driver-name  { font-family:'Press Start 2P', monospace; font-size:0.85em; color:#ffcc00; text-align:center; }
         #sc-driver-blurb { font-size:0.75em; color:#ccc; text-align:center; line-height:1.5; }
         .sc-role-badge   { font-family:'Press Start 2P', monospace; font-size:0.7em; padding:6px 14px; border-radius:8px; text-transform:uppercase; }
@@ -2974,6 +2974,14 @@ socket.on('rrTimer', ({ timeLeft, phase }) => {
 const SC_SCREENS = ['sc-role-screen','sc-pit-screen','sc-race-screen','sc-reveal-screen','sc-end-screen'];
 let scMyRole = null, scMyTeamIdx = null, scMyTasks = [], scLaneAnimFrames = {}, scRaceInterval = null;
 
+// Driver portrait image (falls back to 🔥 for pyro / unknown)
+function scPortrait(driver, px) {
+    if (driver && driver.id) {
+        return `<img src="/sprites/drivers/${driver.id}.png" alt="" style="height:${px}px;width:auto;image-rendering:pixelated;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));">`;
+    }
+    return `<span style="font-size:${px}px;line-height:1;">🔥</span>`;
+}
+
 function scShowOnly(id) {
     // Hide the hub + lobby so their footer (share/leave/close) can't bleed through
     const hub = document.getElementById('hub-screen'); if (hub) hub.style.display = 'none';
@@ -2991,7 +2999,7 @@ function scCleanup() {
 // ── Role reveal ──────────────────────────────────────────────────────────────
 socket.on('scYourRole', ({ role, partner, driver }) => {
     scMyRole = role;
-    document.getElementById('sc-driver-emoji').innerText = driver ? driver.emoji : '🔥';
+    document.getElementById('sc-driver-emoji').innerHTML = scPortrait(driver, 100);
     document.getElementById('sc-driver-name').innerText  = driver ? driver.name  : 'PYROMANIAC';
     document.getElementById('sc-driver-blurb').innerText = driver ? driver.blurb : 'Watch. Hope. Pray someone crashes.';
     const badge = document.getElementById('sc-role-badge');
@@ -3025,7 +3033,7 @@ socket.on('scPitStart', ({ role, lap, timeLeft, tasks, driver }) => {
     scMyTasks = tasks || [];
     document.getElementById('sc-pit-lap').innerText    = `LAP ${lap} PIT`;
     document.getElementById('sc-pit-timer').innerText  = timeLeft;
-    document.getElementById('sc-pit-driver-emoji').innerText = driver ? driver.emoji : '';
+    document.getElementById('sc-pit-driver-emoji').innerHTML = driver ? scPortrait(driver, 46) : '';
     document.getElementById('sc-pit-driver-name').innerText  = driver ? driver.name  : '';
 
     const instrView = document.getElementById('sc-instructor-view');
@@ -3558,7 +3566,7 @@ function scStartRaceCanvas() {
             ctx.textAlign = 'left';
             ctx.font = `bold ${fs}px sans-serif`;
             ctx.fillStyle = team.crashed ? '#bbb' : '#fff';
-            ctx.fillText(`${team.driver.emoji} ${team.driver.name}`, textX, midY - fs * 0.6);
+            ctx.fillText(`${team.driver.name}`, textX, midY - fs * 0.6);
             ctx.font = `bold ${Math.round(fs * 1.05)}px monospace`;
             ctx.fillStyle = team.crashed ? '#ef5350' : '#4fc3f7';
             ctx.fillText(team.crashed ? 'OUT 💥' : `${team.speed} MPH`, textX, midY + fs * 0.75);
@@ -3598,7 +3606,7 @@ socket.on('scPitReveal', ({ lap, results }) => {
         }).join('');
         div.innerHTML = `
             <div class="sc-reveal-header">
-                <div class="sc-reveal-driver">${r.driverEmoji}</div>
+                <div class="sc-reveal-driver">${scPortrait({ id: r.driverId }, 48)}</div>
                 <div class="sc-reveal-info">
                     <div class="sc-reveal-dname">${r.driverName}</div>
                     <div class="sc-reveal-crew">📋 ${r.instructorName} &nbsp;🔧 ${r.executorName}</div>
@@ -3623,7 +3631,7 @@ socket.on('scGameEnd', ({ standings }) => {
         div.innerHTML = `
             <div class="sc-podium-medal">${s.crashed ? '💥' : medals[i] || '🏁'}</div>
             <div class="sc-podium-info">
-                <div class="sc-podium-driver">${s.driver.emoji} ${s.driver.name}</div>
+                <div class="sc-podium-driver" style="display:flex;align-items:center;gap:6px;">${scPortrait(s.driver, 34)}<span>${s.driver.name}</span></div>
                 <div class="sc-podium-crew">📋 ${s.instructorName} &nbsp;🔧 ${s.executorName}</div>
             </div>
             <div class="sc-podium-speed">${s.crashed ? 'CRASHED L'+s.crashedOnLap : s.totalSpeed+' TOT'}</div>`;

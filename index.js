@@ -1249,7 +1249,7 @@ function sc_resolvePit(room) {
         }
         return {
             teamIdx: team.teamIdx,
-            driverName: team.driver.name, driverEmoji: team.driver.emoji,
+            driverName: team.driver.name, driverEmoji: team.driver.emoji, driverId: team.driver.id,
             instructorName: room.players[team.instructorId]?.name || '?',
             executorName:   room.players[team.executorId]?.name   || '?',
             tasks: team.currentTasks.map(t => ({
