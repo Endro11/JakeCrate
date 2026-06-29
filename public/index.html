@@ -1567,14 +1567,19 @@ function rebuildHandCanvas() {
     // Clip painted colours to the emoji's exact alpha silhouette
     t.globalCompositeOperation = 'destination-in';
     t.drawImage(handMasks[currentHandIdx], 0, 0);
-    // 3-D depth pass: overlay emoji luminance only (grayscale strips the yellow
-    // skin-tone, leaving just the light/dark shading between fingers)
-    t.globalCompositeOperation = 'source-over';
-    t.filter = 'grayscale(1) brightness(1.4) contrast(0.85)';
-    t.globalAlpha = 0.38;
+    // 3-D depth pass: MULTIPLY the emoji's luminance so the chosen colour keeps
+    // its true hue (shadows darken the picked colour instead of greying it out).
+    // brightness boost keeps highlights near-white so they barely darken the fill.
+    t.globalCompositeOperation = 'multiply';
+    t.filter = 'grayscale(1) brightness(1.6) contrast(1.1)';
+    t.globalAlpha = 0.6;
     t.drawImage(handMasks[currentHandIdx], 0, 0);
     t.filter = 'none';
     t.globalAlpha = 1;
+    // Re-clip to silhouette (multiply can't add pixels, but keep it tidy)
+    t.globalCompositeOperation = 'destination-in';
+    t.drawImage(handMasks[currentHandIdx], 0, 0);
+    t.globalCompositeOperation = 'source-over';
 
     // Step 2: write to handComposed, applying flip here so the baked-in
     // avatar dataUrl that other players receive is already correctly mirrored
