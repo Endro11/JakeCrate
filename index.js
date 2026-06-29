@@ -119,6 +119,38 @@ function makeRoom(code) {
 
 function getRoom(code) { return rooms[code] || null; }
 
+// Deferred eviction: socketId -> setTimeout handle (cancelled if player reconnects in time)
+const disconnectTimers = {};
+
+// Shared cleanup called on full eviction (leaveRoom, kickPlayer, or after 30s grace)
+function evictPlayer(room, id) {
+    if (!room.players[id]) return;
+    const name = room.players[id].name || '?';
+    delete room.players[id];
+    delete room.avatars[id];
+    delete room.lastReactionTimes[id];
+    if (id === room.seekerSocketId) room.seekerSocketId = null;
+    room.seekerSocketIds = room.seekerSocketIds.filter(x => x !== id);
+    delete room.seekerPokes[id]; delete room.seekerCameras[id];
+    broadcastRoom(room, 'updatePlayers', room.players);
+    if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
+    pp_recheckProgress(room);
+    transferHostIfNeeded(room);
+    broadcastGameState(room);
+    console.log(`👋 ${name} evicted from ${room.code}`);
+    if (Object.keys(room.players).length === 0) clearAndDeleteRoom(room);
+}
+
+function clearAndDeleteRoom(room) {
+    clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
+    clearInterval(room.sqTimer);   clearTimeout(room.sqTimer);
+    clearInterval(room.ppTimer);   clearTimeout(room.ppTimer);
+    clearInterval(room.rrTimer);   clearTimeout(room.rrTimer);
+    clearInterval(room.scTimer);   clearTimeout(room.scTimer);
+    delete rooms[room.code];
+    console.log(`🗑️  Room ${room.code} removed`);
+}
+
 function socketRoom(socket) {
     for (const code of socket.rooms) {
         if (code !== socket.id && rooms[code]) return rooms[code];
@@ -156,12 +188,132 @@ function isHost(room, socket) {
 
 function transferHostIfNeeded(room) {
     if (room.hostSocketId) return; // still has a host
-    const next = Object.keys(room.players)[0];
+    const next = Object.entries(room.players).find(([, p]) => !p.disconnected)?.[0];
     if (!next) return;
     room.hostSocketId = next;
     room.hostToken = room.players[next]?.token || next;
     broadcastRoom(room, 'hostChanged', { hostSocketId: next });
     console.log(`👑 Host transferred to ${room.players[next]?.name} in room ${room.code}`);
+}
+
+// ─── Reconnect support ────────────────────────────────────────────────────────
+
+// When a player gets a new socket.id on reconnect, any per-game state keyed by
+// their old socket.id is orphaned. This re-points every known map/field.
+// Must run BEFORE the old id's records are deleted.
+function rekeySocketState(room, oldId, newId) {
+    if (!oldId || oldId === newId) return;
+    const maps = [
+        'avatars', 'lastReactionTimes', 'seekerPokes', 'seekerCameras', 'viewportPoints',
+        'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
+        'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
+        'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
+    ];
+    maps.forEach(key => {
+        if (room[key] && Object.prototype.hasOwnProperty.call(room[key], oldId)) {
+            room[key][newId] = room[key][oldId];
+            delete room[key][oldId];
+        }
+    });
+    if (room.ppStorytellerId === oldId) room.ppStorytellerId = newId;
+    if (Array.isArray(room.ppStorytellerIds)) {
+        room.ppStorytellerIds = room.ppStorytellerIds.map(id => id === oldId ? newId : id);
+    }
+    if (Array.isArray(room.ppTable)) {
+        room.ppTable.forEach(c => { if (c.submitterId === oldId) c.submitterId = newId; });
+    }
+    if (room.sqByeId === oldId) room.sqByeId = newId;
+    if (Array.isArray(room.sqMatchups)) {
+        room.sqMatchups.forEach(m => {
+            if (m.p1Id === oldId) m.p1Id = newId;
+            if (m.p2Id === oldId) m.p2Id = newId;
+        });
+    }
+    if (Array.isArray(room.scTeams)) {
+        room.scTeams.forEach(t => {
+            if (t.executorId === oldId) t.executorId = newId;
+            if (t.instructorId === oldId) t.instructorId = newId;
+        });
+    }
+    if (Array.isArray(room.rrBattles)) {
+        room.rrBattles.forEach(b => {
+            if (b.p1 === oldId) b.p1 = newId;
+            if (b.p2 === oldId) b.p2 = newId;
+            if (b.votes && Object.prototype.hasOwnProperty.call(b.votes, oldId)) {
+                b.votes[newId] = b.votes[oldId];
+                delete b.votes[oldId];
+            }
+        });
+    }
+    if (room.scPyroId === oldId) room.scPyroId = newId;
+}
+
+// Builds a snapshot of where this player is in the active round.
+// Sent on every (re)join so the client can restore the correct screen.
+function buildFullSnapshot(room, socket) {
+    const base = { gamePhase: room.gamePhase, selectedGame: room.selectedGame, timeLeft: room.timeLeft };
+    switch (room.selectedGame) {
+        case 'tacostealth':
+            return { ...base, ts: {
+                isSeeker: room.seekerSocketIds.includes(socket.id),
+                isDead: !!(room.players[socket.id] && room.players[socket.id].isDead),
+                pokesLeft: room.seekerPokes[socket.id] ?? room.seekerPokesLeft,
+            }};
+        case 'strokeoff':
+            return { ...base, so: {
+                phase: room.strokePhase,
+                theme: room.strokeTheme,
+                painting: room.strokePainting,
+                myPart: room.strokePlayerParts[socket.id] || null,
+                hasVoted: !!room.strokeVotes[socket.id],
+            }};
+        case 'squiggle': {
+            const matchup = (room.sqMatchups || [])[room.sqCurrentMatchup] || null;
+            return { ...base, sq: {
+                phase: room.sqPhase, round: room.sqRound, matchup,
+                myHistory: room.sqHistories[socket.id] || [],
+                mySquiggle: room.sqSquiggles[socket.id] || null,
+                hasVoted: !!room.sqVotes[socket.id],
+                timeLeft: room.sqTimeLeft,
+            }};
+        }
+        case 'pikpic':
+            return { ...base, pp: {
+                phase: room.ppPhase, round: room.ppRound,
+                storytellerId: room.ppStorytellerId,
+                storytellerIds: room.ppStorytellerIds,
+                isStoryteller: socket.id === room.ppStorytellerId,
+                clue: room.ppClue,
+                table: room.ppTable,
+                hand: room.ppHands[socket.id] || [],
+                hasSubmitted: (room.ppTable || []).some(c => c.submitterId === socket.id),
+                hasVoted: !!room.ppVotes[socket.id],
+                timeLeft: room.ppTimeLeft,
+            }};
+        case 'rizzorroast': {
+            const battle = (room.rrBattles || [])[room.rrCurrentBattle] || null;
+            return { ...base, rr: {
+                phase: room.rrPhase, template: room.rrTemplate,
+                myFills: room.rrPlayerFills[socket.id] || null,
+                fillReady: !!room.rrFillReady[socket.id],
+                recordReady: !!room.rrRecordReady[socket.id],
+                battle,
+                hasVoted: !!(battle && battle.votes && battle.votes[socket.id]),
+                timeLeft: room.rrTimeLeft,
+            }};
+        }
+        case 'splitcrew': {
+            const myTeam = (room.scTeams || []).find(t => t.executorId === socket.id || t.instructorId === socket.id) || null;
+            return { ...base, sc: {
+                phase: room.scPhase, lap: room.scLap,
+                isPyro: socket.id === room.scPyroId,
+                role: myTeam ? (myTeam.executorId === socket.id ? 'executor' : 'instructor') : null,
+                team: myTeam, timeLeft: room.scTimeLeft,
+            }};
+        }
+        default:
+            return base;
+    }
 }
 
 // ─── Taco Stealth game logic ──────────────────────────────────────────────────
@@ -214,7 +366,7 @@ function ts_returnToLobby(room) {
 }
 
 function ts_checkReveal(room) {
-    const hiders = Object.values(room.players).filter(p => !room.seekerSocketIds.includes(p.id));
+    const hiders = Object.values(room.players).filter(p => !room.seekerSocketIds.includes(p.id) && !p.disconnected);
     if (hiders.length === 0 || hiders.every(p => p.isDead)) ts_enterReveal(room);
 }
 
@@ -906,22 +1058,24 @@ function pp_recheckProgress(room) {
     if (!room) return;
     const active = ['CLUE', 'SUBMIT', 'VOTE'].includes(room.ppPhase);
     if (!active) return;
-    // Not enough players left to continue a Dixit-style round → bail to lobby
-    if (Object.keys(room.players).length < 2) { pp_returnToLobby(room); return; }
+    // Count only connected players for progress checks; disconnected ones are skipped
+    const activePlayers = Object.entries(room.players).filter(([, p]) => !p.disconnected);
+    if (activePlayers.length < 2) { pp_returnToLobby(room); return; }
 
     if (room.ppPhase === 'CLUE') {
-        if (!room.players[room.ppStorytellerId]) {
+        const stHere = room.players[room.ppStorytellerId] && !room.players[room.ppStorytellerId].disconnected;
+        if (!stHere) {
             clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
             if (room.ppRound >= 3) pp_returnToLobby(room);
             else pp_startRound(room, room.ppRound + 1);
         }
     } else if (room.ppPhase === 'SUBMIT') {
-        // storyteller already played their card; everyone present should submit one
-        if (room.ppTable.length >= Object.keys(room.players).length) {
+        // Advance once all active (non-disconnected) players have submitted
+        if (room.ppTable.length >= activePlayers.length) {
             clearInterval(room.ppTimer); pp_openVoting(room);
         }
     } else if (room.ppPhase === 'VOTE') {
-        const nonStory = Object.keys(room.players).filter(id => id !== room.ppStorytellerId);
+        const nonStory = activePlayers.map(([id]) => id).filter(id => id !== room.ppStorytellerId);
         if (Object.keys(room.ppVotes).length >= nonStory.length) {
             clearInterval(room.ppTimer); pp_resolveVotes(room);
         }
@@ -1463,19 +1617,31 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Evict any stale socket sharing this token (page refresh / duplicate tab)
+        // Evict any stale socket sharing this token (page refresh / duplicate tab / reconnect)
         const staleId = Object.keys(room.players).find(id => room.players[id].token === token && id !== socket.id);
         if (staleId) {
+            // Cancel pending 30s eviction timer — player came back in time
+            if (disconnectTimers[staleId]) {
+                clearTimeout(disconnectTimers[staleId]);
+                delete disconnectTimers[staleId];
+            }
             const staleSock = io.sockets.sockets.get(staleId);
             if (staleSock) { staleSock.leave(code); staleSock.emit('kicked', { reason: 'reconnected' }); }
+            // Rekey per-game state (ppHands, ppVotes, sqMatchups, etc.) to the new id
+            // BEFORE deleting old records so nothing is orphaned
+            rekeySocketState(room, staleId, socket.id);
             delete room.players[staleId];
             delete room.avatars[staleId];
             delete room.lastReactionTimes[staleId];
             if (room.hostSocketId === staleId) room.hostSocketId = socket.id;
             if (room.seekerSocketId === staleId) room.seekerSocketId = socket.id;
-            room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== staleId);
+            if (room.seekerSocketIds.includes(staleId)) {
+                room.seekerSocketIds = room.seekerSocketIds.map(id => id === staleId ? socket.id : id);
+            } else {
+                room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== staleId);
+            }
             delete room.seekerPokes[staleId]; delete room.seekerCameras[staleId];
-            console.log(`🔄 Evicted stale session for ${playerData.name} (${staleId})`);
+            console.log(`🔄 Evicted stale session for ${playerData.name} (${staleId} → ${socket.id})`);
         }
 
         socket.join(code);
@@ -1522,6 +1688,9 @@ io.on('connection', (socket) => {
         if (Object.keys(room.gameVotes).length > 0) {
             socket.emit('gameVotes', { votes: room.gameVotes, players: room.players });
         }
+        // Send full game state snapshot so reconnecting clients restore the right screen
+        socket.emit('stateSnapshot', buildFullSnapshot(room, socket));
+        room.lastActivity = Date.now();
     });
 
     socket.on('selectGame', (gameId) => {
@@ -2035,56 +2204,41 @@ io.on('connection', (socket) => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
         if (!room.players[targetId]) return;
+        if (disconnectTimers[targetId]) { clearTimeout(disconnectTimers[targetId]); delete disconnectTimers[targetId]; }
         const targetSock = io.sockets.sockets.get(targetId);
         if (targetSock) { targetSock.leave(room.code); targetSock.emit('kicked', { reason: 'removed by host' }); }
-        delete room.players[targetId];
-        delete room.avatars[targetId];
-        delete room.lastReactionTimes[targetId];
-        if (room.seekerSocketId === targetId) room.seekerSocketId = null;
-        room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== targetId);
-        delete room.seekerPokes[targetId]; delete room.seekerCameras[targetId];
-        broadcastRoom(room, 'updatePlayers', room.players);
-        broadcastGameState(room);
-        console.log(`🦵 Host kicked ${targetId} from room ${room.code}`);
+        console.log(`🦵 Host kicked ${room.players[targetId].name} from room ${room.code}`);
+        evictPlayer(room, targetId);
     });
 
     socket.on('leaveRoom', () => {
         const room = socketRoom(socket);
         if (!room) return;
-        const name = room.players[socket.id]?.name || 'Someone';
+        if (disconnectTimers[socket.id]) { clearTimeout(disconnectTimers[socket.id]); delete disconnectTimers[socket.id]; }
         socket.leave(room.code);
-        delete room.players[socket.id];
-        delete room.avatars[socket.id];
-        delete room.lastReactionTimes[socket.id];
-        if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
-        room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== socket.id);
-        delete room.seekerPokes[socket.id]; delete room.seekerCameras[socket.id];
-        broadcastRoom(room, 'updatePlayers', room.players);
-        if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
-        pp_recheckProgress(room);
-        transferHostIfNeeded(room);
-        broadcastGameState(room);
-        console.log(`👋 ${name} left room ${room.code}`);
-        if (Object.keys(room.players).length === 0) {
-            clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
-            clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
-            clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
-            clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
-            clearInterval(room.scTimer); clearTimeout(room.scTimer);
-            delete rooms[room.code];
-        }
+        evictPlayer(room, socket.id);
+    });
+
+    socket.on('passHost', ({ targetId }) => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        if (!room.players[targetId] || room.players[targetId].disconnected) return;
+        room.hostSocketId = targetId;
+        room.hostToken = room.players[targetId].token;
+        broadcastRoom(room, 'hostChanged', { hostSocketId: targetId });
+        console.log(`👑 Host passed to ${room.players[targetId].name} in ${room.code}`);
     });
 
     socket.on('closeRoom', () => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
         broadcastRoom(room, 'roomClosed', {});
-        clearInterval(room.gameTimer); clearTimeout(room.revealTimer);
         Object.keys(room.players).forEach(id => {
+            if (disconnectTimers[id]) { clearTimeout(disconnectTimers[id]); delete disconnectTimers[id]; }
             const s = io.sockets.sockets.get(id);
             if (s) s.leave(room.code);
         });
-        delete rooms[room.code];
+        clearAndDeleteRoom(room);
         console.log(`🚪 Room ${room.code} closed by host`);
     });
 
@@ -2092,37 +2246,36 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         const room = socketRoom(socket);
-        if (!room) return;
-        if (room.players[socket.id]) {
-            console.log(`🔴 ${room.players[socket.id].name} left room ${room.code}`);
-            delete room.players[socket.id];
-            broadcastRoom(room, 'updatePlayers', room.players);
-            if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
-            pp_recheckProgress(room);
-        }
-        if (socket.id === room.seekerSocketId) room.seekerSocketId = null;
-        room.seekerSocketIds = room.seekerSocketIds.filter(id => id !== socket.id);
-        delete room.seekerPokes[socket.id]; delete room.seekerCameras[socket.id];
-        if (socket.id === room.hostSocketId) {
-            room.hostSocketId = null;
-            transferHostIfNeeded(room);
-        }
-        delete room.lastReactionTimes[socket.id];
-        delete room.avatars[socket.id];
+        if (!room || !room.players[socket.id]) return;
+        const player = room.players[socket.id];
+        player.disconnected = true;
+        broadcastRoom(room, 'updatePlayers', room.players);
+        if (room.gamePhase === 'SEEKING') ts_checkReveal(room);
+        pp_recheckProgress(room);
+        if (socket.id === room.hostSocketId) { room.hostSocketId = null; transferHostIfNeeded(room); }
         broadcastGameState(room);
-
-        if (Object.keys(room.players).length === 0) {
-            clearInterval(room.gameTimer);
-            clearTimeout(room.revealTimer);
-            clearInterval(room.sqTimer); clearTimeout(room.sqTimer);
-            clearInterval(room.ppTimer); clearTimeout(room.ppTimer);
-            clearInterval(room.rrTimer); clearTimeout(room.rrTimer);
-            clearInterval(room.scTimer); clearTimeout(room.scTimer);
-            delete rooms[room.code];
-            console.log(`🗑️  Room ${room.code} removed (empty)`);
-        }
+        console.log(`🟡 ${player.name} disconnected (grace 30s) from ${room.code}`);
+        disconnectTimers[socket.id] = setTimeout(() => {
+            delete disconnectTimers[socket.id];
+            if (!rooms[room.code]) return;
+            evictPlayer(room, socket.id);
+        }, 30_000);
     });
 });
+
+// ─── Periodic room GC ─────────────────────────────────────────────────────────
+// Sweep rooms where all players are disconnected and no activity in 5 minutes.
+// Backstop for any disconnect timer that was cancelled or missed.
+setInterval(() => {
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    Object.entries(rooms).forEach(([code, room]) => {
+        const hasConnected = Object.values(room.players).some(p => !p.disconnected);
+        if (!hasConnected && (room.lastActivity || 0) < cutoff) {
+            clearAndDeleteRoom(room);
+            console.log(`🗑️  GC swept idle room ${code}`);
+        }
+    });
+}, 3 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 JakeCrate running on port ${PORT}`));

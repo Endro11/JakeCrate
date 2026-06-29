@@ -152,6 +152,7 @@
         .eb-name { font-size:0.28em; color:#fff; font-family:monospace; background:rgba(0,0,0,0.75); padding:2px 6px; border-radius:3px; white-space:nowrap; margin-top:2px; letter-spacing:1px; }
         @keyframes eb-float { 0%{opacity:1;transform:translateY(0) scale(1)} 25%{transform:translateY(-30px) scale(1.25)} 80%{opacity:1} 100%{opacity:0;transform:translateY(-220px) scale(0.7)} }
 
+        #reconnect-overlay { display:none; position:fixed; inset:0; z-index:600; background:rgba(0,0,8,0.88); flex-direction:column; align-items:center; justify-content:center; color:#fff; font-family:monospace; text-align:center; }
         #volunteer-toast { display:none; position:absolute; top:calc(92px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:25; background:rgba(21,101,192,0.96); color:#fff; font-family:monospace; padding:10px 22px; border-radius:8px; font-size:0.9em; text-align:center; pointer-events:none; border:1px solid #5090ff; white-space:nowrap; animation:toast-in 0.25s ease-out; }
         @keyframes toast-in { from{opacity:0;transform:translateX(-50%) translateY(-8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
         @keyframes btn-wiggle { 0%,88%,100%{transform:rotate(0deg)} 91%{transform:rotate(-3deg)} 95%{transform:rotate(3deg)} 98%{transform:rotate(-1deg)} }
@@ -919,6 +920,13 @@
     <button id="pp-lightbox-action" style="display:none;" onclick="ppLightboxAction(event)"></button>
 </div>
 
+<!-- Reconnect overlay — shown when game is in progress and socket reconnected -->
+<div id="reconnect-overlay">
+    <div style="font-size:2em;margin-bottom:12px;">🔄</div>
+    <div style="font-size:1.1em;font-weight:bold;letter-spacing:2px;margin-bottom:6px;">RECONNECTING…</div>
+    <div style="font-size:0.8em;opacity:0.7;">Syncing with the room</div>
+</div>
+
 <!-- Hold-to-enlarge overlay (global, covers everything) -->
 <div id="pp-hold-overlay">
     <img id="pp-hold-img" src="">
@@ -1259,6 +1267,19 @@ socket.on('connect', () => {
     }
 });
 
+socket.on('disconnect', () => {
+    showToast('⚠️ Connection lost — reconnecting…');
+});
+
+socket.on('stateSnapshot', (data) => {
+    if (!data.selectedGame || data.gamePhase === 'LOBBY') return;
+    if (data.selectedGame === 'pikpic') {
+        handlePpSnapshot(data.pp);
+    } else {
+        showReconnectOverlay();
+    }
+});
+
 // ── Room lobby ─────────────────────────────────────────────────────────────
 function showRoomLobby() {
     hide('hub-screen');
@@ -1421,8 +1442,11 @@ function renderRoomLobby() {
     document.getElementById('rl-players').innerHTML = list.length
         ? list.map(p => {
             const isMe = p.id === socket.id;
+            const offline = p.disconnected ? ' <span style="color:#f44;font-size:0.75em;vertical-align:middle;" title="Disconnected">●</span>' : '';
+            const chipStyle = p.disconnected ? ' style="opacity:0.5"' : '';
             const kickBtn = (isRoomHost && !isMe) ? ` <button class="kick-btn" onclick="kickPlayer('${p.id}')" title="Remove player">✕</button>` : '';
-            return `<div class="lobby-chip">${playerBadge(p.token,p.name)} ${isMe ? '⭐ ' : ''}${p.name}${kickBtn}</div>`;
+            const passBtn = (isRoomHost && !isMe && !p.disconnected) ? ` <button class="kick-btn" onclick="socket.emit('passHost',{targetId:'${p.id}'})" title="Pass host crown" style="background:#7c4dff;">👑</button>` : '';
+            return `<div class="lobby-chip"${chipStyle}>${playerBadge(p.token,p.name)} ${isMe ? '⭐ ' : ''}${p.name}${offline}${passBtn}${kickBtn}</div>`;
           }).join('')
         : '<div class="lobby-chip" style="opacity:.6">No one here yet…</div>';
 
@@ -1465,6 +1489,64 @@ function showToast(msg) {
     t.innerHTML = msg; t.style.display = 'block';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+function showReconnectOverlay() {
+    const el = document.getElementById('reconnect-overlay');
+    if (el) el.style.display = 'flex';
+}
+function hideReconnectOverlay() {
+    const el = document.getElementById('reconnect-overlay');
+    if (el) el.style.display = 'none';
+}
+
+function handlePpSnapshot(pp) {
+    if (!pp) return;
+    hideReconnectOverlay();
+    ppMyHand = pp.hand || [];
+    ppStorytellerId = pp.storytellerId || null;
+    switch (pp.phase) {
+        case 'UPLOAD':
+            ppShow('pp-upload-screen');
+            break;
+        case 'CLUE':
+            if (pp.isStoryteller) {
+                ppShow('pp-clue-screen');
+                ppRenderFan('pp-clue-fan', ppMyHand, 'select');
+            } else {
+                ppShow('pp-wait-screen');
+                document.getElementById('pp-wait-label').innerText = 'Waiting for curator\'s clue…';
+                document.getElementById('pp-wait-timer').innerText = pp.timeLeft > 0 ? pp.timeLeft : '';
+            }
+            break;
+        case 'SUBMIT':
+            if (pp.isStoryteller) {
+                ppShow('pp-wait-screen');
+                document.getElementById('pp-wait-label').innerText = `Your clue: "${pp.clue}" — waiting for others…`;
+            } else if (!pp.hasSubmitted) {
+                ppSelectedCardId = null; ppResetDropZone();
+                ppShow('pp-submit-screen');
+                document.getElementById('pp-submit-clue-display').innerText = `"${pp.clue}"`;
+                ppRenderFan('pp-submit-fan', ppMyHand, 'drag');
+            } else {
+                ppShow('pp-wait-screen');
+                document.getElementById('pp-wait-label').innerText = 'Card submitted — waiting for others…';
+            }
+            break;
+        case 'VOTE':
+            if (pp.table && pp.table.length) {
+                ppShow('pp-vote-screen');
+                document.getElementById('pp-vote-clue').innerText = `"${pp.clue}"`;
+                document.getElementById('pp-vote-timer').innerText = pp.timeLeft > 0 ? pp.timeLeft : '';
+                document.getElementById('pp-vote-hint').innerText = pp.isStoryteller
+                    ? 'You told the clue — watch others vote!'
+                    : 'Tap a card to select · hold to preview · swipe to browse';
+                ppRenderGallery(pp.table, pp.isStoryteller);
+            }
+            break;
+        default:
+            showReconnectOverlay();
+    }
 }
 function flashScreen(color) {
     const f = document.createElement('div');
@@ -3206,6 +3288,7 @@ socket.on('ppUploadProgress', ({ readyCount, totalCount, readyPlayers }) => {
 });
 
 socket.on('ppRoundStart', ({ round, totalRounds, storytellerId, storytellerName, hand, ppScores, players, subUsed, timeLeft }) => {
+    hideReconnectOverlay();
     ppPhase = 'CLUE'; ppMyHand = hand; ppStorytellerId = storytellerId; ppSubUsed = subUsed; ppSelectedCardId = null;
     document.getElementById('pp-result-screen').style.display = 'none';
     document.getElementById('pp-upload-screen').style.display = 'none';
@@ -3241,6 +3324,7 @@ function ppResetDropZone() {
 }
 
 socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
+    hideReconnectOverlay();
     ppPhase = 'SUBMIT';
     const amST = socket.id === storytellerId;
     if (amST) {
@@ -3276,6 +3360,7 @@ socket.on('ppHandUpdate', ({ hand, subUsed }) => {
 });
 
 socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
+    hideReconnectOverlay();
     ppPhase = 'VOTE'; ppStorytellerId = storytellerId;
     ppShow('pp-vote-screen');
     document.getElementById('pp-vote-clue').innerText = `"${clue}"`;
@@ -3304,6 +3389,7 @@ socket.on('ppTimer', ({ timeLeft, phase }) => {
 });
 
 socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, votesPerCard, roundScores, ppScores, players, allGuessed, noneGuessed, isLastRound }) => {
+    hideReconnectOverlay();
     ppPhase = 'RESULT';
     ppShow('pp-result-screen');
     document.getElementById('pp-result-clue').innerText = `"${clue}"`;
@@ -3383,6 +3469,7 @@ function rrSubmitFills() {
 }
 
 socket.on('rrFillPhase', ({ template, timeLeft }) => {
+    hideReconnectOverlay();
     hide('room-lobby'); rrPhase = 'FILL';
     rrShow('rr-fill-screen');
     rrRenderTemplate(template.template, template.blanks);
@@ -3658,6 +3745,7 @@ function scCleanup() {
 
 // ── Role reveal ──────────────────────────────────────────────────────────────
 socket.on('scYourRole', ({ role, partner, driver }) => {
+    hideReconnectOverlay();
     scMyRole = role;
     document.getElementById('sc-driver-emoji').innerHTML = scPortrait(driver, 100);
     document.getElementById('sc-driver-name').innerText  = driver ? driver.name  : 'PYROMANIAC';
@@ -4329,6 +4417,7 @@ function sqDrawSquiggle(ctx, pts, w, h) {
 }
 
 socket.on('sqBeginDraw', ({ round, prompt, squiggle, timeLeft, byeThisRound }) => {
+    hideReconnectOverlay();
     sqRound = round; sqMySquiggle = squiggle; sqPhase = 'DRAW'; sqVoted = false;
     soDrawing = !byeThisRound;
     soGestureId = 0;
@@ -4406,6 +4495,7 @@ function sqStartPlayback(c1, c2, h1, h2, sq1, sq2) {
 }
 
 socket.on('sqBattleBegin', ({ matchupIdx, round, pointValue, prompt, total, p1, p2 }) => {
+    hideReconnectOverlay();
     sqPhase = 'BATTLE'; sqBattleData = { matchupIdx, round, pointValue, prompt, p1, p2 }; sqVoted = false;
     soDrawing = false;
     document.getElementById('so-screen').style.display = 'none';
