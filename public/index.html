@@ -2468,6 +2468,7 @@ function renderUnifiedScoreboard() {
 let fdArenaCanvas = null, fdArenaCtx = null;
 let fdP1Img = null, fdP2Img = null;
 let fdP1Id = null, fdP2Id = null;
+let fdF1Size = { w: 60, h: 70 }, fdF2Size = { w: 60, h: 70 };
 
 function fdShowScreen(id) {
     ['fd-prompt-screen','fd-wait-screen','fd-arena-screen','fd-result-screen'].forEach(s => {
@@ -2483,6 +2484,7 @@ function fdCleanup() {
     hide('so-screen'); soDrawing = false;
     fdP1Img = null; fdP2Img = null;
     fdArenaCtx = null; fdArenaCanvas = null;
+    fdF1Size = { w: 60, h: 70 }; fdF2Size = { w: 60, h: 70 };
 }
 
 function fdAnalyzeAndSubmit() {
@@ -2509,41 +2511,44 @@ function fdAnalyzeAndSubmit() {
     fdShowScreen('fd-wait-screen');
 }
 
-function fdRenderFrame(f1Bodies, f2Bodies, f1hp, f2hp) {
+function fdRenderFrame(f1, f2, f1hp, f2hp) {
     const ctx = fdArenaCtx;
     if (!ctx) return;
-    const cw = 800, ch = 460;
-    ctx.fillStyle = '#0a1220'; ctx.fillRect(0, 0, cw, ch);
-    ctx.fillStyle = '#1e3a5f'; ctx.fillRect(30, 450, 740, 18);
-    fdDrawFighter(ctx, f1Bodies, fdP1Img, '#3a9eff');
-    fdDrawFighter(ctx, f2Bodies, fdP2Img, '#ff5a5a');
+    // Background
+    ctx.fillStyle = '#0a1220'; ctx.fillRect(0, 0, 800, 460);
+    // Center platform
+    ctx.fillStyle = '#2a4a6f';
+    ctx.beginPath(); ctx.roundRect(210, 354, 380, 20, 6); ctx.fill();
+    ctx.fillStyle = '#3a6fa0'; ctx.fillRect(210, 354, 380, 4);
+    // Side ledges
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(75, 402, 90, 14);
+    ctx.fillRect(635, 402, 90, 14);
+    // Fighters
+    fdDrawFighter(ctx, f1, fdP1Img, '#3a9eff', fdF1Size);
+    fdDrawFighter(ctx, f2, fdP2Img, '#ff5a5a', fdF2Size);
+    // Damage % bars (ascending: more damage = bar shrinks from right)
     const hp1 = document.getElementById('fd-hp-p1'), hp2 = document.getElementById('fd-hp-p2');
-    if (hp1) hp1.style.width = Math.max(0, f1hp) + '%';
-    if (hp2) hp2.style.width = Math.max(0, f2hp) + '%';
+    if (hp1) hp1.style.width = Math.max(0, 100 - f1hp) + '%';
+    if (hp2) hp2.style.width = Math.max(0, 100 - f2hp) + '%';
 }
 
-function fdDrawFighter(ctx, bodies, img, color) {
-    const torso = bodies.find(b => b.label === 'torso');
-    bodies.forEach(b => {
-        ctx.save();
-        ctx.translate(b.x, b.y);
-        ctx.rotate(b.angle);
+function fdDrawFighter(ctx, body, img, color, size) {
+    if (!body) return;
+    const { x, y, angle } = body;
+    const w = size?.w || 60, h = size?.h || 70;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else {
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.8;
-        if (b.r) { ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI*2); ctx.fill(); }
-        else { ctx.fillRect(-b.w/2, -b.h/2, b.w, b.h); }
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
         ctx.globalAlpha = 1;
-        ctx.restore();
-    });
-    if (torso && img) {
-        ctx.save();
-        ctx.translate(torso.x, torso.y);
-        ctx.rotate(torso.angle);
-        ctx.globalAlpha = 0.9;
-        ctx.drawImage(img, -58, -120, 116, 185);
-        ctx.globalAlpha = 1;
-        ctx.restore();
     }
+    ctx.restore();
 }
 
 socket.on('fdDrawPhase', ({ prompt, timeLeft }) => {
@@ -2588,8 +2593,10 @@ socket.on('fdSubmitted', ({ count, total }) => {
     if (el) el.innerText = `${count}/${total} fighters ready`;
 });
 
-socket.on('fdFightStart', ({ p1Id, p2Id, p1Name, p2Name, p1Drawing, p2Drawing, matchup, total }) => {
+socket.on('fdFightStart', ({ p1Id, p2Id, p1Name, p2Name, p1Drawing, p2Drawing, matchup, total, f1Size, f2Size }) => {
     fdP1Id = p1Id; fdP2Id = p2Id;
+    fdF1Size = f1Size || { w: 60, h: 70 };
+    fdF2Size = f2Size || { w: 60, h: 70 };
     document.getElementById('fd-p1-name').innerText = p1Name;
     document.getElementById('fd-p2-name').innerText = p2Name;
     document.getElementById('fd-match-num').innerText = matchup + 1;

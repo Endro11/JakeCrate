@@ -451,74 +451,58 @@ const FD_PROMPTS = [
     { text: 'Draw a fighter who fights DIRTY', move: 'headbutt' },
 ];
 
-function fd_createRagdoll(x, startY, masses) {
-    const head      = Bodies.circle(x, startY - 70, 20, { mass: masses.head * 2, label: 'head', frictionAir: 0.01 });
-    const torso     = Bodies.rectangle(x, startY, 28, 50, { mass: masses.torso * 5, label: 'torso', frictionAir: 0.01 });
-    const lUpperArm = Bodies.rectangle(x - 24, startY - 18, 10, 26, { mass: masses.lArm * 1.2, label: 'lUpperArm', frictionAir: 0.01 });
-    const lForearm  = Bodies.rectangle(x - 24, startY + 12, 9, 24, { mass: masses.lArm * 0.8, label: 'lForearm', frictionAir: 0.01 });
-    const rUpperArm = Bodies.rectangle(x + 24, startY - 18, 10, 26, { mass: masses.rArm * 1.2, label: 'rUpperArm', frictionAir: 0.01 });
-    const rForearm  = Bodies.rectangle(x + 24, startY + 12, 9, 24, { mass: masses.rArm * 0.8, label: 'rForearm', frictionAir: 0.01 });
-    const lLeg      = Bodies.rectangle(x - 10, startY + 42, 11, 34, { mass: masses.legs * 2, label: 'lLeg', frictionAir: 0.01 });
-    const rLeg      = Bodies.rectangle(x + 10, startY + 42, 11, 34, { mass: masses.legs * 2, label: 'rLeg', frictionAir: 0.01 });
-    const constraints = [
-        Constraint.create({ bodyA: head,      bodyB: torso,     pointA:{x:0,y:18},   pointB:{x:0,y:-23},  stiffness:0.9,  length:4 }),
-        Constraint.create({ bodyA: torso,     bodyB: lUpperArm, pointA:{x:-14,y:-14},pointB:{x:0,y:-12},  stiffness:0.9,  length:4 }),
-        Constraint.create({ bodyA: lUpperArm, bodyB: lForearm,  pointA:{x:0,y:12},   pointB:{x:0,y:-11},  stiffness:0.75, length:4 }),
-        Constraint.create({ bodyA: torso,     bodyB: rUpperArm, pointA:{x:14,y:-14}, pointB:{x:0,y:-12},  stiffness:0.9,  length:4 }),
-        Constraint.create({ bodyA: rUpperArm, bodyB: rForearm,  pointA:{x:0,y:12},   pointB:{x:0,y:-11},  stiffness:0.75, length:4 }),
-        Constraint.create({ bodyA: torso,     bodyB: lLeg,      pointA:{x:-8,y:24},  pointB:{x:0,y:-16},  stiffness:0.9,  length:3 }),
-        Constraint.create({ bodyA: torso,     bodyB: rLeg,      pointA:{x:8,y:24},   pointB:{x:0,y:-16},  stiffness:0.9,  length:3 }),
-    ];
-    return Composite.create({ bodies:[head,torso,lUpperArm,lForearm,rUpperArm,rForearm,lLeg,rLeg], constraints });
+function fd_fighterSize(masses) {
+    const total = masses.head + masses.torso + masses.lArm + masses.rArm + masses.legs;
+    return { w: Math.round(44 + total * 4), h: Math.round(56 + total * 4), total };
 }
 
-function fd_captureFrame(composite) {
-    return Composite.allBodies(composite).map(b => ({
-        x: b.position.x, y: b.position.y, angle: b.angle, label: b.label,
-        w: (b.bounds.max.x - b.bounds.min.x), h: (b.bounds.max.y - b.bounds.min.y),
-        r: b.circleRadius || null,
-    }));
+function fd_createFighter(x, y, masses) {
+    const { w, h, total } = fd_fighterSize(masses);
+    return Bodies.rectangle(x, y, w, h, {
+        mass: Math.max(1, total),
+        frictionAir: 0.008,
+        restitution: 0.25,
+        friction: 0.1,
+        label: 'fighter',
+    });
 }
 
-function fd_applyMove(f1bodies, f2bodies, moveType) {
-    const f1torso = f1bodies.find(b => b.label === 'torso');
-    const f2torso = f2bodies.find(b => b.label === 'torso');
-    if (!f1torso || !f2torso) return;
+function fd_captureFrame(body) {
+    return { x: body.position.x, y: body.position.y, angle: body.angle };
+}
+
+function fd_applyMove(b1, b2, moveType) {
+    if (!b1 || !b2) return;
     switch (moveType) {
-        case 'headbutt': {
-            const f1head = f1bodies.find(b => b.label === 'head');
-            const f2head = f2bodies.find(b => b.label === 'head');
-            Body.applyForce(f1torso, f1torso.position, { x:  0.08, y: -0.03 });
-            Body.applyForce(f2torso, f2torso.position, { x: -0.08, y: -0.03 });
-            if (f1head) Body.applyForce(f1head, f1head.position, { x:  0.05, y: 0 });
-            if (f2head) Body.applyForce(f2head, f2head.position, { x: -0.05, y: 0 });
+        case 'headbutt':
+            Body.setVelocity(b1, { x:  14, y: -6 });
+            Body.setVelocity(b2, { x: -14, y: -6 });
             break;
-        }
-        case 'windmill': {
-            const f1arms = f1bodies.filter(b => b.label.includes('Arm'));
-            const f2arms = f2bodies.filter(b => b.label.includes('Arm'));
-            f1arms.forEach((b, i) => Body.setAngularVelocity(b, (i % 2 === 0 ? 1 : -1) * 6));
-            f2arms.forEach((b, i) => Body.setAngularVelocity(b, (i % 2 === 0 ? -1 : 1) * 6));
+        case 'windmill':
+            Body.setAngularVelocity(b1,  10);
+            Body.setAngularVelocity(b2, -10);
+            Body.setVelocity(b1, { x:  9, y: -3 });
+            Body.setVelocity(b2, { x: -9, y: -3 });
             break;
-        }
-        case 'kick': {
-            const f1leg = f1bodies.find(b => b.label === 'rLeg');
-            const f2leg = f2bodies.find(b => b.label === 'lLeg');
-            if (f1leg) Body.applyForce(f1leg, f1leg.position, { x:  0.15, y: -0.04 });
-            if (f2leg) Body.applyForce(f2leg, f2leg.position, { x: -0.15, y: -0.04 });
+        case 'kick':
+            Body.setVelocity(b1, { x:  11, y: -9 });
+            Body.setVelocity(b2, { x: -11, y: -9 });
+            Body.setAngularVelocity(b1,  6);
+            Body.setAngularVelocity(b2, -6);
             break;
-        }
         case 'spin':
-            Body.setAngularVelocity(f1torso,  8);
-            Body.setAngularVelocity(f2torso, -8);
+            Body.setAngularVelocity(b1,  14);
+            Body.setAngularVelocity(b2, -14);
+            Body.applyForce(b1, b1.position, { x:  0.6, y: -0.2 });
+            Body.applyForce(b2, b2.position, { x: -0.6, y: -0.2 });
             break;
         case 'bellyflop':
-            Body.applyForce(f1torso, f1torso.position, { x: 0, y: -0.15 });
-            Body.applyForce(f2torso, f2torso.position, { x: 0, y: -0.15 });
+            Body.setVelocity(b1, { x:  6, y: -14 });
+            Body.setVelocity(b2, { x: -6, y: -14 });
             break;
-        default:
-            Body.applyForce(f1torso, f1torso.position, { x:  0.07, y: -0.02 });
-            Body.applyForce(f2torso, f2torso.position, { x: -0.07, y: -0.02 });
+        default: // charge
+            Body.setVelocity(b1, { x:  12, y: -5 });
+            Body.setVelocity(b2, { x: -12, y: -5 });
     }
 }
 
@@ -557,68 +541,81 @@ function fd_nextMatchup(room) {
     room.fdCurrentMatchup++;
     if (room.fdCurrentMatchup >= room.fdMatchups.length) { fd_gameOver(room); return; }
     const { p1Id, p2Id } = room.fdMatchups[room.fdCurrentMatchup];
-    const p1 = room.players[p1Id], p2 = room.players[p2Id];
-    if (!p1 || !p2) { fd_nextMatchup(room); return; }
-    const d1 = room.fdDrawings[p1Id] || { dataUrl: null, masses: { head:1, torso:1, lArm:1, rArm:1, legs:1 } };
-    const d2 = room.fdDrawings[p2Id] || { dataUrl: null, masses: { head:1, torso:1, lArm:1, rArm:1, legs:1 } };
-    broadcastRoom(room, 'fdFightStart', {
-        matchup: room.fdCurrentMatchup, total: room.fdMatchups.length,
-        p1Id, p2Id, p1Name: p1.name, p2Name: p2.name,
-        p1Drawing: d1.dataUrl, p2Drawing: d2.dataUrl,
-    });
-    setTimeout(() => fd_runFight(room, p1Id, p2Id, d1.masses, d2.masses), 1500);
+    if (!room.players[p1Id] || !room.players[p2Id]) { fd_nextMatchup(room); return; }
+    const d1 = room.fdDrawings[p1Id] || { masses: { head:1, torso:1, lArm:1, rArm:1, legs:1 } };
+    const d2 = room.fdDrawings[p2Id] || { masses: { head:1, torso:1, lArm:1, rArm:1, legs:1 } };
+    fd_runFight(room, p1Id, p2Id, d1.masses, d2.masses);
 }
 
 function fd_runFight(room, p1Id, p2Id, m1, m2) {
-    const engine = Engine.create({ gravity: { y: 2 } });
-    const ground = Bodies.rectangle(400, 470, 800, 20, { isStatic: true, label: 'ground' });
-    const wallL  = Bodies.rectangle(5,   250, 10,  500, { isStatic: true });
-    const wallR  = Bodies.rectangle(795, 250, 10,  500, { isStatic: true });
-    Composite.add(engine.world, [ground, wallL, wallR]);
-    const c1 = fd_createRagdoll(160, 320, m1);
-    const c2 = fd_createRagdoll(640, 320, m2);
-    Composite.add(engine.world, [c1, c2]);
-    const f1torso = Composite.allBodies(c1).find(b => b.label === 'torso');
-    const f2torso = Composite.allBodies(c2).find(b => b.label === 'torso');
-    if (f1torso) Body.setVelocity(f1torso, { x:  4, y: -1 });
-    if (f2torso) Body.setVelocity(f2torso, { x: -4, y: -1 });
+    const engine = Engine.create({ gravity: { y: 1.8 } });
+    const platform   = Bodies.rectangle(400, 360, 380, 20, { isStatic: true, label: 'platform' });
+    const leftLedge  = Bodies.rectangle(120, 408,  90, 14, { isStatic: true, label: 'ledge' });
+    const rightLedge = Bodies.rectangle(680, 408,  90, 14, { isStatic: true, label: 'ledge' });
+    Composite.add(engine.world, [platform, leftLedge, rightLedge]);
+
+    const f1body = fd_createFighter(210, 280, m1);
+    const f2body = fd_createFighter(590, 280, m2);
+    Composite.add(engine.world, [f1body, f2body]);
+    Body.setVelocity(f1body, { x:  4, y: -1 });
+    Body.setVelocity(f2body, { x: -4, y: -1 });
+
+    const s1 = fd_fighterSize(m1);
+    const s2 = fd_fighterSize(m2);
+
     room.fdFightEngine = engine;
     room.fdFightTick = 0;
-    room.fdHP = { [p1Id]: 100, [p2Id]: 100 };
-    const c1bodies = Composite.allBodies(c1);
-    const c2bodies = Composite.allBodies(c2);
+    room.fdHP = { [p1Id]: 0, [p2Id]: 0 }; // ascending damage %
+
+    broadcastRoom(room, 'fdFightStart', {
+        matchup: room.fdCurrentMatchup, total: room.fdMatchups.length,
+        p1Id, p2Id,
+        p1Name: room.players[p1Id]?.name,
+        p2Name: room.players[p2Id]?.name,
+        p1Drawing: room.fdDrawings[p1Id]?.dataUrl || null,
+        p2Drawing: room.fdDrawings[p2Id]?.dataUrl || null,
+        f1Size: { w: s1.w, h: s1.h },
+        f2Size: { w: s2.w, h: s2.h },
+    });
+
     Events.on(engine, 'collisionStart', (ev) => {
         ev.pairs.forEach(pair => {
             const { bodyA, bodyB } = pair;
             if (bodyA.isStatic || bodyB.isStatic) return;
             const rv = Math.hypot(bodyA.velocity.x - bodyB.velocity.x, bodyA.velocity.y - bodyB.velocity.y);
-            if (rv > 4) {
-                const dmg = Math.min(10, (rv - 4) * 1.5);
-                const aInC1 = c1bodies.includes(bodyA), bInC1 = c1bodies.includes(bodyB);
-                const aInC2 = c2bodies.includes(bodyA), bInC2 = c2bodies.includes(bodyB);
-                if ((aInC1 && bInC2) || (aInC2 && bInC1)) {
-                    room.fdHP[p1Id] = Math.max(0, room.fdHP[p1Id] - dmg);
-                    room.fdHP[p2Id] = Math.max(0, room.fdHP[p2Id] - dmg);
-                }
+            if (rv > 3) {
+                const dmg = Math.min(15, (rv - 3) * 2);
+                if (bodyA === f1body || bodyB === f1body) room.fdHP[p1Id] = Math.min(100, room.fdHP[p1Id] + dmg);
+                if (bodyA === f2body || bodyB === f2body) room.fdHP[p2Id] = Math.min(100, room.fdHP[p2Id] + dmg);
             }
         });
     });
+
     room.fdFightInterval = setInterval(() => {
         Engine.update(engine, 1000 / 60);
         room.fdFightTick++;
-        if (room.fdFightTick % 90 === 45) {
-            fd_applyMove(Composite.allBodies(c1), Composite.allBodies(c2), room.fdMoveType);
+
+        if (room.fdFightTick % 60 === 0) {
+            fd_applyMove(f1body, f2body, room.fdMoveType);
         }
+
         if (room.fdFightTick % 2 === 0) {
             broadcastRoom(room, 'fdFrame', {
-                f1: fd_captureFrame(c1), f2: fd_captureFrame(c2),
+                f1: fd_captureFrame(f1body), f2: fd_captureFrame(f2body),
                 f1hp: room.fdHP[p1Id], f2hp: room.fdHP[p2Id],
             });
         }
-        if (room.fdFightTick >= 900 || room.fdHP[p1Id] <= 0 || room.fdHP[p2Id] <= 0) {
+
+        const p1 = f1body.position, p2 = f2body.position;
+        const b1off = p1.y > 510 || p1.x < -130 || p1.x > 930;
+        const b2off = p2.y > 510 || p2.x < -130 || p2.x > 930;
+        if (b1off || b2off || room.fdFightTick >= 720) {
             clearInterval(room.fdFightInterval);
             room.fdFightInterval = null;
-            const winnerId = room.fdHP[p1Id] >= room.fdHP[p2Id] ? p1Id : p2Id;
+            let winnerId;
+            if (b1off && !b2off) winnerId = p2Id;
+            else if (b2off && !b1off) winnerId = p1Id;
+            else winnerId = room.fdHP[p1Id] <= room.fdHP[p2Id] ? p1Id : p2Id;
             fd_endFight(room, winnerId);
         }
     }, 1000 / 60);
