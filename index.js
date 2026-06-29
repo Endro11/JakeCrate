@@ -12,6 +12,11 @@ app.use(express.static('public'));
 
 const rooms = {};   // code -> room object
 
+const MAX_PLAYERS_PER_ROOM = 12;   // cap per room
+const MAX_ACTIVE_ROOMS     = 300;  // global safety cap
+const CREATE_WINDOW_MS     = 30000; // room-spam window
+const CREATE_MAX_IN_WINDOW = 5;     // max createRoom calls per socket per window
+
 function makeCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code;
@@ -1368,11 +1373,25 @@ io.on('connection', (socket) => {
     // ── Hub: room management ──────────────────────────────────────────────────
 
     socket.on('createRoom', () => {
+        // Global cap so memory can't be exhausted by room spam
+        if (Object.keys(rooms).length >= MAX_ACTIVE_ROOMS) {
+            socket.emit('joinError', { message: 'Server is busy — too many active rooms. Try again shortly.' });
+            return;
+        }
+        // Per-socket rate limit
+        const now = Date.now();
+        socket.data.createTimes = (socket.data.createTimes || []).filter(t => now - t < CREATE_WINDOW_MS);
+        if (socket.data.createTimes.length >= CREATE_MAX_IN_WINDOW) {
+            socket.emit('joinError', { message: 'Slow down — you\'re creating rooms too fast.' });
+            return;
+        }
+        socket.data.createTimes.push(now);
+
         const code = makeCode();
         rooms[code] = makeRoom(code);
         socket.join(code);
         socket.emit('roomCreated', { code });
-        console.log(`🏠 Room created: ${code}`);
+        console.log(`🏠 Room created: ${code} (${Object.keys(rooms).length} active)`);
     });
 
     socket.on('joinRoom', ({ code, playerData }) => {
@@ -1381,6 +1400,14 @@ io.on('connection', (socket) => {
         if (!room) { socket.emit('joinError', { message: 'Room not found.' }); return; }
 
         const token = playerData.token || socket.id;
+
+        // Player cap — but never block a returning player (reconnect / refresh)
+        const isReturning = Object.values(room.players).some(p => p.token === token)
+            || room.seekerToken === token || room.hostToken === token || !!room.playerState[token];
+        if (!isReturning && Object.keys(room.players).length >= MAX_PLAYERS_PER_ROOM) {
+            socket.emit('joinError', { message: `Room is full (max ${MAX_PLAYERS_PER_ROOM} players).` });
+            return;
+        }
 
         // Evict any stale socket sharing this token (page refresh / duplicate tab)
         const staleId = Object.keys(room.players).find(id => room.players[id].token === token && id !== socket.id);

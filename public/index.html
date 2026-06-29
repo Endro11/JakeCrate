@@ -13,6 +13,27 @@
         canvas { display:block; touch-action:none; cursor:crosshair; }
         #global-leave { display:none; position:fixed; top:calc(env(safe-area-inset-top) + 6px); left:6px; z-index:250; background:rgba(198,40,40,0.82); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.7em; font-weight:bold; letter-spacing:1px; cursor:pointer; -webkit-user-select:none; user-select:none; }
 
+        /* ── Universal winner podium ── */
+        #podium-overlay { display:none; position:fixed; inset:0; z-index:400; background:radial-gradient(circle at 50% 18%, #221a3d, #05050a 75%); flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:calc(env(safe-area-inset-top)+24px) 16px calc(env(safe-area-inset-bottom)+20px); color:#fff; overflow-y:auto; }
+        #podium-overlay.open { display:flex; }
+        #podium-title { font-family:'Press Start 2P',monospace; font-size:1.05em; color:#ffd700; text-shadow:0 0 16px rgba(255,215,0,0.55); text-align:center; line-height:1.4; }
+        #podium-sub { font-size:0.92em; color:#cfd6e6; text-align:center; max-width:340px; line-height:1.5; margin-top:-4px; }
+        #podium-stage { display:flex; align-items:flex-end; justify-content:center; gap:8px; width:min(440px,96%); margin-top:8px; }
+        .podium-col { flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+        .podium-name { font-weight:900; font-size:0.82em; text-align:center; word-break:break-word; line-height:1.15; max-width:100%; }
+        .podium-score { font-family:monospace; font-size:0.74em; color:#ffd76b; }
+        .podium-medal { font-size:1.5em; line-height:1; }
+        .podium-bar { width:100%; border-radius:8px 8px 0 0; display:flex; align-items:center; justify-content:center; box-shadow:0 -2px 12px rgba(0,0,0,0.4) inset; }
+        .podium-bar .podium-place { font-family:'Press Start 2P',monospace; font-size:0.9em; color:rgba(0,0,0,0.55); }
+        .podium-1 .podium-bar { background:linear-gradient(180deg,#ffe14d,#c79200); height:120px; }
+        .podium-2 .podium-bar { background:linear-gradient(180deg,#e2e2e2,#8d8d8d); height:90px; }
+        .podium-3 .podium-bar { background:linear-gradient(180deg,#e6975a,#9c5a23); height:66px; }
+        #podium-rest { width:min(440px,96%); display:flex; flex-direction:column; gap:5px; }
+        .podium-rest-row { display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); border-radius:8px; padding:8px 12px; font-size:0.85em; }
+        .podium-rest-row .pr-rank { color:#8a93a8; font-family:monospace; margin-right:10px; }
+        .podium-rest-row .pr-score { color:#ffd76b; font-family:monospace; }
+        #podium-close { background:#2e7d32; border:none; border-radius:12px; padding:14px 30px; color:#fff; font-weight:bold; font-size:1em; letter-spacing:1px; text-transform:uppercase; cursor:pointer; margin-top:8px; }
+
         /* ── Hub landing ── */
         #hub-screen { display:flex; position:absolute; inset:0; z-index:50; background:radial-gradient(circle at 50% 30%, #0d1525, #050508 70%); flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:24px; color:#fff; }
         .hub-logo { font-size:3em; font-weight:900; letter-spacing:4px; color:#ffeb3b; text-shadow:0 0 28px rgba(255,235,59,0.5); }
@@ -456,6 +477,15 @@
 
 <!-- Always-available escape hatch during any game -->
 <button id="global-leave" onclick="leaveRoom()">⎋ LEAVE</button>
+
+<!-- Universal winner podium -->
+<div id="podium-overlay">
+    <div id="podium-title">🏆 RESULTS</div>
+    <div id="podium-sub"></div>
+    <div id="podium-stage"></div>
+    <div id="podium-rest"></div>
+    <button id="podium-close" onclick="hidePodium()">Continue →</button>
+</div>
 
 <!-- ════════════════════ HUB LANDING ════════════════════ -->
 <div id="hub-screen">
@@ -1128,6 +1158,7 @@ socket.on('connect', () => {
 // ── Room lobby ─────────────────────────────────────────────────────────────
 function showRoomLobby() {
     hide('hub-screen');
+    hidePodium();
     show('room-lobby');
     document.getElementById('rl-code-display').innerText = currentRoomCode || '----';
     isJoined = true;
@@ -1170,6 +1201,7 @@ function leaveRoom() {
     socket.emit('leaveRoom');
     // Forget the room so a reconnect doesn't auto-rejoin us back into it
     localStorage.removeItem('jc_room');
+    hidePodium();
     // Tear down every game's UI/state
     try { soCleanup(); } catch (e) {}
     try { tsSkipRules(); } catch (e) {}
@@ -1207,6 +1239,35 @@ function syncGlobalLeave() {
     btn.style.display = (isJoined && currentRoomCode && !hubVis && !lobbyVis) ? 'block' : 'none';
 }
 setInterval(syncGlobalLeave, 600);
+
+// ── Universal winner podium ────────────────────────────────────────────────
+// entries: [{ name, score, scoreLabel? }]  opts: { title, sub }
+function showPodium(entries, opts = {}) {
+    const list = (entries || []).filter(e => e && e.name)
+        .sort((a, b) => (b.score || 0) - (a.score || 0));
+    document.getElementById('podium-title').innerText = opts.title || '🏆 RESULTS';
+    document.getElementById('podium-sub').innerText = opts.sub || '';
+    const lbl = e => (e.scoreLabel != null ? e.scoreLabel : `${e.score || 0} pts`);
+    const medals = ['🥇', '🥈', '🥉'];
+    const top3 = list.slice(0, 3);
+    const stage = document.getElementById('podium-stage');
+    stage.innerHTML = '';
+    [1, 0, 2].forEach(idx => {            // render order: 2nd, 1st, 3rd
+        const e = top3[idx]; if (!e) return;
+        const col = document.createElement('div');
+        col.className = `podium-col podium-${idx + 1}`;
+        col.innerHTML = `<div class="podium-medal">${medals[idx]}</div>
+            <div class="podium-name">${e.name}</div>
+            <div class="podium-score">${lbl(e)}</div>
+            <div class="podium-bar"><span class="podium-place">${idx + 1}</span></div>`;
+        stage.appendChild(col);
+    });
+    document.getElementById('podium-rest').innerHTML = list.slice(3).map((e, i) =>
+        `<div class="podium-rest-row"><span><span class="pr-rank">${i + 4}</span>${e.name}</span><span class="pr-score">${lbl(e)}</span></div>`
+    ).join('');
+    document.getElementById('podium-overlay').classList.add('open');
+}
+function hidePodium() { document.getElementById('podium-overlay').classList.remove('open'); }
 
 function closeRoom() {
     if (!isRoomHost) return;
@@ -1353,6 +1414,20 @@ socket.on('gameState', (state) => {
     const inLobby = state.phase === 'LOBBY';
 
     if (!isJoined) return;
+
+    if (inLobby) hidePodium();
+
+    // Sleight of Hands: show the winner podium when the round reveals
+    if (selectedGame === 'tacostealth' && state.phase === 'REVEAL' && prevPhase !== 'REVEAL') {
+        setTimeout(() => {
+            const entries = Object.values(tsScoreCache || {}).map(s => ({
+                name: s.name,
+                score: (s.survivals || 0) * 100 + (s.catches || 0),
+                scoreLabel: `${s.survivals || 0}🛡 · ${s.catches || 0}🎯`
+            }));
+            if (entries.length) showPodium(entries, { title: '🏆 SLEIGHT OF HANDS', sub: 'Most rounds survived wins!' });
+        }, 1500);
+    }
 
     // Show hub → room lobby transition
     const hubVisible = getComputedStyle(document.getElementById('hub-screen')).display !== 'none';
@@ -2348,6 +2423,15 @@ socket.on('soVoteResult', ({ fakeId, fakeName, fakeCaught, tallies, players, soS
 
     if (soScores) { soScoreCache = {}; soScores.forEach(s => { soScoreCache[s.name] = s; }); renderUnifiedScoreboard(); }
     setTimeout(() => { const btn = document.getElementById('so-lobby-btn'); if (btn) btn.style.display = 'block'; }, 3000);
+    if (soScores && soScores.length) {
+        const entries = soScores.map(s => ({
+            name: s.name,
+            score: (s.correct || 0) * 2 + (s.fakeWins || 0) * 3,
+            scoreLabel: `${s.correct || 0}✓ · ${s.fakeWins || 0}🥷`
+        }));
+        const sub = fakeCaught ? `🎯 ${fakeName} was the fake — caught!` : `🥷 ${fakeName} was the fake — got away!`;
+        setTimeout(() => showPodium(entries, { title: '🏆 MASTERPIECED', sub }), 3500);
+    }
 });
 
 function soVote(suspectId) {
@@ -2771,6 +2855,11 @@ socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, vot
 
     document.getElementById('pp-result-next').innerText = isLastRound ? '🏆 Game over! Final scores above.' : `Next round starting in ${10}s…`;
     if (isLastRound && isRoomHost) document.getElementById('pp-lobby-btn').style.display = 'block';
+    if (isLastRound) {
+        const entries = players.map(p => ({ name: p.name, score: ppScores[p.name] || 0 }));
+        const win = [...entries].sort((a, b) => b.score - a.score)[0];
+        setTimeout(() => showPodium(entries, { title: '🏆 PIKPIC', sub: win ? `${win.name} wins with ${win.score} pts!` : '' }), 1800);
+    }
 });
 
 // ─── Rizz or Roast client ────────────────────────────────────────────────────
@@ -3045,6 +3134,8 @@ socket.on('rrGameEnd', ({ sorted, rrScores }) => {
     ).join('');
     document.getElementById('rr-result-next').innerText = '';
     if (isRoomHost) document.getElementById('rr-lobby-btn').style.display = 'block';
+    const entries = (sorted || []).map(([name, pts]) => ({ name, score: pts }));
+    setTimeout(() => showPodium(entries, { title: '🏆 RIZZ OR ROAST', sub: sorted[0] ? `${sorted[0][0]} wins!` : '' }), 1200);
 });
 
 function rrReturnToLobby() {
@@ -3908,6 +3999,9 @@ socket.on('sqRoundEnd', ({ round, scores, players, final }) => {
             list.appendChild(row);
         });
     if (final) {
+        const entries = Object.entries(scores).map(([id, pts]) => ({ name: players[id]?.name || '?', score: pts }));
+        const win = [...entries].sort((a, b) => b.score - a.score)[0];
+        setTimeout(() => showPodium(entries, { title: '🏆 STROKE OFF', sub: win ? `${win.name} wins!` : '' }), 1500);
         setTimeout(() => {
             rs.style.display = 'none';
             sqPhase = 'LOBBY';
