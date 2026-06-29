@@ -291,14 +291,14 @@
         .pp-slot.filled { border:2px solid #1e5fa0; overflow:hidden; }
         .pp-slot-x { position:absolute; top:2px; right:3px; font-size:0.7em; color:#ef9a9a; font-weight:bold; line-height:1; }
         .pp-action-row { display:flex; gap:8px; width:min(340px,92%); flex-wrap:wrap; justify-content:center; }
-        .pp-btn { padding:12px 20px; font-weight:bold; font-size:0.85em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; text-align:center; user-select:none; -webkit-user-select:none; display:inline-block; }
+        .pp-btn { padding:9px 14px; font-weight:bold; font-size:0.85em; border:none; border-radius:10px; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; text-align:center; user-select:none; -webkit-user-select:none; display:inline-block; }
         .pp-action-row .pp-btn { flex:1; min-width:120px; }
         /* Lightbox */
         #pp-lightbox { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.92); flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom); }
         #pp-lightbox img { max-width:92vw; max-height:72vh; border-radius:10px; object-fit:contain; }
         #pp-lightbox.open { display:flex; }
         #pp-lightbox-close { position:absolute; top:calc(env(safe-area-inset-top) + 10px); right:14px; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.12); border-radius:50%; color:#fff; font-size:1.4em; font-weight:bold; cursor:pointer; }
-        #pp-lightbox-action { background:#2e7d32; color:#fff; border:none; border-radius:12px; padding:15px 28px; font-size:1.05em; font-weight:bold; letter-spacing:1px; text-transform:uppercase; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
+        #pp-lightbox-action { background:#2e7d32; color:#fff; border:none; border-radius:12px; padding:10px 22px; font-size:0.9em; font-weight:bold; letter-spacing:1px; text-transform:uppercase; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
         .pp-btn-blue { background:#1565c0; }
         .pp-btn-green { background:#2e7d32; }
         .pp-btn-yellow { background:#e65100; color:#fff; }
@@ -334,12 +334,12 @@
         .pp-voter-row { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; font-family:monospace; font-size:0.78em; }
         .pp-outcome-box { font-size:0.9em; text-align:center; color:#ccc; background:rgba(255,255,255,0.05); border:1px solid #2a3a55; border-radius:8px; padding:10px 14px; max-width:340px; }
         /* Fan hand */
-        .pp-fan-wrap { position:relative; width:100%; flex-shrink:0; height:170px; }
-        .pp-fan-card { position:absolute; border-radius:10px; overflow:hidden; border:3px solid #1e2e48; cursor:grab; transform-origin:bottom center; transition:transform .13s,border-color .15s,box-shadow .15s; user-select:none; -webkit-user-select:none; }
+        .pp-fan-wrap { position:relative; width:100%; flex-shrink:0; height:210px; }
+        .pp-fan-card { position:absolute; border-radius:10px; overflow:hidden; border:3px solid #1e2e48; cursor:grab; transform-origin:bottom center; transition:transform .13s,border-color .15s,box-shadow .15s; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
         .pp-fan-card.selected { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); }
         .pp-fan-card:active { cursor:grabbing; }
         /* Drop zones */
-        .pp-zone { border-radius:12px; min-height:68px; display:flex; align-items:center; justify-content:center; gap:5px; flex-direction:column; padding:8px; transition:all .15s; box-sizing:border-box; }
+        .pp-zone { border-radius:12px; min-height:52px; display:flex; align-items:center; justify-content:center; gap:5px; flex-direction:column; padding:6px 8px; transition:all .15s; box-sizing:border-box; }
         .pp-zone-submit { border:1.5px dashed #2e5a28; background:rgba(46,125,50,0.06); color:#4a8a4a; }
         .pp-zone-submit.drag-over { border-color:#4caf50; background:rgba(76,175,80,0.15); }
         .pp-zone-swap { border:1.5px dashed #7a4a0a; background:rgba(230,81,0,0.06); color:#8a6030; }
@@ -353,7 +353,7 @@
         #pp-vote-carousel { flex:1; overflow:hidden; width:100%; position:relative; min-height:0; }
         #pp-vote-slides { display:flex; height:100%; will-change:transform; transition:transform .22s cubic-bezier(.4,0,.2,1); }
         .pp-vote-slide { min-width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 20px; box-sizing:border-box; gap:8px; }
-        .pp-vote-slide-img { max-width:100%; max-height:260px; border-radius:12px; object-fit:contain; display:block; border:3px solid rgba(255,255,255,0.06); transition:border-color .15s,box-shadow .15s; cursor:pointer; }
+        .pp-vote-slide-img { max-width:100%; max-height:260px; border-radius:12px; object-fit:contain; display:block; border:3px solid rgba(255,255,255,0.06); transition:border-color .15s,box-shadow .15s; cursor:pointer; -webkit-touch-callout:none; }
         .pp-vote-slide-img.selected { border-color:#ffeb3b; box-shadow:0 0 22px rgba(255,235,59,0.4); }
         .pp-vote-slide-img.pp-voted { border-color:#2e7d32; box-shadow:0 0 16px rgba(76,175,80,0.5); }
         .pp-vote-slide-img.st-card { opacity:.55; cursor:default; }
@@ -2890,7 +2890,7 @@ function ppRenderHand(containerId, cards, selectable) {
 }
 
 // ── Fan hand rendering ──
-let ppDragCardId = null, ppHoldTimer = null, ppHoldFired = false, ppFtueDone = false, ppVoteFtueDone = false;
+let ppDragCardId = null, ppHoldTimer = null, ppHoldFired = false, ppFtueDone = false, ppVoteFtueDone = false, ppFanMode = 'select';
 
 function ppFanPositions(n) {
     const spread = Math.min(42, Math.max(22, n * 8));
@@ -2906,6 +2906,7 @@ function ppFanPositions(n) {
 
 // mode: 'select' = tap to select (clue screen), 'drag' = drag to zone (submit screen)
 function ppRenderFan(containerId, cards, mode) {
+    ppFanMode = mode;
     const el = document.getElementById(containerId); if (!el) return;
     const pos = ppFanPositions(cards.length);
     const n = cards.length;
@@ -2913,9 +2914,6 @@ function ppRenderFan(containerId, cards, mode) {
         const url = c.photoUrl.replace(/'/g, "\\'");
         const p = pos[i];
         const isSel = c.cardId === ppSelectedCardId;
-        const tapHandler = mode === 'select'
-            ? `onpointerup="if(!ppHoldFired)ppSelectCard('${c.cardId}');ppEndHold();" onpointercancel="ppEndHold();"`
-            : `onpointerup="ppEndHold();" onpointercancel="ppEndHold();"`;
         return `<div class="pp-fan-card${isSel ? ' selected' : ''}" data-cid="${c.cardId}"
             style="left:calc(${p.leftPct}% - 36px);bottom:${p.yDrop}px;width:72px;height:100px;transform:rotate(${p.angle}deg);z-index:${n - i};"
             draggable="${mode === 'drag' ? 'true' : 'false'}"
@@ -2923,8 +2921,8 @@ function ppRenderFan(containerId, cards, mode) {
             ondragend="ppDragCardId=null;"
             onmouseenter="ppFanHov(this,true,${p.angle})"
             onmouseleave="ppFanHov(this,false,${p.angle})"
-            onpointerdown="ppBegHold('${url}',event,this)"
-            ${tapHandler}>
+            oncontextmenu="return false"
+            onpointerdown="ppBegHold('${url}',event,this,'${mode}')">
             <img src="${c.photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" draggable="false">
         </div>`;
     }).join('');
@@ -2935,24 +2933,76 @@ function ppFanHov(el, on, angle) {
     el.style.zIndex = on ? 20 : '';
 }
 
-function ppBegHold(src, e, el) {
+function ppBegHold(src, e, el, mode) {
+    const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    if (isTouch) e.preventDefault();
     ppEndHold();
     ppHoldFired = false;
+    const cardId = el.dataset.cid;
     const sx = e.clientX, sy = e.clientY;
-    let moved = false;
+    let moved = false, dragging = false, ghost = null;
+
+    if (isTouch) { try { el.setPointerCapture(e.pointerId); } catch(_) {} }
+
     function onMove(ev) {
-        if (!moved && (Math.abs(ev.clientX - sx) > 10 || Math.abs(ev.clientY - sy) > 10)) {
-            moved = true; ppEndHold(); el.removeEventListener('pointermove', onMove);
+        if (!moved && (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8)) {
+            moved = true; ppEndHold();
+        }
+        if (moved && mode === 'drag' && isTouch) {
+            if (!dragging) {
+                dragging = true; ppDragCardId = cardId;
+                ghost = document.createElement('div');
+                ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:1000;width:72px;height:100px;border-radius:8px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.6);opacity:0.88;transform:translate(-50%,-110%) rotate(5deg);';
+                ghost.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+                document.body.appendChild(ghost);
+            }
+            ghost.style.left = ev.clientX + 'px';
+            ghost.style.top = ev.clientY + 'px';
+            const dz = document.getElementById('pp-drop-zone');
+            const sz = document.getElementById('pp-swap-zone');
+            if (dz) ppDZOver('pp-drop-zone', ppIsOverEl(ev.clientX, ev.clientY, dz));
+            if (sz) ppDZOver('pp-swap-zone', ppIsOverEl(ev.clientX, ev.clientY, sz));
         }
     }
+
+    function cleanup() {
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+        el.removeEventListener('pointercancel', cleanup);
+        ppDZOver('pp-drop-zone', false); ppDZOver('pp-swap-zone', false);
+        if (ghost) { ghost.remove(); ghost = null; }
+        ppDragCardId = null;
+    }
+
+    function onUp(ev) {
+        cleanup();
+        if (dragging) {
+            const dz = document.getElementById('pp-drop-zone');
+            const sz = document.getElementById('pp-swap-zone');
+            if (dz && ppIsOverEl(ev.clientX, ev.clientY, dz)) { ppSelectedCardId = cardId; ppConfirmCard(); }
+            else if (sz && !ppSubUsed && ppIsOverEl(ev.clientX, ev.clientY, sz)) { ppSelectedCardId = cardId; ppSwapCard(); }
+        } else if (!moved && !ppHoldFired && mode === 'select') {
+            ppSelectCard(cardId);
+        }
+        ppEndHold();
+    }
+
     el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', cleanup);
+
     ppHoldTimer = setTimeout(() => {
         if (!moved) {
             ppHoldFired = true;
             document.getElementById('pp-hold-img').src = src;
             document.getElementById('pp-hold-overlay').style.display = 'flex';
         }
-    }, 220);
+    }, 320);
+}
+
+function ppIsOverEl(x, y, el) {
+    const r = el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 }
 
 function ppEndHold() {
@@ -2997,11 +3047,12 @@ function ppRenderGallery(cards, amST) {
             <div style="position:relative;display:inline-flex;justify-content:center;width:100%;">
                 <img src="${c.photoUrl}" class="${imgClass}" id="pp-vsimg-${i}"
                     ${clickAttr}
+                    oncontextmenu="return false"
                     onpointerdown="ppBegHold('${url}',event,this)"
                     onpointerup="ppEndHold()" onpointercancel="ppEndHold()">
                 <button id="pp-vsbtn-${i}" class="pp-btn pp-btn-green" onclick="ppVoteConfirm('${c.cardId}')"
-                    style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
-                    padding:11px 22px;font-size:0.85em;letter-spacing:1px;box-shadow:0 4px 18px rgba(0,0,0,0.7);white-space:nowrap;">
+                    style="display:none;position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+                    padding:8px 16px;font-size:0.82em;letter-spacing:1px;box-shadow:0 4px 18px rgba(0,0,0,0.7);white-space:nowrap;">
                     ✅ VOTE THIS CARD</button>
             </div>
             <div style="font-size:0.72em;color:#445;font-family:monospace;">card ${i + 1} of ${cards.length}</div>
@@ -3084,7 +3135,7 @@ function ppConfirmCard() {
     const card = ppMyHand.find(c => c.cardId === submitted);
     const dz = document.getElementById('pp-drop-zone');
     if (dz && card) {
-        dz.style.cssText = 'flex:2;border-radius:12px;min-height:68px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid #2e7d32;background:rgba(46,125,50,0.1);box-sizing:border-box;';
+        dz.style.cssText = 'flex:2;border-radius:12px;min-height:52px;display:flex;align-items:center;gap:8px;padding:6px 10px;border:1.5px solid #2e7d32;background:rgba(46,125,50,0.1);box-sizing:border-box;';
         dz.innerHTML = `<img src="${card.photoUrl}" style="width:46px;height:46px;object-fit:cover;border-radius:7px;flex-shrink:0;">
             <div><div style="font-size:0.7em;color:#3a9a4a;letter-spacing:1px;font-family:monospace;">SUBMITTED ✓</div></div>`;
     }
