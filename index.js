@@ -1017,9 +1017,9 @@ function rr_returnToLobby(room) {
 
 // ─── Split Crew ────────────────────────────────────────────────────────────────
 
-const SC_PIT_SECONDS    = 55;
-const SC_RACE_SECONDS   = 18;
-const SC_REVEAL_SECONDS = 8;
+const SC_PIT_SECONDS    = 28;   // tight — tasks are simple, pressure is the point
+const SC_RACE_SECONDS   = 7;    // quick standings flyby
+const SC_REVEAL_SECONDS = 5;
 const SC_LAPS           = 3;
 
 function sc_ri(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }

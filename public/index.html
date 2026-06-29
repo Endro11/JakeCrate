@@ -345,6 +345,8 @@
         /* Pit stop */
         .sc-lap-badge    { font-family:'Press Start 2P', monospace; font-size:0.65em; background:rgba(255,204,0,0.15); border:1px solid #ffcc00; border-radius:6px; padding:4px 10px; color:#ffcc00; }
         .sc-pit-timer    { font-family:'Press Start 2P', monospace; font-size:1.6em; color:#ff4444; text-shadow:0 0 10px #ff0000; }
+        .sc-pit-timer.sc-timer-urgent { animation:sc-timer-flash 0.5s steps(1) infinite; }
+        @keyframes sc-timer-flash { 0%{color:#fff;text-shadow:0 0 16px #ff0000;transform:scale(1.12)} 50%{color:#ff2222;text-shadow:0 0 20px #ff0000;transform:scale(1)} }
         /* Instructor task list */
         .sc-task-row     { width:min(380px,95%); background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; transition:border-color .2s, background .2s; }
         .sc-task-row.done-good { border-color:#4caf50; background:rgba(76,175,80,0.12); }
@@ -3397,7 +3399,10 @@ socket.on('scTaskAck', ({ taskId, quality }) => {
 socket.on('scTimer', ({ phase, timeLeft, lap }) => {
     if (phase === 'PIT') {
         const el = document.getElementById('sc-pit-timer');
-        if (el) el.innerText = timeLeft > 0 ? timeLeft : '0';
+        if (el) {
+            el.innerText = timeLeft > 0 ? timeLeft : '0';
+            el.classList.toggle('sc-timer-urgent', timeLeft <= 8);
+        }
     } else if (phase === 'RACE') {
         const el = document.getElementById('sc-race-timer');
         if (el) el.innerText = timeLeft;
@@ -3406,7 +3411,10 @@ socket.on('scTimer', ({ phase, timeLeft, lap }) => {
 
 // ── Race screen (canvas) ─────────────────────────────────────────────────────
 const SC_CAR_COLS = 3, SC_CAR_ROWS = 6;
-const SC_CAR_SW = 469, SC_CAR_SH = 128; // sprite cell size in sheet
+const SC_CELL_W = 1408 / 3, SC_CELL_H = 128;   // full sprite cell
+// Tight car crop within each cell (measured): car sits lower-left
+const SC_CARX = 72, SC_CARY = 50, SC_CARW = 322, SC_CARH = 78;
+const SC_CAR_ASPECT = SC_CARW / SC_CARH;        // ~4.13 : 1
 let scTrackImg = null, scCarSheet = null;
 let scRaceRaf = null, scRaceScrollX = 0, scRaceTick = 0, scRaceTeams = [];
 
@@ -3490,11 +3498,13 @@ function scStartRaceCanvas() {
             scRaceTick++; scRaceRaf = requestAnimationFrame(draw); return;
         }
 
-        const laneH = lanesH / n;
+        // Cap lane height so few-team games don't balloon; top-align the block
+        const laneH = Math.min(112, lanesH / n);
 
         teams.forEach((team, pos) => {
             const laneY = trackH + pos * laneH;
             const isFirst = pos === 0 && !team.crashed;
+            const dmg = team.damages ? team.damages.length : 0;
 
             // Lane background (fully opaque)
             ctx.fillStyle = team.crashed ? '#2a0d0d'
@@ -3504,60 +3514,54 @@ function scStartRaceCanvas() {
                 ctx.fillStyle = 'rgba(255,204,0,0.10)';
                 ctx.fillRect(0, laneY, W, laneH);
             }
-            // Divider line
             ctx.fillStyle = isFirst ? 'rgba(255,204,0,0.55)' : 'rgba(255,255,255,0.08)';
             ctx.fillRect(0, laneY, W, isFirst ? 2 : 1);
 
-            // ── Car sprite ────────────────────────────────────────────────
-            const displayH = Math.min(laneH - 8, 56);
-            const displayW = Math.round(displayH * (SC_CAR_SW / SC_CAR_SH));
+            // ── Rank number (far left) ────────────────────────────────────
+            const midY = laneY + laneH / 2;
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+            ctx.font = `${Math.round(laneH * 0.30)}px "Press Start 2P", monospace`;
+            ctx.fillStyle = team.crashed ? '#e57373' : isFirst ? '#ffd700' : '#8a93a8';
+            ctx.fillText(team.crashed ? '💀' : `${pos + 1}`, 22, midY);
+
+            // ── Car sprite (tight crop, fixed position) ───────────────────
+            const displayH = Math.min(laneH - 20, 40);
+            const displayW = Math.round(displayH * SC_CAR_ASPECT);
             const row = team.teamIdx % SC_CAR_ROWS;
-            const dmg = team.damages ? team.damages.length : 0;
-
             let frame = 0;
-            if (team.crashed)      frame = 2;
-            else if (dmg >= 2)     frame = (Math.floor(scRaceTick / 4) % 2) ? 1 : 2;
-            else if (dmg === 1)    frame = Math.floor(scRaceTick / 10) % 2;
+            if (team.crashed)   frame = 2;
+            else if (dmg >= 2)  frame = (Math.floor(scRaceTick / 5) % 2) ? 1 : 2;
+            else if (dmg === 1) frame = Math.floor(scRaceTick / 12) % 2;
 
-            const maxX = W * 0.50, minX = 6;
-            const speedFrac = team.crashed ? 0 : (team.speed || 0) / maxSpeed;
-            const wobble = team.crashed ? 0 : Math.sin(scRaceTick * 0.05 + pos) * 3;
-            const carX = Math.round(minX + speedFrac * (maxX - minX) + wobble);
-            const carY = Math.round(laneY + (laneH - displayH) / 2);
+            const carX = 44 + (team.crashed ? 0 : Math.round(Math.sin(scRaceTick * 0.06 + pos) * 2));
+            const carY = Math.round(midY - displayH / 2);
+            const sx = Math.round(frame * SC_CELL_W + SC_CARX);
+            const sy = Math.round(row * SC_CELL_H + SC_CARY);
 
             if (scCarSheet && scCarSheet.complete && scCarSheet.naturalWidth > 0) {
                 ctx.globalAlpha = team.crashed ? 0.4 : 1;
-                ctx.drawImage(scCarSheet, frame * SC_CAR_SW, row * SC_CAR_SH, SC_CAR_SW, SC_CAR_SH,
-                              carX, carY, displayW, displayH);
+                ctx.drawImage(scCarSheet, sx, sy, SC_CARW, SC_CARH, carX, carY, displayW, displayH);
                 ctx.globalAlpha = 1;
                 if (dmg > 0 && !team.crashed) {
-                    ctx.font = `${Math.round(displayH * 0.5)}px serif`;
-                    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-                    ctx.fillText('💨', carX + displayW * 0.55, carY + displayH * 0.4);
+                    ctx.font = `${Math.round(displayH * 0.7)}px serif`;
+                    ctx.textAlign = 'left';
+                    ctx.fillText('💨', carX + displayW * 0.45, carY + displayH * 0.35);
                 }
             } else {
                 ctx.fillStyle = team.driver.color || '#888';
                 ctx.fillRect(carX, carY, displayW, displayH);
             }
 
-            // ── Text column (right side) ──────────────────────────────────
-            const textX = Math.round(W * 0.62);
-            const midY  = laneY + laneH / 2;
-            const fs    = Math.max(10, Math.min(15, Math.round(laneH * 0.26)));
-
-            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-            // Position
-            ctx.font = `${Math.max(11, Math.round(laneH * 0.34))}px "Press Start 2P", monospace`;
-            ctx.fillStyle = team.crashed ? '#e57373' : isFirst ? '#ffd700' : '#9aa';
-            ctx.fillText(team.crashed ? '💀' : `${pos + 1}`, textX, midY);
-            // Driver name
+            // ── Name + speed (right of car) ───────────────────────────────
+            const textX = carX + displayW + 12;
+            const fs = Math.max(11, Math.min(15, Math.round(laneH * 0.20)));
+            ctx.textAlign = 'left';
             ctx.font = `bold ${fs}px sans-serif`;
-            ctx.fillStyle = '#fff';
-            ctx.fillText(`${team.driver.emoji} ${team.driver.name}`, textX + 34, midY - fs * 0.55);
-            // Speed
-            ctx.font = `bold ${Math.round(fs * 0.9)}px monospace`;
+            ctx.fillStyle = team.crashed ? '#bbb' : '#fff';
+            ctx.fillText(`${team.driver.emoji} ${team.driver.name}`, textX, midY - fs * 0.6);
+            ctx.font = `bold ${Math.round(fs * 1.05)}px monospace`;
             ctx.fillStyle = team.crashed ? '#ef5350' : '#4fc3f7';
-            ctx.fillText(team.crashed ? 'OUT 💥' : `${team.speed} MPH`, textX + 34, midY + fs * 0.7);
+            ctx.fillText(team.crashed ? 'OUT 💥' : `${team.speed} MPH`, textX, midY + fs * 0.75);
         });
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
