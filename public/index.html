@@ -5084,9 +5084,15 @@ function bbPlayListenBeat(playerId) {
     bbMyHand = entry.hand || [];
     bbMyBeat = {};
     bbMyHand.forEach(s=>{ bbMyBeat[s.id]=new Set(entry.beat[s.id]||[]); });
-    bbStopLoop();
-    if(bbListenProxyUrl&&bbSampleBuffer) bbStartLoop();
-    bbStartBeat();
+    bbStopLoop(); bbStreamStop();
+    if(bbSampleBuffer) {
+        bbStartLoop();
+    } else if(bbListenProxyUrl) {
+        // Buffer not ready — stream with correct loop region already set above
+        bbStreamStart(bbListenProxyUrl);
+        if(bbAudioEl) bbAudioEl.playbackRate = bbPlaybackRate;
+    }
+    if(bbMyHand.length) bbStartBeat();
 }
 
 // ── vote screen ──
@@ -5134,13 +5140,14 @@ socket.on('bbSampleReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})
     if(tit) tit.textContent=title; if(art) art.textContent=creator;
     if(yr)  yr.textContent=date;  if(img){img.src=thumbUrl;img.style.display='';}
     document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.add('spinning'));
-    // Stream the selected region immediately; decode in background for waveform
-    bbStreamStart(audioProxyUrl);
-    if(ldr) ldr.textContent='🎵 Playing — waveform loading…';
+    // Decode in background for waveform; DON'T start audio yet (wait for SCRUB phase)
+    if(ldr) ldr.textContent='⏳ Waveform loading…';
     bbLoadSample(audioProxyUrl).then(()=>{
-        if(ldr) ldr.textContent='✓ Record loaded';
-        // Switch to precise loop if still on crate or scrub screen
-        bbStreamStop(); bbStartLoop();
+        if(ldr) ldr.textContent='✓ Record loaded — get ready to scrub';
+        // If SCRUB screen is already showing, start the loop now
+        if(document.getElementById('bb-scrub-screen')?.style.display==='flex') {
+            bbStreamStop(); bbStartLoop(); bbDrawWaveform();
+        }
     });
 });
 
