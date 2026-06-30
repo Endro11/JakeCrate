@@ -114,6 +114,14 @@ function makeRoom(code) {
         scPyroId: null,
         scTimer: null,
         scTimeLeft: 0,
+        // Beat Battle state
+        bbPhase: 'LOBBY',
+        bbRoles: {},
+        bbSounds: {},
+        bbPattern: {},
+        bbVotes: {},
+        bbTimer: null,
+        bbTimeLeft: 0,
     };
 }
 
@@ -147,6 +155,7 @@ function clearAndDeleteRoom(room) {
     clearInterval(room.ppTimer);   clearTimeout(room.ppTimer);
     clearInterval(room.rrTimer);   clearTimeout(room.rrTimer);
     clearInterval(room.scTimer);   clearTimeout(room.scTimer);
+    clearInterval(room.bbTimer);   clearTimeout(room.bbTimer);
     delete rooms[room.code];
     console.log(`🗑️  Room ${room.code} removed`);
 }
@@ -1256,6 +1265,109 @@ function rr_returnToLobby(room) {
     broadcastGameState(room);
 }
 
+// ─── Beat Battle ──────────────────────────────────────────────────────────────
+
+const BB_ROLES = ['kick','snare','hihat','synth','bass','sfx'];
+const BB_ROLE_LABELS = { kick:'💥 KICK', snare:'🥁 SNARE', hihat:'🎩 HI-HAT', synth:'🎹 MELODY', bass:'🔊 BASS', sfx:'✨ EFFECT' };
+const BB_DEFAULT_PATTERNS = {
+    kick:  [0, 4, 8, 12],
+    snare: [2, 6, 10, 14],
+    hihat: [0, 2, 4, 6, 8, 10, 12, 14],
+    synth: [0, 3, 8, 11],
+    bass:  [0, 8],
+    sfx:   [4, 12],
+};
+const BB_STEPS = 16;
+const BB_TEMPO = 88;
+const BB_RECORD_SECS = 45;
+const BB_REMIX_SECS = 45;
+
+function bb_startGame(room) {
+    room.gamePhase = 'PLAYING';
+    room.bbPhase = 'RECORD';
+    room.bbSounds = {};
+    room.bbVotes = {};
+    const ids = Object.keys(room.players);
+    room.bbRoles = {};
+    ids.forEach((id, i) => { room.bbRoles[id] = BB_ROLES[i % BB_ROLES.length]; });
+    room.bbPattern = {};
+    ids.forEach(id => { room.bbPattern[id] = [...BB_DEFAULT_PATTERNS[room.bbRoles[id]]]; });
+    const assignments = {};
+    ids.forEach(id => { assignments[id] = { role: room.bbRoles[id], name: room.players[id].name }; });
+    room.bbTimeLeft = BB_RECORD_SECS;
+    broadcastRoom(room, 'bbRecordPhase', { assignments, timeLeft: BB_RECORD_SECS });
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_startListen(room); }
+    }, 1000);
+}
+
+function bb_serializePattern(room) {
+    const out = {};
+    Object.entries(room.bbPattern).forEach(([id, steps]) => { out[id] = [...steps]; });
+    return out;
+}
+
+function bb_startListen(room) {
+    clearInterval(room.bbTimer);
+    room.bbPhase = 'LISTEN';
+    const loopsToPlay = 4;
+    const secsPerLoop = BB_STEPS * (60 / BB_TEMPO / 2);
+    const listenDuration = Math.ceil(loopsToPlay * secsPerLoop) + 2;
+    broadcastRoom(room, 'bbListenPhase', {
+        pattern: bb_serializePattern(room),
+        sounds: room.bbSounds,
+        loopsToPlay,
+        tempo: BB_TEMPO,
+    });
+    room.bbTimer = setTimeout(() => bb_startRemix(room), listenDuration * 1000);
+}
+
+function bb_startRemix(room) {
+    clearTimeout(room.bbTimer);
+    room.bbPhase = 'REMIX';
+    room.bbTimeLeft = BB_REMIX_SECS;
+    broadcastRoom(room, 'bbRemixPhase', {
+        pattern: bb_serializePattern(room),
+        sounds: room.bbSounds,
+        timeLeft: BB_REMIX_SECS,
+        tempo: BB_TEMPO,
+    });
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_startVote(room); }
+    }, 1000);
+}
+
+function bb_startVote(room) {
+    clearInterval(room.bbTimer);
+    room.bbPhase = 'VOTE';
+    broadcastRoom(room, 'bbVotePhase', {
+        players: Object.entries(room.players).map(([id, p]) => ({
+            id, name: p.name,
+            role: room.bbRoles[id],
+            roleLabel: BB_ROLE_LABELS[room.bbRoles[id]] || room.bbRoles[id],
+        })),
+    });
+}
+
+function bb_endVote(room) {
+    room.bbPhase = 'RESULT';
+    room.gamePhase = 'LOBBY';
+    const tally = {};
+    Object.values(room.bbVotes).forEach(tid => { tally[tid] = (tally[tid] || 0) + 1; });
+    const scores = Object.keys(room.players).map(id => ({
+        id, name: room.players[id].name,
+        role: room.bbRoles[id],
+        roleLabel: BB_ROLE_LABELS[room.bbRoles[id]] || room.bbRoles[id],
+        votes: tally[id] || 0,
+    })).sort((a, b) => b.votes - a.votes);
+    broadcastRoom(room, 'bbResult', { scores });
+    broadcastGameState(room);
+}
+
 // ─── Split Crew ────────────────────────────────────────────────────────────────
 
 const SC_PIT_SECONDS    = 28;   // tight — tasks are simple, pressure is the point
@@ -2165,6 +2277,67 @@ io.on('connection', (socket) => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
         rr_returnToLobby(room);
+    });
+
+    // ── Beat Battle events ────────────────────────────────────────────────────
+
+    socket.on('bbStartGame', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        room.selectedGame = 'beatbattle';
+        bb_startGame(room);
+    });
+
+    socket.on('bbSubmitSound', ({ dataUrl }) => {
+        const room = socketRoom(socket);
+        if (!room || room.bbPhase !== 'RECORD') return;
+        room.bbSounds[socket.id] = {
+            dataUrl,
+            name: room.players[socket.id]?.name || '?',
+            role: room.bbRoles[socket.id],
+            roleLabel: BB_ROLE_LABELS[room.bbRoles[socket.id]] || room.bbRoles[socket.id],
+        };
+        broadcastRoom(room, 'bbSoundIn', {
+            playerId: socket.id,
+            dataUrl,
+            role: room.bbRoles[socket.id],
+        });
+        if (Object.keys(room.bbSounds).length >= Object.keys(room.players).length) {
+            clearInterval(room.bbTimer);
+            setTimeout(() => bb_startListen(room), 800);
+        }
+    });
+
+    socket.on('bbToggleStep', ({ stepIdx }) => {
+        const room = socketRoom(socket);
+        if (!room || room.bbPhase !== 'REMIX') return;
+        if (!room.bbPattern[socket.id]) room.bbPattern[socket.id] = [];
+        const pat = room.bbPattern[socket.id];
+        const idx = pat.indexOf(stepIdx);
+        const on = idx === -1;
+        if (on) pat.push(stepIdx); else pat.splice(idx, 1);
+        broadcastRoom(room, 'bbStepUpdate', { playerId: socket.id, stepIdx, on });
+    });
+
+    socket.on('bbVote', ({ targetId }) => {
+        const room = socketRoom(socket);
+        if (!room || room.bbPhase !== 'VOTE' || socket.id === targetId) return;
+        if (room.bbVotes[socket.id]) return; // already voted
+        room.bbVotes[socket.id] = targetId;
+        const voteCount = Object.keys(room.bbVotes).length;
+        const playerCount = Object.keys(room.players).length;
+        broadcastRoom(room, 'bbVoteCast', { voterCount: voteCount, total: playerCount });
+        if (voteCount >= playerCount - 1) bb_endVote(room);
+    });
+
+    socket.on('bbReturnToLobby', () => {
+        const room = socketRoom(socket);
+        if (!room || !isHost(room, socket)) return;
+        clearInterval(room.bbTimer); clearTimeout(room.bbTimer);
+        room.bbPhase = 'LOBBY'; room.gamePhase = 'LOBBY';
+        room.bbSounds = {}; room.bbPattern = {}; room.bbVotes = {};
+        broadcastRoom(room, 'bbLobby', {});
+        broadcastGameState(room);
     });
 
     // ── Split Crew events ─────────────────────────────────────────────────────

@@ -529,6 +529,29 @@
         .sc-podium-driver { font-weight:900; font-size:0.95em; }
         .sc-podium-crew   { font-size:0.72em; color:#888; }
         .sc-podium-speed  { font-family:'Press Start 2P',monospace; font-size:0.65em; color:#4fc3f7; align-self:center; }
+
+        /* ── Beat Battle ── */
+        #bb-record-btn.recording { background:#2a0808 !important; border-color:#ff3b3b !important; color:#ff3b3b !important; animation:bb-pulse .6s ease-in-out infinite alternate; }
+        @keyframes bb-pulse { from { box-shadow:0 0 0 0 rgba(255,59,59,.4); } to { box-shadow:0 0 0 16px rgba(255,59,59,0); } }
+        .bb-step-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+        .bb-row-label { width:64px; flex-shrink:0; font-size:0.63em; font-weight:700; color:#4a6a8a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .bb-steps { display:flex; gap:4px; flex-wrap:nowrap; overflow-x:auto; flex:1; padding-bottom:2px; }
+        .bb-steps::-webkit-scrollbar { height:3px; }
+        .bb-steps::-webkit-scrollbar-thumb { background:#2a3450; border-radius:2px; }
+        .bb-step { width:34px; height:34px; flex-shrink:0; border-radius:7px; border:1.5px solid #2a3450; background:#111827; cursor:pointer; position:relative; transition:transform .08s; }
+        .bb-step:active { transform:scale(.88); }
+        .bb-step.on { border-color:transparent; }
+        .bb-step.playing { box-shadow:0 0 0 2px #fff,0 0 8px rgba(255,255,255,.35); }
+        .bb-step.locked { cursor:default; }
+        .bb-step.bar-mark::after { content:''; position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:3px; height:3px; border-radius:50%; background:#2a3450; }
+        .bb-mine .bb-row-label { color:#ff9800; }
+        .bb-vote-card { padding:14px 16px; border-radius:12px; border:2px solid #2a3450; background:#111827; cursor:pointer; display:flex; align-items:center; gap:12px; transition:border-color .15s,background .15s; }
+        .bb-vote-card:active { transform:scale(.97); }
+        .bb-vote-card.voted { border-color:#ff9800; background:rgba(255,152,0,.08); }
+        .bb-vote-card.self { opacity:.45; cursor:default; pointer-events:none; }
+        .bb-submitted-dot { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:7px; font-size:0.7em; margin:3px; }
+        .bb-submitted-dot.done { background:rgba(76,175,80,.12); border:1px solid #4caf50; color:#4caf50; }
+        .bb-submitted-dot.waiting { background:#0d111a; border:1px solid #2a3450; color:#4a6a8a; }
     </style>
 </head>
 <body>
@@ -615,6 +638,14 @@
                 <div class="gc-name">Split Crew</div>
                 <div class="gc-desc">One phone reads the tasks, one phone does them — keep your diva driver happy or watch the car explode</div>
                 <div class="gc-voters" id="gv-sc"></div>
+            </div>
+        </div>
+        <div class="game-card" id="gc-bb" onclick="pickGame('beatbattle')">
+            <div class="gc-icon">🥁</div>
+            <div class="gc-info">
+                <div class="gc-name">Beat Battle</div>
+                <div class="gc-desc">Record your voice as an instrument — build the beat, vote for the best sound</div>
+                <div class="gc-voters" id="gv-bb"></div>
             </div>
         </div>
     </div>
@@ -1295,6 +1326,7 @@ function rlStartGame() {
     else if (selectedGame === 'pikpic') socket.emit('ppStartGame');
     else if (selectedGame === 'rizzorroast') socket.emit('rrStartGame');
     else if (selectedGame === 'splitcrew') socket.emit('scStartGame');
+    else if (selectedGame === 'beatbattle') socket.emit('bbStartGame');
 }
 
 function shareRoom() {
@@ -1324,6 +1356,7 @@ function leaveRoom() {
     try { ppCleanup(); ppCloseLightbox(); } catch (e) {}
     try { rrCleanup(); } catch (e) {}
     try { scCleanup(); } catch (e) {}
+    try { bbCleanup(); } catch (e) {}
     hideAllGameChrome();
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
@@ -1339,7 +1372,8 @@ function hideAllGameChrome() {
     drawerOpen = false;
     ['monitor-hud','phase-hud','nav-desk','ui-bar','float-tools','ts-drawer','pokeBtn','hand-menu',
      'so-screen','so-memorize-screen','so-reveal-screen','so-vote-screen',
-     'sq-battle-screen','sq-results-screen'].forEach(id => {
+     'sq-battle-screen','sq-results-screen',
+     'bb-record-screen','bb-play-screen','bb-remix-screen','bb-vote-screen'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
     try { PP_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); } catch (e) {}
@@ -1451,7 +1485,7 @@ function renderRoomLobby() {
 
     document.querySelectorAll('.game-card:not(.soon)').forEach(el => el.classList.remove('selected'));
     if (selectedGame) {
-        const card = document.getElementById('gc-' + selectedGame.replace('tacostealth','ts').replace('strokeoff','so').replace('squiggle','sq'));
+        const card = document.getElementById('gc-' + selectedGame.replace('tacostealth','ts').replace('strokeoff','so').replace('squiggle','sq').replace('pikpic','pp').replace('rizzorroast','rr').replace('splitcrew','sc').replace('beatbattle','bb'));
         if (card) card.classList.add('selected');
     }
 }
@@ -1756,6 +1790,8 @@ socket.on('gameVotes', ({ votes, players }) => {
     if (ppEl) ppEl.innerHTML = (byGame['pikpic'] || []).join('');
     const rrEl = document.getElementById('gv-rr');
     if (rrEl) rrEl.innerHTML = (byGame['rizzorroast'] || []).join('');
+    const bbEl = document.getElementById('gv-bb');
+    if (bbEl) bbEl.innerHTML = (byGame['beatbattle'] || []).join('');
 });
 
 // ── Taco Stealth ──────────────────────────────────────────────────────────
@@ -4568,6 +4604,439 @@ socket.on('sqRoundEnd', ({ round, scores, players, final }) => {
         }, 12000);
     }
 });
+
+// ════════════════════════════════════════════════════════════════════════
+// BEAT BATTLE
+// ════════════════════════════════════════════════════════════════════════
+const BB_SCREENS = ['bb-record-screen','bb-play-screen','bb-remix-screen','bb-vote-screen'];
+const BB_ROLE_COLORS = { kick:'#ff6b3d', snare:'#5ee6c5', hihat:'#c792ea', synth:'#ffd76b', bass:'#6ba8ff', sfx:'#f78c6c' };
+const BB_ROLE_HINTS = {
+    kick:  'Short punch — "BUH!" or clap your hands',
+    snare: 'Crisp snap — "TSS!" or click your tongue',
+    hihat: 'Quick tick — "tsk" or snap your fingers',
+    synth: 'Hold a note — "BWAAAH" or hum',
+    bass:  'Deep boom — "BOM" or thump your chest',
+    sfx:   'Wild card — any weird sound you want',
+};
+const BB_ROLE_ICONS = { kick:'💥', snare:'🥁', hihat:'🎩', synth:'🎹', bass:'🔊', sfx:'✨' };
+const BB_ROLE_LABELS = { kick:'💥 KICK', snare:'🥁 SNARE', hihat:'🎩 HI-HAT', synth:'🎹 MELODY', bass:'🔊 BASS', sfx:'✨ EFFECT' };
+const BB_STEPS = 16, BB_STEPS_PER_BAR = 8;
+
+let bbAudioCtx = null;
+let bbSoundBuffers = {};   // socketId → AudioBuffer (recorded)
+let bbSynthBuffers = {};   // role → AudioBuffer (fallback)
+let bbPattern = {};        // socketId → Set<stepIdx>
+let bbRoles = {};          // socketId → role string
+let bbPlayerNames = {};    // socketId → name string
+let bbMyId = null, bbMyRole = null, bbTempo = 88;
+let bbIsPlaying = false, bbSchedulerTimer = null;
+let bbCurrentStep = 0, bbNextStepTime = 0, bbLoopCount = 0, bbTargetLoops = 0;
+let bbActiveNodes = [], bbSubmittedSounds = {};
+
+function bbEnsureAudio() {
+    if (!bbAudioCtx) bbAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (bbAudioCtx.state === 'suspended') bbAudioCtx.resume();
+    return bbAudioCtx;
+}
+
+function bbMakeSynth(role) {
+    const ctx = bbEnsureAudio();
+    const sr = ctx.sampleRate, len = Math.floor(sr * 0.28);
+    const buf = ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+        const t = i / sr, env = Math.pow(1 - i / len, 2.2);
+        if (role === 'kick')  d[i] = Math.sin(2*Math.PI*(85*Math.exp(-9*t))*t)*env;
+        else if (role === 'snare') d[i] = ((Math.random()*2-1)*0.7 + Math.sin(2*Math.PI*200*t)*0.3)*Math.exp(-15*t);
+        else if (role === 'hihat') d[i] = (Math.random()*2-1)*Math.exp(-28*t)*0.5;
+        else if (role === 'synth') d[i] = Math.sin(2*Math.PI*440*t)*env*0.6;
+        else if (role === 'bass')  d[i] = Math.sin(2*Math.PI*65*t)*env*0.85;
+        else d[i] = Math.sin(2*Math.PI*300*t*(1+t*2))*env*0.45;
+    }
+    return buf;
+}
+
+function bbLoadFallbacks() {
+    const ctx = bbEnsureAudio();
+    ['kick','snare','hihat','synth','bass','sfx'].forEach(r => {
+        if (!bbSynthBuffers[r]) bbSynthBuffers[r] = bbMakeSynth(r);
+    });
+}
+
+async function bbDecodeSound(dataUrl, playerId) {
+    try {
+        const ctx = bbEnsureAudio();
+        const b64 = dataUrl.split(',')[1];
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        bbSoundBuffers[playerId] = await ctx.decodeAudioData(bytes.buffer.slice(0));
+    } catch (e) { console.warn('bbDecode fail', playerId, e); }
+}
+
+function bbPlayHit(playerId, when) {
+    const buf = bbSoundBuffers[playerId] || bbSynthBuffers[bbRoles[playerId]];
+    if (!buf || !bbAudioCtx) return;
+    const src = bbAudioCtx.createBufferSource();
+    src.buffer = buf;
+    const g = bbAudioCtx.createGain(); g.gain.value = 0.82;
+    src.connect(g); g.connect(bbAudioCtx.destination);
+    src.start(when);
+    bbActiveNodes.push(src);
+}
+
+function bbStopAudio() {
+    bbActiveNodes.forEach(n => { try { n.stop(); } catch(e){} });
+    bbActiveNodes = [];
+}
+
+function bbStepDur() { return 60 / bbTempo / 2; }
+
+function bbScheduler() {
+    const ctx = bbAudioCtx;
+    while (bbNextStepTime < ctx.currentTime + 0.1) {
+        Object.entries(bbPattern).forEach(([pid, steps]) => {
+            const set = steps instanceof Set ? steps : new Set(steps);
+            if (set.has(bbCurrentStep)) bbPlayHit(pid, bbNextStepTime);
+        });
+        const delay = Math.max(0, (bbNextStepTime - ctx.currentTime) * 1000);
+        const step = bbCurrentStep;
+        setTimeout(() => bbRenderPlayhead(step), delay);
+        bbNextStepTime += bbStepDur();
+        bbCurrentStep = (bbCurrentStep + 1) % BB_STEPS;
+        if (bbCurrentStep === 0) {
+            bbLoopCount++;
+            const el = document.getElementById('bb-loop-counter');
+            if (el && bbTargetLoops > 0) el.textContent = `Loop ${bbLoopCount} / ${bbTargetLoops}`;
+            if (bbTargetLoops > 0 && bbLoopCount >= bbTargetLoops) {
+                clearInterval(bbSchedulerTimer); bbIsPlaying = false;
+            }
+        }
+    }
+}
+
+function bbStartPlayback(loops) {
+    bbEnsureAudio(); bbLoadFallbacks();
+    bbIsPlaying = true; bbCurrentStep = 0; bbLoopCount = 0; bbTargetLoops = loops || 0;
+    bbNextStepTime = bbAudioCtx.currentTime + 0.12;
+    bbSchedulerTimer = setInterval(bbScheduler, 25);
+}
+
+function bbStopPlayback() {
+    clearInterval(bbSchedulerTimer); bbSchedulerTimer = null;
+    bbIsPlaying = false; bbStopAudio(); bbRenderPlayhead(-1);
+}
+
+function bbShowScreen(id) {
+    BB_SCREENS.forEach(s => {
+        const el = document.getElementById(s);
+        if (el) el.style.display = s === id ? 'flex' : 'none';
+    });
+}
+
+function bbCleanup() {
+    BB_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; });
+    bbStopPlayback();
+    bbSoundBuffers = {}; bbPattern = {}; bbRoles = {}; bbPlayerNames = {};
+    bbMyId = null; bbMyRole = null; bbSubmittedSounds = {};
+}
+
+// ── Grid ─────────────────────────────────────────────────────────────────────
+
+function bbBuildGrid(containerId, editable) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    Object.entries(bbRoles).forEach(([pid, role]) => {
+        const color = BB_ROLE_COLORS[role] || '#aaa';
+        const isMine = pid === bbMyId;
+        const canEdit = editable && isMine;
+        const steps = bbPattern[pid] instanceof Set ? bbPattern[pid] : new Set(bbPattern[pid] || []);
+
+        const row = document.createElement('div');
+        row.className = 'bb-step-row' + (isMine ? ' bb-mine' : '');
+        row.dataset.player = pid;
+
+        const lbl = document.createElement('div');
+        lbl.className = 'bb-row-label';
+        lbl.style.color = isMine ? color : '#4a6a8a';
+        lbl.textContent = bbPlayerNames[pid] || '?';
+        row.appendChild(lbl);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'bb-steps';
+        for (let i = 0; i < BB_STEPS; i++) {
+            const s = document.createElement('div');
+            s.className = 'bb-step' + (i % BB_STEPS_PER_BAR === 0 ? ' bar-mark' : '') +
+                          (steps.has(i) ? ' on' : '') + (!canEdit ? ' locked' : '');
+            s.dataset.step = i; s.dataset.player = pid;
+            if (steps.has(i)) s.style.background = color;
+            if (canEdit) s.addEventListener('click', () => socket.emit('bbToggleStep', { stepIdx: i }));
+            wrap.appendChild(s);
+        }
+        row.appendChild(wrap);
+        container.appendChild(row);
+    });
+}
+
+function bbRenderPlayhead(stepIdx) {
+    document.querySelectorAll('.bb-step').forEach(s => s.classList.remove('playing'));
+    if (stepIdx >= 0)
+        document.querySelectorAll(`.bb-step[data-step="${stepIdx}"]`).forEach(s => s.classList.add('playing'));
+}
+
+function bbUpdateStep(playerId, stepIdx, on) {
+    if (!bbPattern[playerId]) bbPattern[playerId] = new Set();
+    if (!(bbPattern[playerId] instanceof Set)) bbPattern[playerId] = new Set(bbPattern[playerId]);
+    if (on) bbPattern[playerId].add(stepIdx); else bbPattern[playerId].delete(stepIdx);
+    const color = BB_ROLE_COLORS[bbRoles[playerId]] || '#aaa';
+    document.querySelectorAll(`.bb-step[data-player="${playerId}"][data-step="${stepIdx}"]`).forEach(s => {
+        s.classList.toggle('on', on); s.style.background = on ? color : '';
+    });
+}
+
+function bbUpdateSubmittedList() {
+    const c = document.getElementById('bb-submitted-list');
+    if (!c) return;
+    c.innerHTML = Object.entries(bbRoles).map(([id, role]) => {
+        const done = !!bbSubmittedSounds[id];
+        return `<span class="bb-submitted-dot ${done ? 'done' : 'waiting'}">${done ? '✓' : '○'} ${bbPlayerNames[id] || '?'} <span style="opacity:.6">${BB_ROLE_ICONS[role] || ''}</span></span>`;
+    }).join('');
+}
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+
+let bbMediaStream = null, bbMediaRecorder = null, bbRecordChunks = [], bbRecordTimeout = null;
+
+async function bbStartRecording() {
+    try { bbMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch(e) { showToast('Mic access needed!'); return; }
+    bbRecordChunks = [];
+    bbMediaRecorder = new MediaRecorder(bbMediaStream);
+    bbMediaRecorder.ondataavailable = e => { if (e.data.size > 0) bbRecordChunks.push(e.data); };
+    bbMediaRecorder.onstop = bbHandleStop;
+    bbMediaRecorder.start();
+    const btn = document.getElementById('bb-record-btn');
+    btn.classList.add('recording');
+    document.getElementById('bb-record-label').textContent = 'RECORDING…';
+    bbRecordTimeout = setTimeout(bbStopRecording, 3000);
+}
+
+function bbStopRecording() {
+    clearTimeout(bbRecordTimeout);
+    if (bbMediaRecorder && bbMediaRecorder.state !== 'inactive') bbMediaRecorder.stop();
+    if (bbMediaStream) bbMediaStream.getTracks().forEach(t => t.stop());
+    const btn = document.getElementById('bb-record-btn');
+    if (btn) { btn.classList.remove('recording'); }
+    const lbl = document.getElementById('bb-record-label');
+    if (lbl) lbl.textContent = 'HOLD';
+}
+
+async function bbHandleStop() {
+    if (!bbRecordChunks.length) return;
+    const blob = new Blob(bbRecordChunks, { type: bbRecordChunks[0].type || 'audio/webm' });
+    const reader = new FileReader();
+    reader.onload = async () => {
+        const dataUrl = reader.result;
+        await bbDecodeSound(dataUrl, bbMyId);
+        socket.emit('bbSubmitSound', { dataUrl });
+        bbEnsureAudio(); bbLoadFallbacks();
+        bbPlayHit(bbMyId, bbAudioCtx.currentTime + 0.05);
+        showToast('Sound in! 🎤');
+    };
+    reader.readAsDataURL(blob);
+}
+
+function bbWireRecordBtn() {
+    const btn = document.getElementById('bb-record-btn');
+    if (!btn || btn._bbWired) return;
+    btn._bbWired = true;
+    btn.style.touchAction = 'none';
+    let active = false;
+    btn.addEventListener('pointerdown', e => {
+        e.preventDefault(); if (active) return;
+        active = true; bbEnsureAudio(); bbStartRecording();
+    });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev =>
+        btn.addEventListener(ev, () => { if (active) { active = false; bbStopRecording(); } })
+    );
+}
+
+// ── Socket handlers ───────────────────────────────────────────────────────────
+
+socket.on('bbRecordPhase', ({ assignments, timeLeft }) => {
+    hide('room-lobby');
+    bbMyId = socket.id;
+    bbRoles = {}; bbPlayerNames = {}; bbSubmittedSounds = {};
+    Object.entries(assignments).forEach(([id, { role, name }]) => {
+        bbRoles[id] = role; bbPlayerNames[id] = name;
+    });
+    bbMyRole = bbRoles[bbMyId];
+    document.getElementById('bb-role-label').textContent = BB_ROLE_LABELS[bbMyRole] || bbMyRole;
+    document.getElementById('bb-role-hint').textContent = BB_ROLE_HINTS[bbMyRole] || 'Record a short sound';
+    document.getElementById('bb-record-timer').textContent = timeLeft;
+    bbUpdateSubmittedList();
+    bbShowScreen('bb-record-screen');
+    bbWireRecordBtn();
+});
+
+socket.on('bbSoundIn', async ({ playerId, dataUrl }) => {
+    bbSubmittedSounds[playerId] = true;
+    if (dataUrl) await bbDecodeSound(dataUrl, playerId);
+    bbUpdateSubmittedList();
+});
+
+socket.on('bbTimeTick', ({ timeLeft }) => {
+    const r = document.getElementById('bb-record-timer'); if (r) r.textContent = timeLeft;
+    const x = document.getElementById('bb-remix-timer');  if (x) x.textContent = timeLeft;
+});
+
+socket.on('bbListenPhase', async ({ pattern, sounds, loopsToPlay, tempo }) => {
+    bbTempo = tempo || 88;
+    bbPattern = {};
+    Object.entries(pattern).forEach(([id, steps]) => { bbPattern[id] = new Set(steps); });
+    await Promise.all(Object.entries(sounds).map(([id, s]) =>
+        (!bbSoundBuffers[id] && s.dataUrl) ? bbDecodeSound(s.dataUrl, id) : Promise.resolve()
+    ));
+    bbShowScreen('bb-play-screen');
+    bbBuildGrid('bb-play-grid', false);
+    document.getElementById('bb-loop-counter').textContent = '';
+    bbStartPlayback(loopsToPlay);
+});
+
+socket.on('bbRemixPhase', async ({ pattern, sounds, timeLeft, tempo }) => {
+    bbTempo = tempo || 88;
+    bbPattern = {};
+    Object.entries(pattern).forEach(([id, steps]) => { bbPattern[id] = new Set(steps); });
+    await Promise.all(Object.entries(sounds).map(([id, s]) =>
+        (!bbSoundBuffers[id] && s.dataUrl) ? bbDecodeSound(s.dataUrl, id) : Promise.resolve()
+    ));
+    bbStopPlayback();
+    bbShowScreen('bb-remix-screen');
+    document.getElementById('bb-remix-timer').textContent = timeLeft;
+    bbBuildGrid('bb-remix-grid', true);
+    bbStartPlayback(0);
+});
+
+socket.on('bbStepUpdate', ({ playerId, stepIdx, on }) => { bbUpdateStep(playerId, stepIdx, on); });
+
+socket.on('bbVotePhase', ({ players }) => {
+    bbStopPlayback();
+    bbShowScreen('bb-vote-screen');
+    const c = document.getElementById('bb-vote-cards');
+    c.innerHTML = '';
+    let voted = false;
+    players.forEach(p => {
+        const isSelf = p.id === bbMyId;
+        const card = document.createElement('div');
+        card.className = 'bb-vote-card' + (isSelf ? ' self' : '');
+        const color = BB_ROLE_COLORS[p.role] || '#aaa';
+        card.innerHTML = `
+            <div style="font-size:1.5em;">${BB_ROLE_ICONS[p.role] || '🎵'}</div>
+            <div style="flex:1;">
+                <div style="font-weight:700;font-size:0.95em;">${p.name}</div>
+                <div style="font-size:0.7em;color:${color};">${BB_ROLE_LABELS[p.role] || p.role}</div>
+            </div>
+            ${isSelf ? '<div style="font-size:0.62em;color:#4a6a8a;">(you)</div>' : ''}
+        `;
+        if (!isSelf) card.addEventListener('click', () => {
+            if (voted) return; voted = true;
+            socket.emit('bbVote', { targetId: p.id });
+            c.querySelectorAll('.bb-vote-card').forEach(x => x.classList.remove('voted'));
+            card.classList.add('voted');
+        });
+        c.appendChild(card);
+    });
+    document.getElementById('bb-vote-status').textContent = '';
+});
+
+socket.on('bbVoteCast', ({ voterCount, total }) => {
+    const el = document.getElementById('bb-vote-status');
+    if (el) el.textContent = `${voterCount} / ${total - 1} votes in`;
+});
+
+socket.on('bbResult', ({ scores }) => {
+    bbShowScreen('bb-vote-screen');
+    const c = document.getElementById('bb-vote-cards');
+    c.innerHTML = scores.map((s, i) => `
+        <div class="bb-vote-card" style="border-color:${i===0?'#ffd700':'#2a3450'};cursor:default;">
+            <div style="font-size:1.3em;">${['🥇','🥈','🥉'][i]||'·'}</div>
+            <div style="flex:1;">
+                <div style="font-weight:700;">${s.name}</div>
+                <div style="font-size:0.7em;color:${BB_ROLE_COLORS[s.role]||'#aaa'};">${BB_ROLE_LABELS[s.role]||s.role}</div>
+            </div>
+            <div style="font-weight:900;font-size:1.05em;color:#ffd700;">${s.votes} 🗳️</div>
+        </div>
+    `).join('');
+    document.getElementById('bb-vote-status').textContent = '';
+    if (scores.length) showPodium(
+        scores.map(s => ({ name: s.name, score: s.votes, scoreLabel: `${s.votes} vote${s.votes!==1?'s':''}` })),
+        { title: '🥁 BEAT BATTLE' }
+    );
+    if (isRoomHost) {
+        const btn = document.createElement('button');
+        btn.textContent = 'BACK TO LOBBY';
+        btn.style.cssText = 'margin-top:14px;padding:12px 28px;background:#2e7d32;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:0.9em;cursor:pointer;width:100%;max-width:380px;';
+        btn.onclick = () => socket.emit('bbReturnToLobby');
+        c.appendChild(btn);
+    }
+});
+
+socket.on('bbLobby', () => { bbCleanup(); show('room-lobby'); renderRoomLobby(); });
 </script>
+
+</body>
+</html>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     BEAT BATTLE SCREENS
+════════════════════════════════════════════════════════════════ -->
+
+<!-- Record phase -->
+<div id="bb-record-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;overflow-y:auto;">
+  <div style="width:100%;background:#111827;padding:18px 20px 14px;text-align:center;border-bottom:1px solid #1e2a3a;">
+    <div id="bb-role-label" style="font-size:2em;font-weight:900;letter-spacing:-0.02em;">💥 KICK</div>
+    <div id="bb-role-hint" style="font-size:0.8em;color:#4a6a8a;margin-top:5px;">Loading…</div>
+  </div>
+  <div style="padding:10px 0 4px;text-align:center;">
+    <div id="bb-record-timer" style="font-size:2em;font-weight:900;color:#ff9800;line-height:1;">45</div>
+    <div style="font-size:0.62em;color:#4a6a8a;margin-top:2px;">seconds left</div>
+  </div>
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:16px;">
+    <button id="bb-record-btn" style="width:130px;height:130px;border-radius:50%;border:4px solid #ff6b3d;background:#1a0c06;color:#ff6b3d;font-size:2em;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;touch-action:none;-webkit-tap-highlight-color:transparent;">
+      <span>🎤</span>
+      <span id="bb-record-label" style="font-size:0.3em;font-weight:900;letter-spacing:0.1em;">HOLD</span>
+    </button>
+  </div>
+  <div style="font-size:0.65em;color:#2a3a50;text-align:center;padding:0 20px 8px;">hold up to 3 seconds — release to submit</div>
+  <div id="bb-submitted-list" style="padding:8px 16px 24px;width:100%;max-width:420px;display:flex;flex-wrap:wrap;justify-content:center;"></div>
+</div>
+
+<!-- Listen phase (beat plays, read-only grid) -->
+<div id="bb-play-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;padding:20px 16px;gap:14px;overflow-y:auto;">
+  <div style="font-size:1.05em;font-weight:800;color:#ff9800;text-align:center;letter-spacing:0.04em;">🎵 YOUR BEAT</div>
+  <div style="font-size:0.7em;color:#4a6a8a;text-align:center;">Everyone's sounds are playing — listen up</div>
+  <div id="bb-play-grid" style="width:100%;max-width:500px;"></div>
+  <div id="bb-loop-counter" style="font-size:0.75em;color:#4a6a8a;"></div>
+</div>
+
+<!-- Remix phase (own row editable) -->
+<div id="bb-remix-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:flex-start;padding:20px 16px;gap:12px;overflow-y:auto;">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+    <div style="font-size:1.05em;font-weight:800;color:#ff9800;letter-spacing:0.04em;">🎛️ REMIX</div>
+    <div id="bb-remix-timer" style="font-size:1.2em;font-weight:900;">45</div>
+  </div>
+  <div style="font-size:0.7em;color:#4a6a8a;">Tap <span style="color:#ff9800;">your row</span> to change when your sound hits</div>
+  <div id="bb-remix-grid" style="width:100%;max-width:500px;"></div>
+</div>
+
+<!-- Vote phase -->
+<div id="bb-vote-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;padding:24px 20px;gap:14px;overflow-y:auto;">
+  <div style="font-size:1.1em;font-weight:800;color:#ff9800;text-align:center;">🏆 BEST SOUND?</div>
+  <div style="font-size:0.75em;color:#4a6a8a;text-align:center;">Whose voice made the beat?</div>
+  <div id="bb-vote-cards" style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:380px;"></div>
+  <div id="bb-vote-status" style="font-size:0.72em;color:#4a6a8a;margin-top:4px;"></div>
+</div>
+
 </body>
 </html>
