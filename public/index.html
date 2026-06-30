@@ -551,6 +551,15 @@
         .bb-battle-btn:active:not(:disabled) { transform:scale(.96); }
         .bb-battle-btn.voted { border-color:#ff9800; background:rgba(255,152,0,.1); }
         .bb-battle-btn:disabled { opacity:.4; cursor:default; }
+        /* Beat pad visualization */
+        .bb-pad-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px 14px; max-width:380px; margin:0 auto; width:100%; box-sizing:border-box; }
+        .bb-pad { border-radius:10px; aspect-ratio:1; border:2px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; font-size:0.65em; font-weight:800; color:rgba(255,255,255,.35); flex-direction:column; gap:2px; transition:background .05s; }
+        @keyframes bb-pad-fire { 0%,100%{opacity:1;transform:scale(1)} 30%{opacity:1;transform:scale(1.07)} }
+        .bb-pad.firing { animation:bb-pad-fire 0.15s ease-out; }
+        /* Per-sound speed button */
+        .bb-speed-btn { display:block; margin-top:3px; padding:2px 0; width:100%; border:1px solid #2a3450; border-radius:4px; background:#151d2c; color:#5a7aaa; font-size:0.7em; cursor:pointer; text-align:center; font-weight:700; }
+        .bb-speed-btn:active { background:#1e2a40; }
+        .bb-speed-btn.active-speed { border-color:#ff9800; color:#ff9800; }
     </style>
 </head>
 <body>
@@ -4675,6 +4684,9 @@ let bbSubmittedCount = 0, bbTotalPlayers = 0;
 let bbMyHand = [];         // [{id, ownerId, ownerName, role, dataUrl}]
 let bbMyBeat = {};         // soundId → Set<stepIdx>
 let bbBattleHasVoted = false;
+let bbSoundCustom = {};    // soundId → { speed: 1.0 }
+const BB_SPEEDS = [1, 0.5, 2, 4];
+const BB_SPEED_LABELS = ['NORM', '808↓', 'CRISP', 'HYPER'];
 
 // ─ Recording ─
 let bbMediaStream = null, bbMediaRecorder = null;
@@ -4730,10 +4742,15 @@ function bbPlayHit(soundId, role, when) {
     if (!buf || !bbAudioCtx) return;
     const src = bbAudioCtx.createBufferSource();
     src.buffer = buf;
+    const custom = bbSoundCustom[soundId] || {};
+    src.playbackRate.value = custom.speed || 1.0;
     const g = bbAudioCtx.createGain(); g.gain.value = 0.82;
     src.connect(g); g.connect(bbAudioCtx.destination);
     src.start(when);
     bbActiveNodes.push(src);
+    // Flash the pad visualization if it's visible
+    const pad = document.querySelector(`.bb-pad[data-sid="${soundId}"]`);
+    if (pad) { pad.classList.remove('firing'); void pad.offsetWidth; pad.classList.add('firing'); }
 }
 
 function bbStopAudio() {
@@ -4804,7 +4821,7 @@ function bbCleanup() {
     bbShowScreen(null);
     bbStopBeat();
     bbSoundBuffers = {}; bbSynthBuffers = {};
-    bbMyRecordings = {}; bbMyHand = []; bbMyBeat = {};
+    bbMyRecordings = {}; bbMyHand = []; bbMyBeat = {}; bbSoundCustom = {};
     bbBeatPattern = {}; bbBeatHand = [];
     bbMyId = null; bbCurrentRoleIdx = 0;
     bbBattleHasVoted = false; bbSubmittedCount = 0; bbTotalPlayers = 0;
@@ -4929,11 +4946,28 @@ function bbBuildGrid(container) {
         const row = document.createElement('div');
         row.className = 'bb-step-row';
 
-        // Label + density fill button
+        // Label + speed + fill buttons
         const lbl = document.createElement('div');
         lbl.className = 'bb-row-label';
         lbl.style.color = color;
-        lbl.innerHTML = `<div>${BB_ROLE_ICONS[sound.role] || ''} ${sound.role.toUpperCase()}</div><div style="opacity:.5;font-size:.85em;">${isOwn ? 'you' : sound.ownerName}</div>`;
+        lbl.innerHTML = `<div>${BB_ROLE_ICONS[sound.role] || ''} ${sound.role.toUpperCase()}</div>`;
+
+        // Speed/pitch cycle button
+        const speedBtn = document.createElement('button');
+        speedBtn.className = 'bb-speed-btn';
+        let curSpeedIdx = BB_SPEEDS.indexOf(bbSoundCustom[sound.id]?.speed || 1);
+        if (curSpeedIdx === -1) curSpeedIdx = 0;
+        speedBtn.textContent = BB_SPEED_LABELS[curSpeedIdx];
+        if (curSpeedIdx !== 0) speedBtn.classList.add('active-speed');
+        speedBtn.addEventListener('click', () => {
+            const idx = BB_SPEEDS.indexOf(bbSoundCustom[sound.id]?.speed || 1);
+            const next = ((idx === -1 ? 0 : idx) + 1) % BB_SPEEDS.length;
+            bbSoundCustom[sound.id] = { speed: BB_SPEEDS[next] };
+            speedBtn.textContent = BB_SPEED_LABELS[next];
+            speedBtn.classList.toggle('active-speed', next !== 0);
+            bbEnsureAudio(); bbPlayHit(sound.id, sound.role, bbAudioCtx.currentTime + 0.02);
+        });
+        lbl.appendChild(speedBtn);
 
         const fillBtn = document.createElement('button');
         fillBtn.className = 'bb-fill-btn';
@@ -5055,6 +5089,7 @@ socket.on('bbRecordPhase', ({ timeLeft, playerCount }) => {
 socket.on('bbTimeTick', ({ timeLeft }) => {
     const r = document.getElementById('bb-rec-timer'); if (r) r.textContent = timeLeft;
     const b = document.getElementById('bb-build-timer'); if (b) b.textContent = timeLeft;
+    const bt = document.getElementById('bb-battle-timer'); if (bt) bt.textContent = timeLeft;
     if (timeLeft === 5) {
         const recScreen = document.getElementById('bb-record-screen');
         if (recScreen && recScreen.style.display === 'flex') {
@@ -5092,7 +5127,7 @@ socket.on('bbBuildPhase', async ({ hand, timeLeft, tempo }) => {
     bbWireBuildScreen();
 });
 
-socket.on('bbMatchupStart', async ({ matchupNum, totalMatchups, p1Id, p1Name, p2Id, p2Name, p1Beat, p2Beat, p1Hand, p2Hand }) => {
+socket.on('bbMatchupStart', async ({ matchupNum, totalMatchups, p1Id, p1Name, p2Id, p2Name, p1Beat, p2Beat, p1Hand, p2Hand, voteTimeLeft }) => {
     bbStopBeat();
     bbBattleHasVoted = false;
     bbShowScreen('bb-battle-screen');
@@ -5101,21 +5136,43 @@ socket.on('bbMatchupStart', async ({ matchupNum, totalMatchups, p1Id, p1Name, p2
     const nowPlaying = document.getElementById('bb-battle-now-playing');
     const voteArea = document.getElementById('bb-battle-vote-area');
     const voteStatus = document.getElementById('bb-battle-vote-status');
+    const timerEl = document.getElementById('bb-battle-timer');
     const voteP1 = document.getElementById('bb-vote-p1');
     const voteP2 = document.getElementById('bb-vote-p2');
     if (nowPlaying) nowPlaying.textContent = '⏳ Loading beats…';
     if (voteArea) voteArea.style.display = 'none';
     if (voteStatus) voteStatus.textContent = '';
+    if (timerEl) { timerEl.textContent = voteTimeLeft || ''; timerEl.style.display = 'none'; }
     if (voteP1) { voteP1.textContent = p1Name; voteP1.disabled = false; voteP1.classList.remove('voted'); }
     if (voteP2) { voteP2.textContent = p2Name; voteP2.disabled = false; voteP2.classList.remove('voted'); }
+
+    // Build pad visualization — one pad per sound from both hands
+    const allSounds = [...p1Hand, ...p2Hand.filter(s => !p1Hand.find(x => x.id === s.id))];
+    const padGrid = document.getElementById('bb-pad-grid');
+    if (padGrid) {
+        padGrid.innerHTML = '';
+        allSounds.slice(0, 8).forEach(sound => {
+            const color = BB_ROLE_COLORS[sound.role] || '#aaa';
+            const pad = document.createElement('div');
+            pad.className = 'bb-pad';
+            pad.dataset.sid = sound.id;
+            pad.style.background = color + '18';
+            pad.style.borderColor = color + '44';
+            pad.innerHTML = `<span style="font-size:1.3em">${BB_ROLE_ICONS[sound.role] || '🎵'}</span><span style="color:${color}">${sound.role.toUpperCase()}</span>`;
+            padGrid.appendChild(pad);
+        });
+    }
+
     bbEnsureAudio(); bbLoadFallbacks();
     await Promise.all([...p1Hand, ...p2Hand].map(s => bbDecodeSound(s.id, s.dataUrl, s.role)));
+
     if (nowPlaying) nowPlaying.textContent = `▶ ${p1Name}'s BEAT`;
     bbStartBeat(p1Beat, p1Hand, 2, () => {
         if (nowPlaying) nowPlaying.textContent = `▶ ${p2Name}'s BEAT`;
         bbStartBeat(p2Beat, p2Hand, 2, () => {
             if (nowPlaying) nowPlaying.textContent = '🏆 Whose beat was better?';
             if (voteArea) voteArea.style.display = 'flex';
+            if (timerEl) timerEl.style.display = '';
         });
     });
 });
@@ -5142,6 +5199,9 @@ socket.on('bbGameOver', ({ scores }) => {
         scores.map(s => ({ name: s.name, score: s.wins, scoreLabel: `${s.wins} win${s.wins !== 1 ? 's' : ''}` })),
         { title: '🎤 BAD PITCHES' }
     );
+    // Override podium close button to return to room lobby (otherwise screen goes blank)
+    const closeBtn = document.getElementById('podium-close');
+    if (closeBtn) closeBtn.onclick = () => { hidePodium(); show('room-lobby'); renderRoomLobby(); };
     if (isRoomHost) {
         setTimeout(() => {
             const overlay = document.getElementById('podium-overlay');
@@ -5156,7 +5216,14 @@ socket.on('bbGameOver', ({ scores }) => {
     }
 });
 
-socket.on('bbLobby', () => { bbCleanup(); show('room-lobby'); renderRoomLobby(); });
+socket.on('bbLobby', () => {
+    bbCleanup();
+    hidePodium();
+    // Restore default podium close button behaviour
+    const closeBtn = document.getElementById('podium-close');
+    if (closeBtn) closeBtn.onclick = hidePodium;
+    show('room-lobby'); renderRoomLobby();
+});
 </script>
 
 </body>
@@ -5217,12 +5284,20 @@ socket.on('bbLobby', () => { bbCleanup(); show('room-lobby'); renderRoomLobby();
 </div>
 
 <!-- Battle phase -->
-<div id="bb-battle-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;padding:28px 20px 24px;gap:16px;overflow-y:auto;">
-  <div id="bb-battle-matchup" style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:0.08em;">MATCHUP 1 / 1</div>
-  <div id="bb-battle-vs" style="font-size:1.1em;font-weight:900;text-align:center;">Player vs Player</div>
-  <div id="bb-battle-now-playing" style="font-size:0.88em;font-weight:700;color:#5ee6c5;text-align:center;min-height:1.4em;">▶ Loading…</div>
-  <div id="bb-battle-vote-area" style="display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:400px;">
-    <div style="font-size:0.75em;color:#4a6a8a;">🏆 Whose beat was better?</div>
+<div id="bb-battle-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;padding:22px 12px 20px;gap:10px;overflow-y:auto;">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:420px;padding:0 4px;">
+    <div id="bb-battle-matchup" style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:0.08em;">MATCHUP 1 / 1</div>
+    <div style="display:flex;align-items:baseline;gap:3px;">
+      <div id="bb-battle-timer" style="display:none;font-size:1.6em;font-weight:900;color:#fff;">50</div>
+      <div style="font-size:0.5em;color:#4a6a8a;">secs</div>
+    </div>
+  </div>
+  <div id="bb-battle-vs" style="font-size:1em;font-weight:900;text-align:center;">Player vs Player</div>
+  <div id="bb-battle-now-playing" style="font-size:0.85em;font-weight:700;color:#5ee6c5;text-align:center;min-height:1.4em;">▶ Loading…</div>
+  <!-- Pad visualization — lights up as sounds fire during playback -->
+  <div id="bb-pad-grid" class="bb-pad-grid"></div>
+  <div id="bb-battle-vote-area" style="display:none;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:400px;margin-top:4px;">
+    <div style="font-size:0.75em;color:#4a6a8a;font-weight:700;">🏆 WHOSE BEAT WAS BETTER?</div>
     <div style="display:flex;gap:12px;width:100%;">
       <button id="bb-vote-p1" class="bb-battle-btn">Player 1</button>
       <button id="bb-vote-p2" class="bb-battle-btn">Player 2</button>

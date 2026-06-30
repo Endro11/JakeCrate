@@ -1278,6 +1278,7 @@ const BB_STEPS = 16;
 const BB_TEMPO = 88;
 const BB_RECORD_SECS = 60;
 const BB_BUILD_SECS = 60;
+const BB_BATTLE_SECS = 50; // auto-advance if not all votes in within 50s
 
 function bb_shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
@@ -1345,9 +1346,11 @@ function bb_endBuild(room) {
 }
 
 function bb_nextMatchup(room) {
+    if (room.bbTimer) { clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null; }
     room.bbCurrentMatchup++;
     if (room.bbCurrentMatchup >= room.bbMatchups.length) { bb_gameOver(room); return; }
     const m = room.bbMatchups[room.bbCurrentMatchup];
+    room.bbTimeLeft = BB_BATTLE_SECS;
     broadcastRoom(room, 'bbMatchupStart', {
         matchupNum: room.bbCurrentMatchup + 1,
         totalMatchups: room.bbMatchups.length,
@@ -1357,7 +1360,14 @@ function bb_nextMatchup(room) {
         p2Beat: room.bbBeats[m.p2Id] || {},
         p1Hand: room.bbHands[m.p1Id] || [],
         p2Hand: room.bbHands[m.p2Id] || [],
+        voteTimeLeft: BB_BATTLE_SECS,
     });
+    // Countdown timer — ticks and auto-advances if not all votes come in
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endMatchupVote(room); }
+    }, 1000);
 }
 
 function bb_endMatchupVote(room) {
@@ -1376,13 +1386,16 @@ function bb_endMatchupVote(room) {
 }
 
 function bb_gameOver(room) {
+    clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null;
     room.bbPhase = 'RESULT';
     room.gamePhase = 'LOBBY';
     const scores = Object.keys(room.players).map(id => ({
         id, name: room.players[id]?.name || '?', wins: room.bbScores[id] || 0,
     })).sort((a, b) => b.wins - a.wins);
     broadcastRoom(room, 'bbGameOver', { scores });
-    broadcastGameState(room);
+    // Do NOT call broadcastGameState here — that would immediately fire
+    // gameState {phase:'LOBBY'} which dismisses the podium before anyone reads it.
+    // gameState is sent when the host clicks "Back to Lobby" via bbReturnToLobby.
 }
 
 // ─── Split Crew ────────────────────────────────────────────────────────────────
