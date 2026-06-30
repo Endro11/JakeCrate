@@ -293,6 +293,43 @@ const playerSize = 75;
 
 ---
 
+## Game 7: Bad Pitches (`beatbattle`)
+
+**Display name:** Bad Pitches · Tagline: "Record dumb mouth-sounds, get dealt a hand, make a beat, 1v1 vote-off"
+**Minimum players:** 2
+
+**How it works:**
+1. **RECORD** — each player hold-records 6 sounds (kick/snare/hihat/synth/bass/sfx) with their mic.
+2. Sounds are pooled and re-dealt — your hand is mostly *other people's* sounds (the comedy).
+3. **TUNE** (45s) — hear your dealt hand as pads; set each sound's pitch/speed (NORM/808↓/CRISP/HYPER).
+4. **BUILD** (60s) — make a beat (see below).
+5. **BATTLE** — round-robin 1v1; each beat plays 2 loops, then everyone votes. 50s auto-advance.
+6. **RESULT** — podium; you can save your beat as a WAV.
+
+**BUILD design ("pick a vibe, tweak one sound at a time" — GarageBand Smart Drums style):**
+- Opens on a real groove already playing (Boom Bap default) — never an empty grid.
+- **Vibe** buttons (Boom Bap / Trap / House / Lo-fi) fill *all* sounds with a full pattern in one tap.
+- Edit ONE sound at a time: tap a pad to hear + select it → a single 16-step lane appears for just
+  that sound (tap cells to add/remove, auto on-grid, no timing skill needed).
+- Two jargon-free per-sound dials: **Deep ↔ High** (pitch/speed) and **Chill / Med / Busy / Max** (density —
+  slide hi-hats to Busy for fast hats). Continuous loop; Play/Stop + Clear-this-sound.
+- Two earlier BUILD designs were rejected: the original 8-row 2×8 step-grid wall (too busy), and a
+  free-timing finger-drum loop-recorder with quantize/bars/roll/metronome (too open-ended + jargon).
+  Don't bring those back.
+
+**Key functions (`public/index.html`):** `bbRenderPads` (pad strip), `bbSetFocus` / `bbRenderFocusLane`
+(focused-sound editor), `bbSetDensity` (`BB_DENSITY`), `bbApplyGroove` (`BB_GROOVE_PRESETS`),
+`bbColorFor` (stable per-sound color), `bbStartBeat`/`bbScheduler` (audio engine, `bbActiveCustom` for
+playback tweaks). Server: `bb_startGame` → `bb_endRecord` → `bb_endTune` → `bb_endBuild` → `bb_nextMatchup`.
+
+**Socket events:**
+- Server → client: `bbRecordPhase`, `bbTunePhase`, `bbBuildPhase`, `bbMatchupStart`, `bbMatchupResult`, `bbGameOver`, `bbTimeTick`, `bbLobby`
+- Client → server: `bbStartGame`, `bbSubmitRecordings`, `bbSubmitTune`, `bbSubmitBeat {beat,custom}`, `bbVote`, `bbReturnToLobby`
+
+**Audio:** Web Audio API — recordings via MediaRecorder → base64 → `decodeAudioData`; per-sound speed via `playbackRate`; WAV export via `OfflineAudioContext`. 88 BPM, 16 steps, 2-bar loop.
+
+---
+
 ## Lobby / Room Management
 
 **Flow:**
@@ -450,3 +487,5 @@ Render free tier — first load after idle may take ~30 seconds. Port set via `p
 29. PikPic context menu suppression: `oncontextmenu="return false"` + `-webkit-touch-callout:none` on fan cards and vote images
 30. Button/layout pass: `.pp-btn` padding reduced, drop zones compacted, fan-wrap height increased to 210px
 31. HANDOFF updated to cover all 6 games
+32. Bad Pitches (`beatbattle`) added as Game 7 — record/tune/build/battle beat-maker
+33. Bad Pitches BUILD iterated twice: rejected the 8-row step-grid and the free-timing loop-recorder; landed on "pick a vibe, tweak one sound at a time" (commit `e8b72db`). Added TUNE round, per-sound color (`bbColorFor`), and tweak-travels-to-battle fix. HANDOFF now covers all 7 games.
