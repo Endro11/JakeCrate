@@ -1318,38 +1318,62 @@ const BB_VOTE_SECS    = 45;
 const BB_LISTEN_SECS  = 10;
 const BB_TOTAL_ROUNDS = 3;
 const BB_ROLES_V2     = ['thump', 'snap', 'sneak'];
+// Round 1 = vinyl jazz sample, Round 2 = drum/rhythm track, Round 3 = player mouth sounds (no vinyl)
+const BB_ROUND_TYPES  = ['sample', 'break', 'voice'];
 
-async function bb_fetchSample() {
-    const api = 'https://archive.org/advancedsearch.php';
-    const cntRes = await fetch(`${api}?q=collection%3Ageorgeblood+AND+mediatype%3Aaudio&rows=0&output=json`);
-    const { response: { numFound } } = await cntRes.json();
-    const start = Math.floor(Math.random() * Math.max(0, numFound - 50));
-    const srchRes = await fetch(`${api}?q=collection%3Ageorgeblood+AND+mediatype%3Aaudio&fl%5B%5D=identifier,title,creator,date,subject&rows=50&start=${start}&output=json`);
-    const { response: { docs } } = await srchRes.json();
-    const shuffled = [...docs].sort(() => Math.random() - 0.5);
-    for (const doc of shuffled) {
-        const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
-        if (/speech|spoken|comedy|lecture|interview/.test(subj)) continue;
-        try {
-            const metaRes = await fetch(`https://archive.org/metadata/${doc.identifier}`);
-            const meta = await metaRes.json();
-            const mp3 = (meta.files || []).find(f =>
-                /mp3/i.test(f.format || '') && (f.name || '').toLowerCase().endsWith('.mp3') &&
-                parseFloat(f.length || 0) > 60
-            );
-            if (!mp3) continue;
-            const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
-            return {
-                identifier: doc.identifier,
-                title: doc.title || 'Unknown Track',
-                creator,
-                date: (doc.date || '').slice(0, 4),
-                audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
-                thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
-                duration: parseFloat(mp3.length || 180),
-            };
-        } catch(e) { continue; }
+function bb_parseDuration(len) {
+    if (!len) return 0;
+    const s = String(len);
+    if (s.includes(':')) {
+        const parts = s.split(':').map(Number);
+        return parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : parts[0]*60 + (parts[1]||0);
     }
+    return parseFloat(s) || 0;
+}
+
+async function bb_fetchSample(drumOnly = false) {
+    const api = 'https://archive.org/advancedsearch.php';
+    const drumFilter = drumOnly ? ' AND (title:drum OR title:rhythm OR title:bounce OR subject:percussion)' : '';
+    const q = `collection:georgeblood AND mediatype:audio${drumFilter}`;
+    const enc = encodeURIComponent(q);
+    try {
+        const cntRes = await fetch(`${api}?q=${enc}&rows=0&output=json`, { signal: AbortSignal.timeout(8000) });
+        const { response: { numFound } } = await cntRes.json();
+        if (!numFound) throw new Error('0 results');
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const start = Math.floor(Math.random() * Math.max(0, numFound - 100));
+            const srchRes = await fetch(`${api}?q=${enc}&fl[]=identifier,title,creator,date,subject&rows=100&start=${start}&output=json`, { signal: AbortSignal.timeout(8000) });
+            const { response: { docs } } = await srchRes.json();
+            const shuffled = [...docs].sort(() => Math.random() - 0.5);
+            for (const doc of shuffled) {
+                if (!drumOnly) {
+                    const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
+                    if (/speech|spoken|comedy|lecture|interview/.test(subj)) continue;
+                }
+                try {
+                    const metaRes = await fetch(`https://archive.org/metadata/${doc.identifier}`, { signal: AbortSignal.timeout(6000) });
+                    const meta = await metaRes.json();
+                    const mp3 = (meta.files || []).find(f => {
+                        if (!/mp3/i.test(f.format || '') || !(f.name||'').toLowerCase().endsWith('.mp3')) return false;
+                        return bb_parseDuration(f.length) > 60;
+                    });
+                    if (!mp3) continue;
+                    const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
+                    console.log(`[BB] found ${drumOnly?'break':'sample'}: ${doc.identifier} — ${doc.title}`);
+                    return {
+                        identifier: doc.identifier,
+                        title: doc.title || 'Unknown Track',
+                        creator, date: (doc.date || '').slice(0, 4),
+                        audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
+                        thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
+                        duration: bb_parseDuration(mp3.length),
+                    };
+                } catch(e) { continue; }
+            }
+        }
+    } catch(e) { console.error('[BB] fetchSample error:', e.message); }
+    // Drum search fell back — try general
+    if (drumOnly) return bb_fetchSample(false);
     return null;
 }
 
@@ -1362,8 +1386,10 @@ function bb_startGame(room) {
     bb_startRound(room);
 }
 
-async function bb_startRound(room) {
+function bb_startRound(room) {
     room.bbRound++;
+    const roundType = BB_ROUND_TYPES[room.bbRound - 1] || 'sample';
+    room.bbRoundType   = roundType;
     room.bbPhase       = 'CRATE';
     room.bbSample      = null;
     room.bbSampleBytes = null;
@@ -1376,14 +1402,23 @@ async function bb_startRound(room) {
     room.bbListenQueue = [];
     room.bbListenIdx   = -1;
     Object.keys(room.players).forEach(id => { room.bbRoundScores[id] = 0; });
-    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, loading: true });
+    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, roundType, loading: roundType !== 'voice' });
+
+    if (roundType === 'voice') {
+        // No vinyl — short crate screen then jump straight to RECORD
+        room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_endScrub(room); }, 8000);
+        return;
+    }
+
+    // Rounds 1 (sample) and 2 (break) — fetch vinyl from Archive.org
+    const drumOnly = roundType === 'break';
     room.bbTimeLeft = BB_CRATE_SECS;
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
         if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endCrate(room); }
     }, 1000);
-    bb_fetchSample().then(sample => {
+    bb_fetchSample(drumOnly).then(sample => {
         if (!sample || !rooms[room.code]) return;
         room.bbSample = sample;
         broadcastRoom(room, 'bbSampleReady', {
@@ -1392,7 +1427,7 @@ async function bb_startRound(room) {
             audioProxyUrl: `/api/bb-audio/${room.code}`,
             duration: sample.duration,
         });
-    }).catch(e => console.error('bb_fetchSample error:', e.message));
+    }).catch(e => console.error('[BB] bb_fetchSample rejected:', e.message));
 }
 
 function bb_endCrate(room) {

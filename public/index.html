@@ -5094,16 +5094,19 @@ function bbShowScreen(id) {
 }
 
 // ── socket events ──
-socket.on('bbCratePhase',({round,totalRounds,loading})=>{
+socket.on('bbCratePhase',({round,totalRounds,loading,roundType})=>{
     bbMyId=socket.id; bbSampleBuffer=null; bbSoundBuffers={};
     bbMyRecordings={}; bbMyHand={}; bbMyBeat={}; bbRecState={};
     bbStreamStop(); bbStopLoop(); bbStopBeat();
     bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0;
-    // Un-wire scrub so it can be re-wired fresh for the new waveform
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
     bbShowScreen('bb-crate-screen');
-    const rnd=document.getElementById('bb-crate-round'); if(rnd) rnd.textContent=`ROUND ${round} / ${totalRounds}`;
-    const ldr=document.getElementById('bb-crate-loading'); if(ldr) ldr.textContent=loading?'Pulling from the crates…':'';
+    const rnd=document.getElementById('bb-crate-round');
+    const labels = {sample:'ROUND 1 — THE RECORD', break:'ROUND 2 — THE BREAK', voice:'ROUND 3 — YOUR VOICE'};
+    if(rnd) rnd.textContent=labels[roundType]||`ROUND ${round} / ${totalRounds}`;
+    const ldr=document.getElementById('bb-crate-loading');
+    const msgs = {sample:'Pulling from the crates…', break:'Hunting for the break…', voice:'Get your voice ready — recording starts in a moment'};
+    if(ldr) ldr.textContent=loading?(msgs[roundType]||'Loading…'):'';
     bbEnsureAudio();
 });
 
