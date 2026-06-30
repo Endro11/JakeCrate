@@ -4684,6 +4684,7 @@ let bbSubmittedCount = 0, bbTotalPlayers = 0;
 let bbMyHand = [];         // [{id, ownerId, ownerName, role, dataUrl}]
 let bbMyBeat = {};         // soundId → Set<stepIdx>
 let bbBattleHasVoted = false;
+let bbBattleLoopEnabled = false;
 let bbSoundCustom = {};    // soundId → { speed: 1.0 }
 const BB_SPEEDS = [1, 0.5, 2, 4];
 const BB_SPEED_LABELS = ['NORM', '808↓', 'CRISP', 'HYPER'];
@@ -4778,8 +4779,12 @@ function bbScheduler() {
         if (bbCurrentStep === 0) {
             bbLoopCount++;
             if (bbTargetLoops > 0 && bbLoopCount >= bbTargetLoops) {
-                clearInterval(bbSchedulerTimer); bbIsPlaying = false;
-                if (bbOnPlaybackDone) { const cb = bbOnPlaybackDone; bbOnPlaybackDone = null; setTimeout(cb, 100); }
+                if (bbBattleLoopEnabled) {
+                    bbLoopCount = 0; // keep looping
+                } else {
+                    clearInterval(bbSchedulerTimer); bbIsPlaying = false;
+                    if (bbOnPlaybackDone) { const cb = bbOnPlaybackDone; bbOnPlaybackDone = null; setTimeout(cb, 100); }
+                }
             }
         }
     }
@@ -4800,8 +4805,10 @@ function bbStartBeat(beat, hand, loops, onDone) {
 
 function bbStopBeat() {
     clearInterval(bbSchedulerTimer); bbSchedulerTimer = null;
-    bbIsPlaying = false; bbStopAudio(); bbRenderPlayhead(-1);
+    bbIsPlaying = false; bbBattleLoopEnabled = false; bbStopAudio(); bbRenderPlayhead(-1);
     bbOnPlaybackDone = null;
+    const lb = document.getElementById('bb-loop-btn');
+    if (lb) { lb.textContent = '🔁 LOOP'; lb.style.borderColor = '#2a3450'; lb.style.color = '#4a6a8a'; }
 }
 
 function bbRenderPlayhead(stepIdx) {
@@ -4824,12 +4831,75 @@ function bbCleanup() {
     bbMyRecordings = {}; bbMyHand = []; bbMyBeat = {}; bbSoundCustom = {};
     bbBeatPattern = {}; bbBeatHand = [];
     bbMyId = null; bbCurrentRoleIdx = 0;
-    bbBattleHasVoted = false; bbSubmittedCount = 0; bbTotalPlayers = 0;
+    bbBattleHasVoted = false; bbBattleLoopEnabled = false;
+    bbSubmittedCount = 0; bbTotalPlayers = 0;
     bbRecordingActive = false;
     if (bbMediaStream) { bbMediaStream.getTracks().forEach(t => t.stop()); bbMediaStream = null; }
 }
 
 // ── Record screen ─────────────────────────────────────────────────────────────
+
+async function bbPreviewRecording(role) {
+    const dataUrl = bbMyRecordings[role];
+    if (!dataUrl) return;
+    bbEnsureAudio();
+    try {
+        const b64 = dataUrl.split(',')[1];
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const buf = await bbAudioCtx.decodeAudioData(bytes.buffer.slice(0));
+        const src = bbAudioCtx.createBufferSource();
+        src.buffer = buf;
+        const g = bbAudioCtx.createGain(); g.gain.value = 0.9;
+        src.connect(g); g.connect(bbAudioCtx.destination);
+        src.start();
+    } catch(e) { showToast('Preview failed'); }
+}
+
+async function bbExportBeat() {
+    if (!bbMyBeat || !Object.keys(bbMyBeat).length) { showToast('No beat to save!'); return; }
+    bbEnsureAudio();
+    const loopDur = BB_STEPS * bbStepDur();
+    const sr = bbAudioCtx.sampleRate || 44100;
+    const offCtx = new OfflineAudioContext(2, Math.ceil(loopDur * 2 * sr), sr);
+    for (let loop = 0; loop < 2; loop++) {
+        for (let step = 0; step < BB_STEPS; step++) {
+            const when = (loop * BB_STEPS + step) * bbStepDur();
+            Object.entries(bbMyBeat).forEach(([sid, steps]) => {
+                const stepSet = steps instanceof Set ? steps : new Set(steps);
+                if (!stepSet.has(step)) return;
+                const buf = bbSoundBuffers[sid];
+                if (!buf) return;
+                const src = offCtx.createBufferSource();
+                src.buffer = buf;
+                src.playbackRate.value = bbSoundCustom[sid]?.speed || 1.0;
+                const g = offCtx.createGain(); g.gain.value = 0.82;
+                src.connect(g); g.connect(offCtx.destination);
+                src.start(when);
+            });
+        }
+    }
+    const rendered = await offCtx.startRendering();
+    const nc = rendered.numberOfChannels, len = rendered.length;
+    const ab = new ArrayBuffer(44 + len * nc * 2);
+    const dv = new DataView(ab);
+    const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0,'RIFF'); dv.setUint32(4, 36 + len*nc*2, true); ws(8,'WAVE'); ws(12,'fmt ');
+    dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,nc,true);
+    dv.setUint32(24,sr,true); dv.setUint32(28,sr*nc*2,true);
+    dv.setUint16(32,nc*2,true); dv.setUint16(34,16,true); ws(36,'data'); dv.setUint32(40,len*nc*2,true);
+    let off = 44;
+    for (let i = 0; i < len; i++) for (let c = 0; c < nc; c++) {
+        const s = Math.max(-1,Math.min(1,rendered.getChannelData(c)[i]));
+        dv.setInt16(off, s < 0 ? s*0x8000 : s*0x7FFF, true); off += 2;
+    }
+    const blob = new Blob([ab], { type:'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'my_beat.wav'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast('Beat saved as WAV!');
+}
 
 function bbRenderRecordScreen() {
     const role = BB_ROLES[bbCurrentRoleIdx];
@@ -4843,6 +4913,8 @@ function bbRenderRecordScreen() {
     if (lbl)  { lbl.textContent = role.toUpperCase(); lbl.style.color = color; }
     if (hint) hint.textContent = BB_ROLE_HINTS[role] || '';
     if (done) done.textContent = bbMyRecordings[role] ? '✓ RECORDED' : '';
+    const playBtn = document.getElementById('bb-rec-play');
+    if (playBtn) playBtn.style.display = bbMyRecordings[role] ? 'inline-block' : 'none';
     if (btn)  btn.style.borderColor = bbMyRecordings[role] ? '#4caf50' : color;
     const dotRow = document.getElementById('bb-role-dot-row');
     if (dotRow) {
@@ -4922,6 +4994,11 @@ function bbWireRecordScreen() {
     if (nxt && !nxt._bbWired) {
         nxt._bbWired = true;
         nxt.addEventListener('click', () => { bbCurrentRoleIdx = (bbCurrentRoleIdx + 1) % BB_ROLES.length; bbRenderRecordScreen(); });
+    }
+    const playBtn = document.getElementById('bb-rec-play');
+    if (playBtn && !playBtn._bbWired) {
+        playBtn._bbWired = true;
+        playBtn.addEventListener('click', () => bbPreviewRecording(BB_ROLES[bbCurrentRoleIdx]));
     }
     const submitBtn = document.getElementById('bb-rec-submit');
     if (submitBtn && !submitBtn._bbWired) {
@@ -5069,6 +5146,22 @@ function bbWireBattleScreen() {
             voteP2.classList.add('voted'); voteP1.disabled = true;
         });
     }
+    const loopBtn = document.getElementById('bb-loop-btn');
+    if (loopBtn && !loopBtn._bbWired) {
+        loopBtn._bbWired = true;
+        loopBtn.addEventListener('click', () => {
+            bbBattleLoopEnabled = !bbBattleLoopEnabled;
+            loopBtn.textContent = bbBattleLoopEnabled ? '⏹ STOP' : '🔁 LOOP';
+            loopBtn.style.borderColor = bbBattleLoopEnabled ? '#ff5252' : '#2a3450';
+            loopBtn.style.color = bbBattleLoopEnabled ? '#ff5252' : '#4a6a8a';
+            // If toggling off while playing, skip to end of current beat
+            if (!bbBattleLoopEnabled && bbIsPlaying) {
+                clearInterval(bbSchedulerTimer); bbSchedulerTimer = null;
+                bbIsPlaying = false; bbRenderPlayhead(-1);
+                if (bbOnPlaybackDone) { const cb = bbOnPlaybackDone; bbOnPlaybackDone = null; setTimeout(cb, 100); }
+            }
+        });
+    }
 }
 
 // ── Socket handlers ───────────────────────────────────────────────────────────
@@ -5129,7 +5222,9 @@ socket.on('bbBuildPhase', async ({ hand, timeLeft, tempo }) => {
 
 socket.on('bbMatchupStart', async ({ matchupNum, totalMatchups, p1Id, p1Name, p2Id, p2Name, p1Beat, p2Beat, p1Hand, p2Hand, voteTimeLeft }) => {
     bbStopBeat();
-    bbBattleHasVoted = false;
+    bbBattleHasVoted = false; bbBattleLoopEnabled = false;
+    const lb = document.getElementById('bb-loop-btn');
+    if (lb) { lb.textContent = '🔁 LOOP'; lb.style.borderColor = '#2a3450'; lb.style.color = '#4a6a8a'; }
     bbShowScreen('bb-battle-screen');
     document.getElementById('bb-battle-matchup').textContent = `MATCHUP ${matchupNum} / ${totalMatchups}`;
     document.getElementById('bb-battle-vs').textContent = `${p1Name} vs ${p2Name}`;
@@ -5202,6 +5297,19 @@ socket.on('bbGameOver', ({ scores }) => {
     // Override podium close button to return to room lobby (otherwise screen goes blank)
     const closeBtn = document.getElementById('podium-close');
     if (closeBtn) closeBtn.onclick = () => { hidePodium(); show('room-lobby'); renderRoomLobby(); };
+    // Add Save Beat button if this player has a beat
+    setTimeout(() => {
+        const overlay = document.getElementById('podium-overlay');
+        if (!overlay || overlay.querySelector('.bb-save-btn')) return;
+        if (bbMyBeat && Object.keys(bbMyBeat).length > 0) {
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'bb-save-btn';
+            saveBtn.textContent = '💾 SAVE YOUR BEAT (WAV)';
+            saveBtn.style.cssText = 'margin-top:6px;padding:10px 24px;background:#1565c0;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:0.82em;cursor:pointer;width:calc(100% - 40px);';
+            saveBtn.onclick = bbExportBeat;
+            overlay.appendChild(saveBtn);
+        }
+    }, 350);
     if (isRoomHost) {
         setTimeout(() => {
             const overlay = document.getElementById('podium-overlay');
@@ -5246,7 +5354,10 @@ socket.on('bbLobby', () => {
     <div id="bb-rec-icon" style="font-size:2.8em;line-height:1;">💥</div>
     <div id="bb-rec-role" style="font-size:1.2em;font-weight:900;letter-spacing:0.04em;">KICK</div>
     <div id="bb-rec-hint" style="font-size:0.68em;color:#4a6a8a;text-align:center;max-width:220px;">Short punch</div>
-    <div id="bb-rec-done-label" style="font-size:0.7em;color:#4caf50;height:1.2em;margin-top:2px;"></div>
+    <div style="display:flex;align-items:center;gap:8px;min-height:1.6em;margin-top:2px;">
+      <div id="bb-rec-done-label" style="font-size:0.7em;color:#4caf50;"></div>
+      <button id="bb-rec-play" style="display:none;padding:3px 10px;border:1.5px solid #4caf50;border-radius:6px;background:transparent;color:#4caf50;font-size:0.65em;font-weight:700;cursor:pointer;">▶ PLAY</button>
+    </div>
   </div>
   <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:12px 0;">
     <button id="bb-rec-btn" style="width:116px;height:116px;border-radius:50%;border:4px solid #ff6b3d;background:#1a0c06;color:#ff6b3d;font-size:1em;font-weight:800;cursor:pointer;touch-action:none;-webkit-tap-highlight-color:transparent;transition:border-color .2s;display:flex;align-items:center;justify-content:center;">🎤 HOLD</button>
@@ -5296,6 +5407,9 @@ socket.on('bbLobby', () => {
   <div id="bb-battle-now-playing" style="font-size:0.85em;font-weight:700;color:#5ee6c5;text-align:center;min-height:1.4em;">▶ Loading…</div>
   <!-- Pad visualization — lights up as sounds fire during playback -->
   <div id="bb-pad-grid" class="bb-pad-grid"></div>
+  <div style="display:flex;justify-content:center;padding:2px 0 4px;">
+    <button id="bb-loop-btn" style="padding:6px 20px;border:1.5px solid #2a3450;border-radius:8px;background:#151d2c;color:#4a6a8a;font-size:0.7em;font-weight:700;cursor:pointer;letter-spacing:.04em;">🔁 LOOP</button>
+  </div>
   <div id="bb-battle-vote-area" style="display:none;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:400px;margin-top:4px;">
     <div style="font-size:0.75em;color:#4a6a8a;font-weight:700;">🏆 WHOSE BEAT WAS BETTER?</div>
     <div style="display:flex;gap:12px;width:100%;">
