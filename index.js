@@ -120,6 +120,7 @@ function makeRoom(code) {
         bbPool: [],
         bbHands: {},
         bbBeats: {},
+        bbCustom: {},
         bbMatchups: [],
         bbCurrentMatchup: -1,
         bbScores: {},
@@ -220,7 +221,7 @@ function rekeySocketState(room, oldId, newId) {
         'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
         'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
         'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
-        'bbRecordings', 'bbHands', 'bbBeats', 'bbScores',
+        'bbRecordings', 'bbHands', 'bbBeats', 'bbScores', 'bbCustom',
     ];
     maps.forEach(key => {
         if (room[key] && Object.prototype.hasOwnProperty.call(room[key], oldId)) {
@@ -1277,6 +1278,7 @@ const BB_ROLES = ['kick','snare','hihat','synth','bass','sfx'];
 const BB_STEPS = 16;
 const BB_TEMPO = 88;
 const BB_RECORD_SECS = 60;
+const BB_TUNE_SECS = 45;   // hear your dealt hand + tweak each sound before building
 const BB_BUILD_SECS = 60;
 const BB_BATTLE_SECS = 50; // auto-advance if not all votes in within 50s
 
@@ -1286,7 +1288,7 @@ function bb_startGame(room) {
     room.gamePhase = 'PLAYING';
     room.bbPhase = 'RECORD';
     room.bbRecordings = {}; room.bbPool = []; room.bbHands = {};
-    room.bbBeats = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1;
+    room.bbBeats = {}; room.bbCustom = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1;
     room.bbScores = {};
     const ids = Object.keys(room.players);
     ids.forEach(id => { room.bbScores[id] = 0; });
@@ -1322,6 +1324,24 @@ function bb_endRecord(room) {
         for (let i = 0; i < 2 && i < extras.length; i++) hand.push(extras[i]);
         room.bbHands[id] = hand;
     });
+    // → TUNE: players hear the hand they were dealt and tweak each sound before building
+    room.bbPhase = 'TUNE';
+    room.bbCustom = {};
+    room.bbTimeLeft = BB_TUNE_SECS;
+    ids.forEach(id => {
+        io.to(id).emit('bbTunePhase', { hand: room.bbHands[id], timeLeft: BB_TUNE_SECS, tempo: BB_TEMPO });
+    });
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_endTune(room); }
+    }, 1000);
+}
+
+function bb_endTune(room) {
+    clearInterval(room.bbTimer);
+    room.bbPhase = 'BUILD';
+    const ids = Object.keys(room.players);
     room.bbTimeLeft = BB_BUILD_SECS;
     ids.forEach(id => {
         io.to(id).emit('bbBuildPhase', { hand: room.bbHands[id], timeLeft: BB_BUILD_SECS, tempo: BB_TEMPO });
@@ -1360,6 +1380,8 @@ function bb_nextMatchup(room) {
         p2Beat: room.bbBeats[m.p2Id] || {},
         p1Hand: room.bbHands[m.p1Id] || [],
         p2Hand: room.bbHands[m.p2Id] || [],
+        p1Custom: room.bbCustom[m.p1Id] || {},
+        p2Custom: room.bbCustom[m.p2Id] || {},
         voteTimeLeft: BB_BATTLE_SECS,
     });
     // Countdown timer — ticks and auto-advances if not all votes come in
@@ -1837,6 +1859,9 @@ io.on('connection', (socket) => {
         if (room.selectedGame === 'beatbattle' && room.bbPhase !== 'LOBBY') {
             if (room.bbPhase === 'RECORD') {
                 socket.emit('bbRecordPhase', { timeLeft: room.bbTimeLeft, playerCount: Object.keys(room.players).length });
+            } else if (room.bbPhase === 'TUNE') {
+                const myHand = room.bbHands[socket.id];
+                if (myHand) socket.emit('bbTunePhase', { hand: myHand, timeLeft: room.bbTimeLeft, tempo: BB_TEMPO });
             } else if (room.bbPhase === 'BUILD') {
                 const myHand = room.bbHands[socket.id];
                 if (myHand) socket.emit('bbBuildPhase', { hand: myHand, timeLeft: room.bbTimeLeft, tempo: BB_TEMPO });
@@ -1849,6 +1874,7 @@ io.on('connection', (socket) => {
                     p1Name: room.players[m.p1Id]?.name || '?', p2Name: room.players[m.p2Id]?.name || '?',
                     p1Beat: room.bbBeats[m.p1Id] || {}, p2Beat: room.bbBeats[m.p2Id] || {},
                     p1Hand: room.bbHands[m.p1Id] || [], p2Hand: room.bbHands[m.p2Id] || [],
+                    p1Custom: room.bbCustom[m.p1Id] || {}, p2Custom: room.bbCustom[m.p2Id] || {},
                     timeLeft: room.bbTimeLeft, scores: room.bbScores,
                 });
             }
@@ -2352,10 +2378,18 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('bbSubmitBeat', ({ beat }) => {
+    socket.on('bbSubmitTune', ({ custom }) => {
+        const room = socketRoom(socket);
+        if (!room || room.bbPhase !== 'TUNE') return;
+        room.bbCustom[socket.id] = custom || {};
+    });
+
+    socket.on('bbSubmitBeat', ({ beat, custom }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'BUILD') return;
         room.bbBeats[socket.id] = beat || {};
+        // Build-screen tweaks win over tune-screen tweaks; fall back to whatever we already have
+        room.bbCustom[socket.id] = custom || room.bbCustom[socket.id] || {};
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbBeats[id])) {
             clearInterval(room.bbTimer);
@@ -2381,7 +2415,7 @@ io.on('connection', (socket) => {
         clearInterval(room.bbTimer); clearTimeout(room.bbTimer);
         room.bbPhase = 'LOBBY'; room.gamePhase = 'LOBBY';
         room.bbRecordings = {}; room.bbPool = []; room.bbHands = {};
-        room.bbBeats = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1; room.bbScores = {};
+        room.bbBeats = {}; room.bbCustom = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1; room.bbScores = {};
         broadcastRoom(room, 'bbLobby', {});
         broadcastGameState(room);
     });
