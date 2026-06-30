@@ -4689,6 +4689,11 @@ let bbMediaStream    = null;
 let bbAudioEl        = null;
 let bbLoopDuration   = 4;    // 2 or 4 seconds, toggled by player
 let bbPlaybackRate   = 1.0;  // pitch/speed control
+let bbR1LayerSrc    = null;
+let bbR1LayerBuffer = null;
+let bbR1LayerActive = false;
+let bbR1LayerUrl    = null;
+let bbR1LoopData    = null;
 
 // ── audio core ──
 function bbEnsureAudio() {
@@ -4956,35 +4961,62 @@ async function bbLoadSample(proxyUrl) {
 // ── scrub ──
 function bbWireScrub() {
     const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap||wrap._bbWired) return; wrap._bbWired=true;
+    let isPanning=false, panStartX=0, panStartZs=0;
     function xToTime(clientX) {
         const r=wrap.getBoundingClientRect();
         const frac=Math.max(0,Math.min(1,(clientX-r.left)/r.width));
         const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
         return zs + frac*(ze-zs);
     }
+    function isOnLoop(clientX) {
+        // Returns true if tap lands on or near the orange loop region
+        const r=wrap.getBoundingClientRect();
+        const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
+        const zd=ze-zs; if(zd<=0) return true;
+        const lx=r.left+((bbLoopStart-zs)/zd)*r.width;
+        const rx=r.left+((bbLoopEnd-zs)/zd)*r.width;
+        return clientX>=lx-36 && clientX<=rx+36;
+    }
     function setStartVisual(t) {
-        // Update loop region + overlay instantly while dragging — no audio restart
         bbLoopStart=Math.max(0,Math.min(t,(bbSampleDuration||180)-bbLoopDuration));
         bbLoopEnd=bbLoopStart+bbLoopDuration;
         bbSetLoop(bbLoopStart,bbLoopEnd);
         bbUpdateScrubOverlay();
     }
     function commitPosition() {
-        // Jump audio to new position on pointer release
         if (bbSampleBuffer) { bbStopLoop(); bbStartLoop(); }
     }
     function onDown(e){
-        e.preventDefault(); bbScrubDragging=true;
-        setStartVisual(xToTime(e.touches?e.touches[0].clientX:e.clientX));
-        commitPosition(); // preview start position immediately on tap
+        e.preventDefault();
+        const cx=e.touches?e.touches[0].clientX:e.clientX;
+        if(isOnLoop(cx)){
+            bbScrubDragging=true;
+            setStartVisual(xToTime(cx));
+            commitPosition();
+        } else {
+            isPanning=true; panStartX=cx; panStartZs=bbZoomStart||0;
+        }
     }
     function onMove(e){
-        if(!bbScrubDragging) return; e.preventDefault();
-        setStartVisual(xToTime(e.touches?e.touches[0].clientX:e.clientX));
+        if(!bbScrubDragging && !isPanning) return; e.preventDefault();
+        const cx=e.touches?e.touches[0].clientX:e.clientX;
+        if(isPanning){
+            const r=wrap.getBoundingClientRect();
+            const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
+            const zd=ze-zs; if(zd<=0||r.width<=0) return;
+            const secPerPx=zd/r.width;
+            // Drag right = view pans left (grab-and-drag feel, like a map)
+            bbZoomStart=Math.max(0,Math.min(panStartZs-(cx-panStartX)*secPerPx,(bbSampleDuration||180)-zd));
+            bbZoomEnd=bbZoomStart+zd;
+            bbDrawWaveform(); bbUpdateScrubOverlay();
+        } else {
+            setStartVisual(xToTime(cx));
+        }
     }
     function onUp(){
-        if(!bbScrubDragging) return;
-        bbScrubDragging=false; commitPosition();
+        if(!bbScrubDragging && !isPanning) return;
+        if(!isPanning) commitPosition();
+        bbScrubDragging=false; isPanning=false;
     }
     wrap.addEventListener('mousedown',onDown); wrap.addEventListener('touchstart',onDown,{passive:false});
     document.addEventListener('mousemove',onMove); document.addEventListener('touchmove',onMove,{passive:false});
@@ -4994,6 +5026,36 @@ function bbWireScrub() {
         socket.emit('bbLockScrub',{start:bbLoopStart,end:bbLoopEnd,rate:bbPlaybackRate});
         lockBtn.disabled=true; lockBtn.textContent='LOCKED ✓';
     });}
+}
+
+function bbToggleR1Layer() {
+    const btn=document.getElementById('bb-r1-layer-btn');
+    if(bbR1LayerActive){
+        try{bbR1LayerSrc?.stop();}catch(e){}
+        bbR1LayerSrc=null; bbR1LayerActive=false;
+        if(btn){btn.textContent='▶ HEAR R1 LOOP'; btn.style.borderColor='#5ee6c5'; btn.style.color='#5ee6c5';}
+        return;
+    }
+    bbEnsureAudio();
+    const doStart=()=>{
+        if(!bbR1LayerBuffer) return;
+        const loop=bbR1LoopData||{start:0,end:4,rate:1};
+        const src=bbAudioCtx.createBufferSource();
+        src.buffer=bbR1LayerBuffer; src.loop=true;
+        src.loopStart=loop.start;
+        src.loopEnd=Math.min(loop.end, bbR1LayerBuffer.duration);
+        src.playbackRate.value=loop.rate||1;
+        src.connect(bbMasterGain);
+        src.start(0,loop.start);
+        bbR1LayerSrc=src; bbR1LayerActive=true;
+        if(btn){btn.textContent='⏹ MUTE R1'; btn.style.borderColor='#ff6b3d'; btn.style.color='#ff6b3d';}
+    };
+    if(bbR1LayerBuffer){ doStart(); return; }
+    if(!bbR1LayerUrl) return;
+    if(btn) btn.textContent='Loading…';
+    fetch(bbR1LayerUrl).then(r=>r.arrayBuffer()).then(ab=>bbAudioCtx.decodeAudioData(ab)).then(buf=>{
+        bbR1LayerBuffer=buf; doStart();
+    }).catch(()=>{ if(btn) btn.textContent='▶ HEAR R1 LOOP'; });
 }
 
 // ── record screen ──
@@ -5178,6 +5240,7 @@ socket.on('bbCratePhase',({round,totalRounds,loading,roundType,tutorial})=>{
     bbMyId=socket.id; bbSampleBuffer=null; bbSoundBuffers={};
     bbMySounds=[null,null,null]; bbCurrentSlot=0; bbMyHand=[]; bbMyBeat={};
     bbStreamStop(); bbStopLoop(); bbStopBeat();
+    try{bbR1LayerSrc?.stop();}catch(e){} bbR1LayerSrc=null; bbR1LayerActive=false; bbR1LayerBuffer=null; bbR1LayerUrl=null;
     bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0;
     bbZoomStart=0; bbZoomEnd=0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
@@ -5236,9 +5299,13 @@ socket.on('bbSampleReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})
     });
 });
 
-socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration})=>{
+socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration,roundType,r1AudioUrl,r1Loop})=>{
     bbSampleDuration=duration||bbSampleDuration;
     if(!bbLoopStart){ bbLoopStart=Math.min(5,bbSampleDuration*0.1); bbLoopEnd=bbLoopStart+bbLoopDuration; bbSetLoop(bbLoopStart,bbLoopEnd); }
+    // Store R1 layer info (R2 break round only)
+    bbR1LayerUrl=r1AudioUrl||null; bbR1LoopData=r1Loop||null;
+    const r1Btn=document.getElementById('bb-r1-layer-btn');
+    if(r1Btn){ r1Btn.style.display=r1AudioUrl?'block':'none'; r1Btn.textContent='▶ HEAR R1 LOOP'; r1Btn.style.borderColor='#5ee6c5'; r1Btn.style.color='#5ee6c5'; }
     bbShowScreen('bb-scrub-screen');
     const timer=document.getElementById('bb-scrub-timer'); if(timer) timer.textContent=timeLeft;
     const wldr=document.getElementById('bb-waveform-loading');
@@ -5433,7 +5500,8 @@ socket.on('bbLobby',()=>{
   </div>
 
   <button id="bb-lock-btn" class="bb-lock-btn" style="padding:14px 0;width:100%;max-width:440px;font-size:0.85em;">LOCK LOOP</button>
-  <div style="font-size:0.6em;color:#4a6a8a;text-align:center;">Drag waveform to place · pitch carries to your beat</div>
+  <button id="bb-r1-layer-btn" onclick="bbToggleR1Layer()" style="display:none;padding:10px 0;width:100%;max-width:440px;border:2px solid #5ee6c5;border-radius:12px;background:rgba(94,230,197,.08);color:#5ee6c5;font-size:0.75em;font-weight:900;cursor:pointer;letter-spacing:.04em;">▶ HEAR R1 LOOP</button>
+  <div style="font-size:0.6em;color:#4a6a8a;text-align:center;">Drag loop region to move · drag outside to scroll</div>
 </div>
 
 <!-- Record screen -->

@@ -1445,6 +1445,7 @@ function bb_startRound(room) {
     room.bbPhase       = 'CRATE';
     room.bbSample      = null;
     room.bbSampleBytes = null;
+    if (room.bbRound === 2) room.bbR1ScrubLocks = {...room.bbScrubLocks}; // save R1 loops for R2 layer
     room.bbScrubLocks  = {};
     room.bbRecordings  = {};
     room.bbHands       = {};
@@ -1521,10 +1522,17 @@ function bb_endCrate(room) {
 function bb_beginScrub(room) {
     room.bbPhase = 'SCRUB';
     room.bbTimeLeft = BB_SCRUB_SECS;
-    broadcastRoom(room, 'bbScrubPhase', {
-        timeLeft: BB_SCRUB_SECS,
-        audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
-        duration: room.bbSample?.duration || 180,
+    const isBreak = room.bbRoundType === 'break';
+    const r1AudioUrl = isBreak && room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null;
+    Object.keys(room.players).forEach(pid => {
+        io.to(pid).emit('bbScrubPhase', {
+            timeLeft: BB_SCRUB_SECS,
+            roundType: room.bbRoundType,
+            audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
+            duration: room.bbSample?.duration || 180,
+            r1AudioUrl,
+            r1Loop: isBreak ? (room.bbR1ScrubLocks?.[pid] || null) : null,
+        });
     });
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
@@ -1552,8 +1560,8 @@ function bb_endScrub(room) {
             if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endRecord(room); }
         }, 1000);
     } else {
-        // Rounds 1 & 2: no recording, no build — go straight to listening to loops
-        bb_beginListenFromScrub(room);
+        // Rounds 1 & 2: no recording — go straight to next round
+        bb_startRound(room);
     }
 }
 
