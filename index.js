@@ -40,11 +40,17 @@ app.get('/api/bb-audio/:code', async (req, res) => {
     if (!room?.bbSample?.audioUrl) return res.status(404).end();
     await bbProxyAudio(room.bbSample.audioUrl, 'bbSampleBytes', room, res);
 });
-// Round-1 sample (used as background in round 3)
+// Round-1 sample (vinyl, used as background in round 3)
 app.get('/api/bb-audio-r1/:code', async (req, res) => {
     const room = rooms[req.params.code];
     if (!room?.bbR1Sample?.audioUrl) return res.status(404).end();
     await bbProxyAudio(room.bbR1Sample.audioUrl, 'bbR1SampleBytes', room, res);
+});
+// Round-2 sample (drum break, used as second background in round 3)
+app.get('/api/bb-audio-r2/:code', async (req, res) => {
+    const room = rooms[req.params.code];
+    if (!room?.bbR2Sample?.audioUrl) return res.status(404).end();
+    await bbProxyAudio(room.bbR2Sample.audioUrl, 'bbR2SampleBytes', room, res);
 });
 
 // ─── Room registry ────────────────────────────────────────────────────────────
@@ -1446,6 +1452,7 @@ function bb_startRound(room) {
     room.bbSample      = null;
     room.bbSampleBytes = null;
     if (room.bbRound === 2) room.bbR1ScrubLocks = {...room.bbScrubLocks}; // save R1 loops for R2 layer
+    if (room.bbRound === 3) room.bbR2ScrubLocks = {...room.bbScrubLocks}; // save R2 loops for R3 build
     room.bbScrubLocks  = {};
     room.bbRecordings  = {};
     room.bbHands       = {};
@@ -1487,6 +1494,7 @@ function bb_startRound(room) {
         }
         room.bbSample = sample;
         if (roundType === 'sample') room.bbR1Sample = sample;
+        if (roundType === 'break')  room.bbR2Sample = sample;
         broadcastRoom(room, 'bbSampleReady', {
             title: sample.title, creator: sample.creator, date: sample.date,
             thumbUrl: sample.thumbUrl,
@@ -1548,17 +1556,8 @@ function bb_endScrub(room) {
     });
 
     if (room.bbRoundType === 'voice') {
-        // Round 3: record 3 free-form sounds then deal them
-        room.bbPhase = 'RECORD';
-        room.bbTimeLeft = BB_RECORD_SECS;
-        Object.keys(room.players).forEach(id => {
-            io.to(id).emit('bbRecordPhase', { timeLeft: BB_RECORD_SECS });
-        });
-        room.bbTimer = setInterval(() => {
-            room.bbTimeLeft--;
-            broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-            if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endRecord(room); }
-        }, 1000);
+        // Round 3: both loops locked — go straight to build with synth pads
+        bb_beginBuild(room);
     } else {
         // Rounds 1 & 2: no recording — go straight to next round
         bb_startRound(room);
@@ -1585,16 +1584,20 @@ function bb_beginBuild(room) {
     room.bbPhase = 'BUILD';
     room.bbTimeLeft = BB_BUILD_SECS;
     const ids = Object.keys(room.players);
-    // Voice round always uses round-1 vinyl as background; other rounds use current sample
-    const audioProxyUrl = room.bbRoundType === 'voice'
+    const isVoice = room.bbRoundType === 'voice';
+    // Voice round: R1 vinyl as primary background, R2 break as secondary
+    const audioProxyUrl = isVoice
         ? (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null)
         : (room.bbSample?.audioUrl   ? `/api/bb-audio/${room.code}`    : null);
+    const r2AudioUrl = isVoice && room.bbR2Sample?.audioUrl ? `/api/bb-audio-r2/${room.code}` : null;
     ids.forEach(id => {
         io.to(id).emit('bbBuildPhase', {
             roundType: room.bbRoundType,
-            hand: room.bbHands[id] || [],          // empty for rounds 1&2
+            hand: [],
             myLoop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
             audioProxyUrl,
+            r2AudioUrl,
+            r2Loop: isVoice ? (room.bbR2ScrubLocks?.[id] || null) : null,
             timeLeft: BB_BUILD_SECS,
         });
     });
@@ -1643,16 +1646,20 @@ function bb_endBuild(room) {
     room.bbPhase = 'LISTEN';
     room.bbListenQueue = ids;
     room.bbListenIdx   = -1;
-    const audioProxyUrl = room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}`
-        : (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null);
+    const isVoice = room.bbRoundType === 'voice';
+    const audioProxyUrl = isVoice
+        ? (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null)
+        : (room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null);
+    const r2AudioUrl = isVoice && room.bbR2Sample?.audioUrl ? `/api/bb-audio-r2/${room.code}` : null;
     const queue = ids.map(id => ({
         playerId: id, playerName: room.players[id]?.name || '?',
         beat: room.bbBeats[id] || {},
-        hand: room.bbHands[id] || [],    // array format for voice round
+        hand: [],
         loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+        r2Loop: isVoice ? (room.bbR2ScrubLocks?.[id] || null) : null,
         roundType: room.bbRoundType,
     }));
-    broadcastRoom(room, 'bbListenPhase', { queue, audioProxyUrl });
+    broadcastRoom(room, 'bbListenPhase', { queue, audioProxyUrl, r2AudioUrl });
     room.bbTimer = setTimeout(() => bb_listenNext(room), 1500);
 }
 
