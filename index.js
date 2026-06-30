@@ -220,6 +220,7 @@ function rekeySocketState(room, oldId, newId) {
         'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
         'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
         'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
+        'bbRecordings', 'bbHands', 'bbBeats', 'bbScores',
     ];
     maps.forEach(key => {
         if (room[key] && Object.prototype.hasOwnProperty.call(room[key], oldId)) {
@@ -323,6 +324,8 @@ function buildFullSnapshot(room, socket) {
                 team: myTeam, timeLeft: room.scTimeLeft,
             }};
         }
+        case 'beatbattle':
+            return { ...base, bb: { phase: room.bbPhase, timeLeft: room.bbTimeLeft } };
         default:
             return base;
     }
@@ -1816,6 +1819,28 @@ io.on('connection', (socket) => {
         }
         // Send full game state snapshot so reconnecting clients restore the right screen
         socket.emit('stateSnapshot', buildFullSnapshot(room, socket));
+
+        // Re-sync Bad Pitches: push the player directly to their current screen
+        if (room.selectedGame === 'beatbattle' && room.bbPhase !== 'LOBBY') {
+            if (room.bbPhase === 'RECORD') {
+                socket.emit('bbRecordPhase', { timeLeft: room.bbTimeLeft, playerCount: Object.keys(room.players).length });
+            } else if (room.bbPhase === 'BUILD') {
+                const myHand = room.bbHands[socket.id];
+                if (myHand) socket.emit('bbBuildPhase', { hand: myHand, timeLeft: room.bbTimeLeft, tempo: BB_TEMPO });
+            } else if (room.bbPhase === 'BATTLE') {
+                const mi = room.bbCurrentMatchup;
+                const m = (mi >= 0 && mi < room.bbMatchups.length) ? room.bbMatchups[mi] : null;
+                if (m) socket.emit('bbMatchupStart', {
+                    matchupIndex: mi, totalMatchups: room.bbMatchups.length,
+                    p1Id: m.p1Id, p2Id: m.p2Id,
+                    p1Name: room.players[m.p1Id]?.name || '?', p2Name: room.players[m.p2Id]?.name || '?',
+                    p1Beat: room.bbBeats[m.p1Id] || {}, p2Beat: room.bbBeats[m.p2Id] || {},
+                    p1Hand: room.bbHands[m.p1Id] || [], p2Hand: room.bbHands[m.p2Id] || [],
+                    timeLeft: room.bbTimeLeft, scores: room.bbScores,
+                });
+            }
+        }
+
         room.lastActivity = Date.now();
     });
 

@@ -1296,6 +1296,10 @@ socket.on('stateSnapshot', (data) => {
     if (!data.selectedGame || data.gamePhase === 'LOBBY') return;
     if (data.selectedGame === 'pikpic') {
         handlePpSnapshot(data.pp);
+    } else if (data.selectedGame === 'beatbattle') {
+        // Server will immediately follow this with bbRecordPhase / bbBuildPhase / bbMatchupStart
+        // to put the player on the right screen — just show a brief toast
+        showToast('Rejoining Bad Pitches…');
     } else {
         showReconnectOverlay();
     }
