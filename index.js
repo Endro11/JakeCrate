@@ -1427,7 +1427,7 @@ function bb_beginScrub(room) {
 function bb_endScrub(room) {
     clearInterval(room.bbTimer); room.bbTimer = null;
     Object.keys(room.players).forEach(id => {
-        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 9, duration: 4 };
+        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 9, duration: 4, rate: 1 };
     });
     room.bbPhase = 'RECORD';
     room.bbTimeLeft = BB_RECORD_SECS;
@@ -1496,7 +1496,7 @@ function bb_endBuild(room) {
         playerId: id, playerName: room.players[id]?.name || '?',
         beat: room.bbBeats[id] || {},
         hand: BB_ROLES_V2.map(r => room.bbHands[id]?.[r]).filter(Boolean),
-        loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4 },
+        loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
     }));
     broadcastRoom(room, 'bbListenPhase', {
         queue, audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
@@ -2520,15 +2520,16 @@ io.on('connection', (socket) => {
         bb_startGame(room);
     });
 
-    socket.on('bbLockScrub', ({ start, end }) => {
+    socket.on('bbLockScrub', ({ start, end, rate }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'SCRUB') return;
         const s = Math.max(0, Math.min(start, room.bbSample?.duration || 180));
         const e = Math.max(s + 1, Math.min(end, room.bbSample?.duration || 180));
         const dur = e - s;
         if (dur < 1 || dur > 8) return;
-        room.bbScrubLocks[socket.id] = { start: s, end: e, duration: dur };
-        socket.emit('bbScrubLocked', { start: s, end: e, duration: dur });
+        const r = [0.75, 1, 1.33].includes(rate) ? rate : 1;
+        room.bbScrubLocks[socket.id] = { start: s, end: e, duration: dur, rate: r };
+        socket.emit('bbScrubLocked', { start: s, end: e, duration: dur, rate: r });
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbScrubLocks[id])) {
             clearInterval(room.bbTimer); room.bbTimer = null;
