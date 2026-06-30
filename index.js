@@ -1317,7 +1317,8 @@ function rr_returnToLobby(room) {
 
 // ─── Bad Pitches v2 — vinyl sample + three sounds ─────────────────────────────
 
-const BB_CRATE_SECS   = 45;
+const BB_PREVIEW_SECS = 10;  // non-looping audio preview during CRATE reveal
+const BB_CRATE_TIMEOUT= 90;  // give up waiting for a track after this many seconds
 const BB_SCRUB_SECS   = 90;
 const BB_RECORD_SECS  = 90;
 const BB_BUILD_SECS   = 75;
@@ -1338,7 +1339,7 @@ function bb_parseDuration(len) {
     return parseFloat(s) || 0;
 }
 
-// Fetch up to `n` valid samples from Archive.org in one parallel batch
+// Fetch up to `n` valid samples from Archive.org — sequential metadata checks, no parallel hammering
 async function bb_fetchBatch(n, drumOnly = false) {
     const api = 'https://archive.org/advancedsearch.php';
     const drumFilter = drumOnly ? ' AND (title:drum OR title:rhythm OR subject:percussion)' : '';
@@ -1346,51 +1347,48 @@ async function bb_fetchBatch(n, drumOnly = false) {
     const enc = encodeURIComponent(q);
     const results = [];
 
-    for (let attempt = 0; attempt < 5 && results.length < n; attempt++) {
+    for (let attempt = 0; attempt < 6 && results.length < n; attempt++) {
         try {
+            console.log(`[BB] search attempt ${attempt + 1} (drumOnly=${drumOnly})…`);
             const srchRes = await fetch(
-                `${api}?q=${enc}&fl[]=identifier,title,creator,date,subject&rows=50&sort[]=random&output=json`,
-                { signal: AbortSignal.timeout(10000) }
+                `${api}?q=${enc}&fl[]=identifier,title,creator,date,subject&rows=10&sort[]=random&output=json`,
+                { signal: AbortSignal.timeout(25000) }
             );
             const { response: { docs } } = await srchRes.json();
-            if (!docs?.length) continue;
+            if (!docs?.length) { console.log('[BB] search returned 0 docs'); continue; }
+            console.log(`[BB] search returned ${docs.length} docs`);
 
-            const candidates = await Promise.all(docs.map(doc =>
-                fetch(`https://archive.org/metadata/${doc.identifier}`, { signal: AbortSignal.timeout(8000) })
-                    .then(r => r.json())
-                    .then(meta => {
-                        if (!drumOnly) {
-                            const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
-                            if (/speech|spoken|comedy|lecture|interview/.test(subj)) return null;
-                        }
-                        const mp3 = (meta.files || []).find(f => {
-                            if (!/mp3/i.test(f.format || '') || !(f.name || '').toLowerCase().endsWith('.mp3')) return false;
-                            return bb_parseDuration(f.length) > 60;
-                        });
-                        if (!mp3) return null;
-                        const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
-                        return {
-                            identifier: doc.identifier,
-                            title: doc.title || 'Unknown Track',
-                            creator, date: (doc.date || '').slice(0, 4),
-                            audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
-                            thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
-                            duration: bb_parseDuration(mp3.length),
-                        };
-                    })
-                    .catch(() => null)
-            ));
-
-            for (const v of candidates.filter(Boolean)) {
+            // Sequential: check one doc at a time, stop as soon as we have enough
+            for (const doc of docs) {
                 if (results.length >= n) break;
-                if (!results.find(r => r.identifier === v.identifier)) results.push(v);
+                if (results.find(r => r.identifier === doc.identifier)) continue;
+                try {
+                    const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
+                    if (!drumOnly && /speech|spoken|comedy|lecture|interview/.test(subj)) continue;
+                    const meta = await fetch(
+                        `https://archive.org/metadata/${doc.identifier}`,
+                        { signal: AbortSignal.timeout(20000) }
+                    );
+                    const data = await meta.json();
+                    const mp3 = (data.files || []).find(f =>
+                        /mp3/i.test(f.format || '') &&
+                        (f.name || '').toLowerCase().endsWith('.mp3') &&
+                        bb_parseDuration(f.length) > 60
+                    );
+                    if (!mp3) continue;
+                    const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
+                    results.push({
+                        identifier: doc.identifier,
+                        title: doc.title || 'Unknown Track',
+                        creator, date: (doc.date || '').slice(0, 4),
+                        audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
+                        thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
+                        duration: bb_parseDuration(mp3.length),
+                    });
+                    console.log(`[BB] found: ${doc.title}`);
+                } catch(e) { console.log(`[BB] skip ${doc.identifier}: ${e.message}`); }
             }
-        } catch(e) { console.error(`[BB] fetchBatch attempt ${attempt}:`, e.message); }
-    }
-    // Drum search: fall back to general if we came up short
-    if (drumOnly && results.length < n) {
-        const fill = await bb_fetchBatch(n - results.length, false);
-        fill.forEach(s => { if (!results.find(r => r.identifier === s.identifier)) results.push(s); });
+        } catch(e) { console.error(`[BB] search attempt ${attempt + 1} failed:`, e.message); }
     }
     return results;
 }
@@ -1401,11 +1399,10 @@ const bbBreakPool  = []; // drum/rhythm tracks
 
 async function bb_refreshPool() {
     console.log('[BB] refreshing sample pool…');
-    const [samples, breaks] = await Promise.all([
-        bb_fetchBatch(20, false),
-        bb_fetchBatch(10, true),
-    ]);
+    // Sequential — don't hammer Archive.org with parallel requests
+    const samples = await bb_fetchBatch(5, false);
     samples.forEach(s => { if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s); });
+    const breaks = await bb_fetchBatch(3, true);
     breaks.forEach(s => { if (!bbBreakPool.find(x => x.identifier === s.identifier)) bbBreakPool.push(s); });
     console.log(`[BB] pool ready: ${bbSamplePool.length} samples, ${bbBreakPool.length} breaks`);
 }
@@ -1467,23 +1464,44 @@ function bb_startRound(room) {
 
     // Rounds 1 (sample) and 2 (break) — serve from pool, fall back to live fetch
     const drumOnly = roundType === 'break';
-    room.bbTimeLeft = BB_CRATE_SECS;
-    room.bbTimer = setInterval(() => {
-        room.bbTimeLeft--;
-        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endCrate(room); }
-    }, 1000);
+
+    // Hard cap: if no track arrives within BB_CRATE_TIMEOUT, give up and start scrub
+    room.bbTimer = setTimeout(() => {
+        room.bbTimer = null;
+        if (!room.bbSample) {
+            console.log('[BB] crate timeout — no track, starting scrub with silence');
+            room.bbSample = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
+            bb_beginScrub(room);
+        }
+    }, BB_CRATE_TIMEOUT * 1000);
+
     bb_pickSample(room, drumOnly).then(sample => {
-        if (!sample || !rooms[room.code]) return;
+        if (!rooms[room.code]) return;
+        clearTimeout(room.bbTimer); room.bbTimer = null;
+        if (!sample) {
+            console.log('[BB] no sample found, starting scrub with silence');
+            room.bbSample = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
+            bb_beginScrub(room);
+            return;
+        }
         room.bbSample = sample;
-        if (roundType === 'sample') room.bbR1Sample = sample; // save for round 3 background
+        if (roundType === 'sample') room.bbR1Sample = sample;
         broadcastRoom(room, 'bbSampleReady', {
             title: sample.title, creator: sample.creator, date: sample.date,
             thumbUrl: sample.thumbUrl,
             audioProxyUrl: `/api/bb-audio/${room.code}`,
             duration: sample.duration,
         });
-    }).catch(e => console.error('[BB] bb_pickSample rejected:', e.message));
+        // Let players hear the 10s preview, then start scrub
+        room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_beginScrub(room); },
+            (BB_PREVIEW_SECS + 3) * 1000);
+    }).catch(e => {
+        console.error('[BB] bb_pickSample error:', e.message);
+        if (!rooms[room.code]) return;
+        clearTimeout(room.bbTimer); room.bbTimer = null;
+        room.bbSample = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
+        bb_beginScrub(room);
+    });
 }
 
 function bb_endCrate(room) {
