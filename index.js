@@ -8,6 +8,38 @@ const io = new Server(server, { maxHttpBufferSize: 5e7 }); // 50MB for photo upl
 
 app.use(express.static('public'));
 
+// ─── Bad Pitches audio proxy ──────────────────────────────────────────────────
+// Streams the Archive.org track through our server (bypasses CORS inconsistency).
+// Caches bytes in room.bbSampleBytes after first download.
+app.get('/api/bb-audio/:code', async (req, res) => {
+    const room = rooms[req.params.code];
+    if (!room?.bbSample?.audioUrl) return res.status(404).end();
+    if (room.bbSampleBytes) {
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Length', room.bbSampleBytes.length);
+        return res.send(room.bbSampleBytes);
+    }
+    try {
+        const upstream = await fetch(room.bbSample.audioUrl);
+        if (!upstream.ok) return res.status(502).end();
+        res.setHeader('Content-Type', 'audio/mpeg');
+        const chunks = [];
+        const reader = upstream.body.getReader();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const buf = Buffer.from(value);
+            chunks.push(buf);
+            res.write(buf);
+        }
+        res.end();
+        room.bbSampleBytes = Buffer.concat(chunks);
+    } catch(e) {
+        console.error('bb-audio proxy error:', e.message);
+        if (!res.headersSent) res.status(502).end(); else res.end();
+    }
+});
+
 // ─── Room registry ────────────────────────────────────────────────────────────
 
 const rooms = {};   // code -> room object
@@ -114,16 +146,20 @@ function makeRoom(code) {
         scPyroId: null,
         scTimer: null,
         scTimeLeft: 0,
-        // Bad Pitches state
+        // Bad Pitches state (v2)
         bbPhase: 'LOBBY',
+        bbRound: 0,
+        bbSample: null,
+        bbSampleBytes: null,
+        bbScrubLocks: {},
         bbRecordings: {},
-        bbPool: [],
         bbHands: {},
         bbBeats: {},
-        bbCustom: {},
-        bbMatchups: [],
-        bbCurrentMatchup: -1,
-        bbScores: {},
+        bbVotes: {},
+        bbRoundScores: {},
+        bbCumScores: {},
+        bbListenQueue: [],
+        bbListenIdx: -1,
         bbTimer: null,
         bbTimeLeft: 0,
     };
@@ -221,7 +257,7 @@ function rekeySocketState(room, oldId, newId) {
         'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
         'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
         'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
-        'bbRecordings', 'bbHands', 'bbBeats', 'bbScores', 'bbCustom',
+        'bbRecordings', 'bbHands', 'bbBeats', 'bbVotes', 'bbRoundScores', 'bbCumScores', 'bbScrubLocks',
     ];
     maps.forEach(key => {
         if (room[key] && Object.prototype.hasOwnProperty.call(room[key], oldId)) {
@@ -1272,152 +1308,265 @@ function rr_returnToLobby(room) {
     broadcastGameState(room);
 }
 
-// ─── Bad Pitches ───────────────────────────────────────────────────────────────
+// ─── Bad Pitches v2 — vinyl sample + three sounds ─────────────────────────────
 
-const BB_ROLES = ['kick','snare','hihat','synth','bass','sfx'];
-const BB_STEPS = 16;
-const BB_TEMPO = 88;
-const BB_RECORD_SECS = 60;
-const BB_TUNE_SECS = 45;   // hear your dealt hand + tweak each sound before building
-const BB_BUILD_SECS = 60;
-const BB_BATTLE_SECS = 50; // auto-advance if not all votes in within 50s
+const BB_CRATE_SECS   = 30;
+const BB_SCRUB_SECS   = 90;
+const BB_RECORD_SECS  = 90;
+const BB_BUILD_SECS   = 75;
+const BB_VOTE_SECS    = 45;
+const BB_LISTEN_SECS  = 10;
+const BB_TOTAL_ROUNDS = 3;
+const BB_ROLES_V2     = ['thump', 'snap', 'sneak'];
 
-function bb_shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+async function bb_fetchSample() {
+    const api = 'https://archive.org/advancedsearch.php';
+    const cntRes = await fetch(`${api}?q=collection%3Ageorgeblood+AND+mediatype%3Aaudio&rows=0&output=json`);
+    const { response: { numFound } } = await cntRes.json();
+    const start = Math.floor(Math.random() * Math.max(0, numFound - 50));
+    const srchRes = await fetch(`${api}?q=collection%3Ageorgeblood+AND+mediatype%3Aaudio&fl%5B%5D=identifier,title,creator,date,subject&rows=50&start=${start}&output=json`);
+    const { response: { docs } } = await srchRes.json();
+    const shuffled = [...docs].sort(() => Math.random() - 0.5);
+    for (const doc of shuffled) {
+        const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
+        if (/speech|spoken|comedy|lecture|interview/.test(subj)) continue;
+        try {
+            const metaRes = await fetch(`https://archive.org/metadata/${doc.identifier}`);
+            const meta = await metaRes.json();
+            const mp3 = (meta.files || []).find(f =>
+                /mp3/i.test(f.format || '') && (f.name || '').toLowerCase().endsWith('.mp3') &&
+                parseFloat(f.length || 0) > 60
+            );
+            if (!mp3) continue;
+            const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
+            return {
+                identifier: doc.identifier,
+                title: doc.title || 'Unknown Track',
+                creator,
+                date: (doc.date || '').slice(0, 4),
+                audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
+                thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
+                duration: parseFloat(mp3.length || 180),
+            };
+        } catch(e) { continue; }
+    }
+    return null;
+}
 
 function bb_startGame(room) {
-    room.gamePhase = 'PLAYING';
-    room.bbPhase = 'RECORD';
-    room.bbRecordings = {}; room.bbPool = []; room.bbHands = {};
-    room.bbBeats = {}; room.bbCustom = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1;
-    room.bbScores = {};
-    const ids = Object.keys(room.players);
-    ids.forEach(id => { room.bbScores[id] = 0; });
-    room.bbTimeLeft = BB_RECORD_SECS;
-    broadcastRoom(room, 'bbRecordPhase', { timeLeft: BB_RECORD_SECS, playerCount: ids.length });
+    room.gamePhase   = 'PLAYING';
+    room.bbPhase     = 'LOBBY';
+    room.bbRound     = 0;
+    room.bbCumScores = {};
+    Object.keys(room.players).forEach(id => { room.bbCumScores[id] = 0; });
+    bb_startRound(room);
+}
+
+async function bb_startRound(room) {
+    room.bbRound++;
+    room.bbPhase       = 'CRATE';
+    room.bbSample      = null;
+    room.bbSampleBytes = null;
+    room.bbScrubLocks  = {};
+    room.bbRecordings  = {};
+    room.bbHands       = {};
+    room.bbBeats       = {};
+    room.bbVotes       = {};
+    room.bbRoundScores = {};
+    room.bbListenQueue = [];
+    room.bbListenIdx   = -1;
+    Object.keys(room.players).forEach(id => { room.bbRoundScores[id] = 0; });
+    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, loading: true });
+    room.bbTimeLeft = BB_CRATE_SECS;
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_endRecord(room); }
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endCrate(room); }
+    }, 1000);
+    bb_fetchSample().then(sample => {
+        if (!sample || !rooms[room.code]) return;
+        room.bbSample = sample;
+        broadcastRoom(room, 'bbSampleReady', {
+            title: sample.title, creator: sample.creator, date: sample.date,
+            thumbUrl: sample.thumbUrl,
+            audioProxyUrl: `/api/bb-audio/${room.code}`,
+            duration: sample.duration,
+        });
+    }).catch(e => console.error('bb_fetchSample error:', e.message));
+}
+
+function bb_endCrate(room) {
+    clearInterval(room.bbTimer); room.bbTimer = null;
+    if (room.bbSample) { bb_beginScrub(room); return; }
+    room.bbTimeLeft = 20;
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        if (room.bbSample || room.bbTimeLeft <= 0) {
+            clearInterval(room.bbTimer); room.bbTimer = null;
+            if (!room.bbSample) room.bbSample = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
+            bb_beginScrub(room);
+        }
+    }, 1000);
+}
+
+function bb_beginScrub(room) {
+    room.bbPhase = 'SCRUB';
+    room.bbTimeLeft = BB_SCRUB_SECS;
+    broadcastRoom(room, 'bbScrubPhase', {
+        timeLeft: BB_SCRUB_SECS,
+        audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
+        duration: room.bbSample?.duration || 180,
+    });
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endScrub(room); }
+    }, 1000);
+}
+
+function bb_endScrub(room) {
+    clearInterval(room.bbTimer); room.bbTimer = null;
+    Object.keys(room.players).forEach(id => {
+        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 9, duration: 4 };
+    });
+    room.bbPhase = 'RECORD';
+    room.bbTimeLeft = BB_RECORD_SECS;
+    Object.keys(room.players).forEach(id => {
+        io.to(id).emit('bbRecordPhase', {
+            timeLeft: BB_RECORD_SECS,
+            playerCount: Object.keys(room.players).length,
+            myLoop: room.bbScrubLocks[id],
+            audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
+        });
+    });
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endRecord(room); }
     }, 1000);
 }
 
 function bb_endRecord(room) {
-    clearInterval(room.bbTimer);
-    room.bbPhase = 'BUILD';
+    clearInterval(room.bbTimer); room.bbTimer = null;
     const ids = Object.keys(room.players);
-    room.bbPool = [];
-    ids.forEach(id => {
-        const recs = room.bbRecordings[id] || {};
-        BB_ROLES.forEach(role => {
-            room.bbPool.push({ id: `${id}_${role}`, ownerId: id, ownerName: room.players[id]?.name || '?', role, dataUrl: recs[role] || null });
+    BB_ROLES_V2.forEach(role => {
+        const pool = ids.map(id => ({
+            id: `${id}_${role}`, ownerId: id,
+            ownerName: room.players[id]?.name || '?', role,
+            dataUrl: (room.bbRecordings[id] || {})[role] || null,
+        })).sort(() => Math.random() - 0.5);
+        ids.forEach((id, i) => {
+            if (!room.bbHands[id]) room.bbHands[id] = {};
+            const others = pool.filter(s => s.ownerId !== id);
+            room.bbHands[id][role] = others.length ? others[i % others.length] : pool[i % pool.length];
         });
     });
-    room.bbHands = {};
+    room.bbPhase = 'DEAL';
     ids.forEach(id => {
-        const hand = [];
-        BB_ROLES.forEach(role => {
-            const opts = bb_shuffle(room.bbPool.filter(s => s.role === role));
-            if (opts.length) hand.push(opts[0]);
+        const hand = BB_ROLES_V2.map(r => room.bbHands[id][r]);
+        io.to(id).emit('bbDealPhase', { hand, fromNames: hand.map(s => s.ownerName) });
+    });
+    room.bbTimer = setTimeout(() => {
+        room.bbPhase = 'BUILD';
+        room.bbTimeLeft = BB_BUILD_SECS;
+        ids.forEach(id => {
+            io.to(id).emit('bbBuildPhase', {
+                hand: BB_ROLES_V2.map(r => room.bbHands[id][r]),
+                myLoop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4 },
+                audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
+                timeLeft: BB_BUILD_SECS,
+            });
         });
-        const dealtIds = new Set(hand.map(s => s.id));
-        const extras = bb_shuffle(room.bbPool.filter(s => !dealtIds.has(s.id)));
-        for (let i = 0; i < 2 && i < extras.length; i++) hand.push(extras[i]);
-        room.bbHands[id] = hand;
-    });
-    // → TUNE: players hear the hand they were dealt and tweak each sound before building
-    room.bbPhase = 'TUNE';
-    room.bbCustom = {};
-    room.bbTimeLeft = BB_TUNE_SECS;
-    ids.forEach(id => {
-        io.to(id).emit('bbTunePhase', { hand: room.bbHands[id], timeLeft: BB_TUNE_SECS, tempo: BB_TEMPO });
-    });
-    room.bbTimer = setInterval(() => {
-        room.bbTimeLeft--;
-        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_endTune(room); }
-    }, 1000);
-}
-
-function bb_endTune(room) {
-    clearInterval(room.bbTimer);
-    room.bbPhase = 'BUILD';
-    const ids = Object.keys(room.players);
-    room.bbTimeLeft = BB_BUILD_SECS;
-    ids.forEach(id => {
-        io.to(id).emit('bbBuildPhase', { hand: room.bbHands[id], timeLeft: BB_BUILD_SECS, tempo: BB_TEMPO });
-    });
-    room.bbTimer = setInterval(() => {
-        room.bbTimeLeft--;
-        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_endBuild(room); }
-    }, 1000);
+        room.bbTimer = setInterval(() => {
+            room.bbTimeLeft--;
+            broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+            if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endBuild(room); }
+        }, 1000);
+    }, 6000);
 }
 
 function bb_endBuild(room) {
-    clearInterval(room.bbTimer);
-    room.bbPhase = 'BATTLE';
+    clearInterval(room.bbTimer); room.bbTimer = null;
     const ids = Object.keys(room.players);
-    room.bbMatchups = [];
-    for (let i = 0; i < ids.length; i++)
-        for (let j = i + 1; j < ids.length; j++)
-            room.bbMatchups.push({ p1Id: ids[i], p2Id: ids[j], votes: {}, winner: null });
-    room.bbCurrentMatchup = -1;
-    bb_nextMatchup(room);
+    ids.forEach(id => { if (!room.bbBeats[id]) room.bbBeats[id] = {}; });
+    room.bbPhase = 'LISTEN';
+    room.bbListenQueue = ids;
+    room.bbListenIdx   = -1;
+    const queue = ids.map(id => ({
+        playerId: id, playerName: room.players[id]?.name || '?',
+        beat: room.bbBeats[id] || {},
+        hand: BB_ROLES_V2.map(r => room.bbHands[id]?.[r]).filter(Boolean),
+        loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4 },
+    }));
+    broadcastRoom(room, 'bbListenPhase', {
+        queue, audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
+    });
+    room.bbTimer = setTimeout(() => bb_listenNext(room), 1500);
 }
 
-function bb_nextMatchup(room) {
-    if (room.bbTimer) { clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null; }
-    room.bbCurrentMatchup++;
-    if (room.bbCurrentMatchup >= room.bbMatchups.length) { bb_gameOver(room); return; }
-    const m = room.bbMatchups[room.bbCurrentMatchup];
-    room.bbTimeLeft = BB_BATTLE_SECS;
-    broadcastRoom(room, 'bbMatchupStart', {
-        matchupNum: room.bbCurrentMatchup + 1,
-        totalMatchups: room.bbMatchups.length,
-        p1Id: m.p1Id, p1Name: room.players[m.p1Id]?.name || '?',
-        p2Id: m.p2Id, p2Name: room.players[m.p2Id]?.name || '?',
-        p1Beat: room.bbBeats[m.p1Id] || {},
-        p2Beat: room.bbBeats[m.p2Id] || {},
-        p1Hand: room.bbHands[m.p1Id] || [],
-        p2Hand: room.bbHands[m.p2Id] || [],
-        p1Custom: room.bbCustom[m.p1Id] || {},
-        p2Custom: room.bbCustom[m.p2Id] || {},
-        voteTimeLeft: BB_BATTLE_SECS,
+function bb_listenNext(room) {
+    room.bbListenIdx++;
+    if (room.bbListenIdx >= room.bbListenQueue.length) {
+        room.bbTimer = setTimeout(() => bb_openVote(room), 1500);
+        return;
+    }
+    broadcastRoom(room, 'bbListenBeat', {
+        idx: room.bbListenIdx, total: room.bbListenQueue.length,
+        playerId: room.bbListenQueue[room.bbListenIdx],
     });
-    // Countdown timer — ticks and auto-advances if not all votes come in
+    room.bbTimer = setTimeout(() => bb_listenNext(room), (BB_LISTEN_SECS + 3) * 1000);
+}
+
+function bb_openVote(room) {
+    if (room.bbTimer) { clearTimeout(room.bbTimer); clearInterval(room.bbTimer); room.bbTimer = null; }
+    room.bbPhase = 'VOTE';
+    room.bbVotes = {};
+    room.bbTimeLeft = BB_VOTE_SECS;
+    const players = Object.keys(room.players).map(id => ({ id, name: room.players[id]?.name || '?' }));
+    broadcastRoom(room, 'bbVotePhase', { players, timeLeft: BB_VOTE_SECS });
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endMatchupVote(room); }
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endVote(room); }
     }, 1000);
 }
 
-function bb_endMatchupVote(room) {
-    const m = room.bbMatchups[room.bbCurrentMatchup];
-    if (!m) return;
-    let p1v = 0, p2v = 0;
-    Object.values(m.votes).forEach(v => { if (v === 'p1') p1v++; else p2v++; });
-    m.winner = p1v >= p2v ? 'p1' : 'p2';
-    const winnerId = m.winner === 'p1' ? m.p1Id : m.p2Id;
-    room.bbScores[winnerId] = (room.bbScores[winnerId] || 0) + 1;
-    broadcastRoom(room, 'bbMatchupResult', {
-        winner: m.winner, winnerId, winnerName: room.players[winnerId]?.name || '?',
-        p1Votes: p1v, p2Votes: p2v,
+function bb_endVote(room) {
+    clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null;
+    const ids = Object.keys(room.players);
+    const tallies = {};
+    ids.forEach(id => { tallies[id] = 0; });
+    Object.entries(room.bbVotes).forEach(([voter, target]) => {
+        if (voter !== target && tallies[target] !== undefined) tallies[target]++;
     });
-    setTimeout(() => bb_nextMatchup(room), 3000);
+    const sorted = Object.entries(tallies).sort((a, b) => b[1] - a[1]);
+    const pts = [3, 2, 1, 0];
+    sorted.forEach(([id], rank) => {
+        const p = pts[rank] || 0;
+        room.bbRoundScores[id] = p;
+        room.bbCumScores[id] = (room.bbCumScores[id] || 0) + p;
+    });
+    room.bbPhase = 'RESULT';
+    const results = sorted.map(([id, votes]) => ({
+        id, name: room.players[id]?.name || '?',
+        votes, roundPts: room.bbRoundScores[id], total: room.bbCumScores[id],
+    }));
+    broadcastRoom(room, 'bbRoundResult', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, results });
+    room.bbTimer = setTimeout(() => {
+        if (!rooms[room.code]) return;
+        if (room.bbRound < BB_TOTAL_ROUNDS) bb_startRound(room);
+        else bb_gameOver(room);
+    }, 6000);
 }
 
 function bb_gameOver(room) {
     clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null;
-    room.bbPhase = 'RESULT';
+    room.bbPhase  = 'RESULT';
     room.gamePhase = 'LOBBY';
     const scores = Object.keys(room.players).map(id => ({
-        id, name: room.players[id]?.name || '?', wins: room.bbScores[id] || 0,
-    })).sort((a, b) => b.wins - a.wins);
+        id, name: room.players[id]?.name || '?', score: room.bbCumScores[id] || 0,
+    })).sort((a, b) => b.score - a.score);
     broadcastRoom(room, 'bbGameOver', { scores });
-    // Do NOT call broadcastGameState here — that would immediately fire
-    // gameState {phase:'LOBBY'} which dismisses the podium before anyone reads it.
-    // gameState is sent when the host clicks "Back to Lobby" via bbReturnToLobby.
 }
 
 // ─── Split Crew ────────────────────────────────────────────────────────────────
@@ -1857,26 +2006,31 @@ io.on('connection', (socket) => {
 
         // Re-sync Bad Pitches: push the player directly to their current screen
         if (room.selectedGame === 'beatbattle' && room.bbPhase !== 'LOBBY') {
-            if (room.bbPhase === 'RECORD') {
-                socket.emit('bbRecordPhase', { timeLeft: room.bbTimeLeft, playerCount: Object.keys(room.players).length });
-            } else if (room.bbPhase === 'TUNE') {
-                const myHand = room.bbHands[socket.id];
-                if (myHand) socket.emit('bbTunePhase', { hand: myHand, timeLeft: room.bbTimeLeft, tempo: BB_TEMPO });
+            const sid = socket.id;
+            const smp = room.bbSample;
+            const proxyUrl = smp?.audioUrl ? `/api/bb-audio/${room.code}` : null;
+            if (room.bbPhase === 'CRATE') {
+                socket.emit('bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, loading: !smp });
+                if (smp) socket.emit('bbSampleReady', { title: smp.title, creator: smp.creator, date: smp.date, thumbUrl: smp.thumbUrl, audioProxyUrl: proxyUrl, duration: smp.duration });
+            } else if (room.bbPhase === 'SCRUB') {
+                socket.emit('bbScrubPhase', { timeLeft: room.bbTimeLeft, audioProxyUrl: proxyUrl, duration: smp?.duration || 180 });
+            } else if (room.bbPhase === 'RECORD') {
+                socket.emit('bbRecordPhase', { timeLeft: room.bbTimeLeft, playerCount: Object.keys(room.players).length, myLoop: room.bbScrubLocks[sid], audioProxyUrl: proxyUrl });
             } else if (room.bbPhase === 'BUILD') {
-                const myHand = room.bbHands[socket.id];
-                if (myHand) socket.emit('bbBuildPhase', { hand: myHand, timeLeft: room.bbTimeLeft, tempo: BB_TEMPO });
-            } else if (room.bbPhase === 'BATTLE') {
-                const mi = room.bbCurrentMatchup;
-                const m = (mi >= 0 && mi < room.bbMatchups.length) ? room.bbMatchups[mi] : null;
-                if (m) socket.emit('bbMatchupStart', {
-                    matchupIndex: mi, totalMatchups: room.bbMatchups.length,
-                    p1Id: m.p1Id, p2Id: m.p2Id,
-                    p1Name: room.players[m.p1Id]?.name || '?', p2Name: room.players[m.p2Id]?.name || '?',
-                    p1Beat: room.bbBeats[m.p1Id] || {}, p2Beat: room.bbBeats[m.p2Id] || {},
-                    p1Hand: room.bbHands[m.p1Id] || [], p2Hand: room.bbHands[m.p2Id] || [],
-                    p1Custom: room.bbCustom[m.p1Id] || {}, p2Custom: room.bbCustom[m.p2Id] || {},
-                    timeLeft: room.bbTimeLeft, scores: room.bbScores,
-                });
+                const hand = room.bbHands[sid];
+                if (hand) socket.emit('bbBuildPhase', { hand: BB_ROLES_V2.map(r => hand[r]), myLoop: room.bbScrubLocks[sid], audioProxyUrl: proxyUrl, timeLeft: room.bbTimeLeft });
+            } else if (room.bbPhase === 'LISTEN' || room.bbPhase === 'VOTE') {
+                const queue = room.bbListenQueue.map(pid => ({
+                    playerId: pid, playerName: room.players[pid]?.name || '?',
+                    beat: room.bbBeats[pid] || {},
+                    hand: BB_ROLES_V2.map(r => room.bbHands[pid]?.[r]).filter(Boolean),
+                    loop: room.bbScrubLocks[pid] || { start: 5, end: 9, duration: 4 },
+                }));
+                socket.emit('bbListenPhase', { queue, audioProxyUrl: proxyUrl });
+                if (room.bbPhase === 'VOTE') {
+                    const players = Object.keys(room.players).map(id => ({ id, name: room.players[id]?.name || '?' }));
+                    socket.emit('bbVotePhase', { players, timeLeft: room.bbTimeLeft });
+                }
             }
         }
 
@@ -2366,6 +2520,22 @@ io.on('connection', (socket) => {
         bb_startGame(room);
     });
 
+    socket.on('bbLockScrub', ({ start, end }) => {
+        const room = socketRoom(socket);
+        if (!room || room.bbPhase !== 'SCRUB') return;
+        const s = Math.max(0, Math.min(start, room.bbSample?.duration || 180));
+        const e = Math.max(s + 1, Math.min(end, room.bbSample?.duration || 180));
+        const dur = e - s;
+        if (dur < 1 || dur > 8) return;
+        room.bbScrubLocks[socket.id] = { start: s, end: e, duration: dur };
+        socket.emit('bbScrubLocked', { start: s, end: e, duration: dur });
+        const ids = Object.keys(room.players);
+        if (ids.every(id => room.bbScrubLocks[id])) {
+            clearInterval(room.bbTimer); room.bbTimer = null;
+            bb_endScrub(room);
+        }
+    });
+
     socket.on('bbSubmitRecordings', ({ recordings }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'RECORD') return;
@@ -2373,49 +2543,44 @@ io.on('connection', (socket) => {
         broadcastRoom(room, 'bbRecordingIn', { playerId: socket.id });
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbRecordings[id])) {
-            clearInterval(room.bbTimer);
+            clearInterval(room.bbTimer); room.bbTimer = null;
             setTimeout(() => bb_endRecord(room), 800);
         }
     });
 
-    socket.on('bbSubmitTune', ({ custom }) => {
-        const room = socketRoom(socket);
-        if (!room || room.bbPhase !== 'TUNE') return;
-        room.bbCustom[socket.id] = custom || {};
-    });
-
-    socket.on('bbSubmitBeat', ({ beat, custom }) => {
+    socket.on('bbSubmitBeat', ({ beat }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'BUILD') return;
         room.bbBeats[socket.id] = beat || {};
-        // Build-screen tweaks win over tune-screen tweaks; fall back to whatever we already have
-        room.bbCustom[socket.id] = custom || room.bbCustom[socket.id] || {};
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbBeats[id])) {
-            clearInterval(room.bbTimer);
+            clearInterval(room.bbTimer); room.bbTimer = null;
             setTimeout(() => bb_endBuild(room), 800);
         }
     });
 
-    socket.on('bbVote', ({ vote }) => {
+    socket.on('bbVote', ({ targetId }) => {
         const room = socketRoom(socket);
-        if (!room || room.bbPhase !== 'BATTLE') return;
-        const m = room.bbMatchups[room.bbCurrentMatchup];
-        if (!m || m.votes[socket.id] || (vote !== 'p1' && vote !== 'p2')) return;
-        m.votes[socket.id] = vote;
-        const voteCount = Object.keys(m.votes).length;
+        if (!room || room.bbPhase !== 'VOTE') return;
+        if (targetId === socket.id) return;
+        if (room.bbVotes[socket.id]) return;
+        if (!room.players[targetId]) return;
+        room.bbVotes[socket.id] = targetId;
+        const voteCount = Object.keys(room.bbVotes).length;
         const playerCount = Object.keys(room.players).length;
         broadcastRoom(room, 'bbVoteCast', { voteCount, total: playerCount });
-        if (voteCount >= playerCount) bb_endMatchupVote(room);
+        if (voteCount >= playerCount) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endVote(room); }
     });
 
     socket.on('bbReturnToLobby', () => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
-        clearInterval(room.bbTimer); clearTimeout(room.bbTimer);
+        clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null;
         room.bbPhase = 'LOBBY'; room.gamePhase = 'LOBBY';
-        room.bbRecordings = {}; room.bbPool = []; room.bbHands = {};
-        room.bbBeats = {}; room.bbCustom = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1; room.bbScores = {};
+        room.bbSample = null; room.bbSampleBytes = null; room.bbScrubLocks = {};
+        room.bbRecordings = {}; room.bbHands = {}; room.bbBeats = {};
+        room.bbVotes = {}; room.bbRoundScores = {}; room.bbCumScores = {};
+        room.bbListenQueue = []; room.bbListenIdx = -1; room.bbRound = 0;
         broadcastRoom(room, 'bbLobby', {});
         broadcastGameState(room);
     });
