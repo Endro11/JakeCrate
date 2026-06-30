@@ -587,6 +587,17 @@
         .bb-pads.compact .bb-pad2-role { font-size:0.62em; }
         .bb-dens { flex:1; padding:7px 0; border:1px solid #2a3450; border-radius:8px; background:#151d2c; color:#9fb0cc; font-size:0.62em; font-weight:700; cursor:pointer; }
         .bb-dens:active { transform:scale(.95); }
+        .bb-vibe { flex-shrink:0; padding:9px 14px; background:#1c2536; border:1.5px solid #34405c; border-radius:9px; color:#dfe7f5; font-size:0.74em; font-weight:800; cursor:pointer; }
+        .bb-vibe:active { transform:scale(.95); background:#27324a; }
+        .bb-chan { display:flex; align-items:center; gap:9px; padding:7px 9px; margin-bottom:5px; border:1.5px solid #232f44; border-radius:10px; background:#121a28; cursor:pointer; }
+        .bb-chan.sel { border-color:#fff; background:#17202f; }
+        .bb-chan.muted { opacity:.42; }
+        .bb-chan-name { width:74px; flex-shrink:0; font-size:0.62em; font-weight:800; letter-spacing:.02em; }
+        .bb-chan-mini { display:grid; grid-template-columns:repeat(16,1fr); gap:2px; flex:1; }
+        .bb-mini { height:11px; border-radius:2px; background:#0c1320; border:1px solid #1b2434; }
+        .bb-mini.beat { border-color:#2a3650; }
+        .bb-mini.on { border-color:transparent; }
+        .bb-chan-mute { flex-shrink:0; width:30px; height:28px; border:1px solid #2a3450; border-radius:7px; background:#151d2c; font-size:0.9em; cursor:pointer; padding:0; }
     </style>
 </head>
 <body>
@@ -4698,20 +4709,33 @@ const BB_GROOVE_PRESETS = [
 const BB_FILL_DENSITIES = [[], [0,4,8,12], [0,2,4,6,8,10,12,14], [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]];
 const BB_FILL_ICONS = ['☐','▪▫▫▫','▪▫▪▫','▪▪▪▪'];
 
+// Fill a vibe into the beat. Only the FIRST sound of each role gets the pattern —
+// duplicate-role extras start empty so the mix never doubles up into mush.
+function bbFillVibe(presetIdx) {
+    const preset = BB_GROOVE_PRESETS[presetIdx];
+    if (!preset) return;
+    const usedRole = {};
+    bbMyHand.forEach(sound => {
+        let pat;
+        if (!usedRole[sound.role]) { usedRole[sound.role] = true; pat = new Set(preset[sound.role] || []); }
+        else pat = new Set();
+        bbMyBeat[sound.id] = pat;
+        bbBeatPattern[sound.id] = new Set(pat);
+    });
+}
+
 function bbApplyGroove(presetIdx) {
     const preset = BB_GROOVE_PRESETS[presetIdx];
     if (!preset) return;
-    bbMyHand.forEach(sound => {
-        const steps = new Set(preset[sound.role] || []);
-        bbMyBeat[sound.id] = steps;
-        bbBeatPattern[sound.id] = new Set(steps);  // so it plays from the next loop
-    });
-    if (typeof bbRenderFocusLane === 'function') bbRenderFocusLane();
+    bbFillVibe(presetIdx);
+    if (typeof bbRefreshBuild === 'function') bbRefreshBuild();
     showToast(`${preset.name} loaded`);
 }
 
 // ─ Audio ─
 let bbAudioCtx = null;
+let bbMaster = null;       // master gain → compressor → out (glues the mix, stops mush)
+let bbMuted = {};          // sid → true when that sound is silenced
 let bbSoundBuffers = {};   // soundId → AudioBuffer
 let bbSynthBuffers = {};   // role → AudioBuffer (synth fallback)
 let bbActiveNodes = [];
@@ -4751,6 +4775,12 @@ let bbRecordingActive = false;
 
 function bbEnsureAudio() {
     if (!bbAudioCtx) bbAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!bbMaster) {
+        bbMaster = bbAudioCtx.createGain(); bbMaster.gain.value = 0.85;
+        const comp = bbAudioCtx.createDynamicsCompressor();
+        comp.threshold.value = -18; comp.ratio.value = 3.5; comp.attack.value = 0.004; comp.release.value = 0.18;
+        bbMaster.connect(comp); comp.connect(bbAudioCtx.destination);
+    }
     if (bbAudioCtx.state === 'suspended') bbAudioCtx.resume();
     return bbAudioCtx;
 }
@@ -4824,8 +4854,8 @@ function bbPlayHit(soundId, role, when) {
     src.buffer = buf;
     const custom = (bbActiveCustom && bbActiveCustom[soundId]) || {};
     src.playbackRate.value = custom.speed || 1.0;
-    const g = bbAudioCtx.createGain(); g.gain.value = 0.82;
-    src.connect(g); g.connect(bbAudioCtx.destination);
+    const g = bbAudioCtx.createGain(); g.gain.value = 0.8;
+    src.connect(g); g.connect(bbMaster || bbAudioCtx.destination);
     src.start(when);
     bbActiveNodes.push(src);
     // Flash the pad visualization if it's visible (battle .bb-pad or tune/build .bb-pad2)
@@ -4847,6 +4877,7 @@ function bbScheduler() {
         if (bbCurrentStep === 0) bbLoopAnchor = bbNextStepTime;
         if (bbMetroEnabled && bbCurrentStep % 4 === 0) bbPlayClick(bbNextStepTime, bbCurrentStep === 0);
         Object.entries(bbBeatPattern).forEach(([sid, steps]) => {
+            if (bbMuted[sid]) return;
             if (steps.has(bbCurrentStep)) {
                 const role = (bbBeatHand.find(s => s.id === sid) || {}).role || 'kick';
                 bbPlayHit(sid, role, bbNextStepTime);
@@ -4873,6 +4904,7 @@ function bbScheduler() {
 
 function bbStartBeat(beat, hand, loops, onDone, custom) {
     clearInterval(bbSchedulerTimer);
+    bbStopAudio();   // kill any pending scheduled hits so loops never stack into mush
     bbActiveCustom = custom || bbSoundCustom;
     bbBeatPattern = {};
     Object.entries(beat).forEach(([sid, steps]) => {
@@ -4916,7 +4948,7 @@ function bbCleanup() {
     bbStopBeat();
     bbSoundBuffers = {}; bbSynthBuffers = {};
     bbMyRecordings = {}; bbMyHand = []; bbMyBeat = {}; bbSoundCustom = {}; bbActiveCustom = bbSoundCustom;
-    bbBeatPattern = {}; bbBeatHand = [];
+    bbBeatPattern = {}; bbBeatHand = []; bbMuted = {}; bbFocusedSid = null;
     bbMyId = null; bbCurrentRoleIdx = 0;
     bbMetroEnabled = false; bbRecArmed = true;
     bbBattleHasVoted = false; bbBattleLoopEnabled = false;
@@ -5172,12 +5204,12 @@ function bbWireTuneScreen() {
     }
 }
 
-// ── Build screen (vibe + focused-sound editor) ───────────────────────────────────
+// ── Build screen (vibe + channel list + focused-sound editor) ────────────────────
 
 function bbBuildBeatObj() {
     const beat = {};
     Object.entries(bbMyBeat).forEach(([sid, steps]) => {
-        beat[sid] = [...(steps instanceof Set ? steps : new Set())];
+        beat[sid] = bbMuted[sid] ? [] : [...(steps instanceof Set ? steps : new Set())];
     });
     return beat;
 }
@@ -5197,16 +5229,49 @@ function bbUpdatePlayBtn() {
     if (b) b.textContent = bbIsPlaying ? '⏸ STOP' : '▶ PLAY';
 }
 
-// Focus a sound for editing: update the lane, the name, and the pitch slider.
+function bbRefreshBuild() { bbRenderChannels(); bbRenderFocusLane(); }
+
+// Channel list: every sound visible at once (no hidden beat). Mini-pattern shows
+// what each sound is playing; tap a row to edit it, tap the speaker to mute it.
+function bbRenderChannels() {
+    const wrap = document.getElementById('bb-build-channels');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    bbMyHand.forEach(sound => {
+        const sid = sound.id, color = bbColorFor(sound);
+        const steps = bbMyBeat[sid] instanceof Set ? bbMyBeat[sid] : new Set();
+        const muted = !!bbMuted[sid];
+        const row = document.createElement('div');
+        row.className = 'bb-chan' + (sid === bbFocusedSid ? ' sel' : '') + (muted ? ' muted' : '');
+        row.dataset.sid = sid;
+        let mini = '';
+        for (let i = 0; i < BB_STEPS; i++)
+            mini += `<span class="bb-mini${steps.has(i) ? ' on' : ''}${i % 4 === 0 ? ' beat' : ''}" style="${steps.has(i) ? 'background:' + color : ''}"></span>`;
+        row.innerHTML =
+            `<div class="bb-chan-name" style="color:${color}">${BB_ROLE_ICONS[sound.role] || '🎵'} ${sound.role.toUpperCase()}</div>` +
+            `<div class="bb-chan-mini">${mini}</div>` +
+            `<button class="bb-chan-mute">${muted ? '🔇' : '🔊'}</button>`;
+        row.querySelector('.bb-chan-mute').addEventListener('click', e => {
+            e.stopPropagation(); bbMuted[sid] = !bbMuted[sid]; bbRenderChannels();
+        });
+        row.addEventListener('click', () => {
+            bbEnsureAudio(); bbActiveCustom = bbSoundCustom;
+            if (!bbMuted[sid]) bbPlayHit(sid, sound.role, bbAudioCtx.currentTime + 0.01);
+            bbSetFocus(sid);
+        });
+        wrap.appendChild(row);
+    });
+}
+
+// Focus a sound for editing: update the lane, the name, the pitch slider, highlights.
 function bbSetFocus(sid) {
     bbFocusedSid = sid;
-    document.querySelectorAll('#bb-build-pads .bb-pad2').forEach(p =>
-        p.classList.toggle('foc', p.dataset.sid === sid));
     const sound = bbMyHand.find(s => s.id === sid);
     const nameEl = document.getElementById('bb-foc-name');
     if (nameEl && sound) { nameEl.textContent = sound.role.toUpperCase(); nameEl.style.color = bbColorFor(sound); }
     const pitch = document.getElementById('bb-foc-pitch');
     if (pitch) pitch.value = (bbSoundCustom[sid] || {}).speed || 1;
+    bbRenderChannels();
     bbRenderFocusLane();
 }
 
@@ -5230,9 +5295,10 @@ function bbRenderFocusLane() {
             else {
                 steps.add(i); cell.classList.add('on'); cell.style.background = color;
                 bbEnsureAudio(); bbActiveCustom = bbSoundCustom;
-                bbPlayHit(sid, sound.role, bbAudioCtx.currentTime + 0.02);
+                if (!bbMuted[sid]) bbPlayHit(sid, sound.role, bbAudioCtx.currentTime + 0.02);
             }
             bbBeatPattern[sid] = new Set(steps);  // play change from next loop
+            bbRenderChannels();                   // keep the mini-pattern in sync
         });
         lane.appendChild(cell);
     }
@@ -5244,7 +5310,7 @@ function bbSetDensity(level) {
     const pat = new Set(BB_DENSITY[level] || []);
     bbMyBeat[bbFocusedSid] = pat;
     bbBeatPattern[bbFocusedSid] = new Set(pat);
-    bbRenderFocusLane();
+    bbRefreshBuild();
 }
 
 function bbWireBuildScreen() {
@@ -5264,7 +5330,7 @@ function bbWireBuildScreen() {
             if (!bbFocusedSid) return;
             bbMyBeat[bbFocusedSid] = new Set();
             bbBeatPattern[bbFocusedSid] = new Set();
-            bbRenderFocusLane();
+            bbRefreshBuild();
         });
     }
     const pitch = document.getElementById('bb-foc-pitch');
@@ -5403,14 +5469,12 @@ socket.on('bbBuildPhase', async ({ hand, timeLeft, tempo }) => {
     bbStopBeat();
     bbTempo = tempo || 88;
     bbMyHand = hand;
-    bbMyBeat = {};
-    hand.forEach(s => { bbMyBeat[s.id] = new Set(BB_GROOVE_PRESETS[0][s.role] || []); }); // start on a real groove
+    bbMyBeat = {}; bbMuted = {};
     bbEnsureAudio(); bbLoadFallbacks();
     await Promise.all(hand.map(s => bbDecodeSound(s.id, s.dataUrl, s.role)));
+    bbFillVibe(0);                           // start on a real Boom Bap groove (one sound per role)
     bbActiveCustom = bbSoundCustom;          // keep the tweaks set during TUNE
-    const padC = document.getElementById('bb-build-pads');
-    if (padC) bbRenderPads(padC, 'build');
-    bbSetFocus(hand[0] && hand[0].id);       // focus the first sound for editing
+    bbSetFocus(hand[0] && hand[0].id);       // render channels + focus the first sound
     const timer = document.getElementById('bb-build-timer');
     if (timer) timer.textContent = timeLeft;
     bbShowScreen('bb-build-screen');
@@ -5421,6 +5485,7 @@ socket.on('bbBuildPhase', async ({ hand, timeLeft, tempo }) => {
 
 socket.on('bbMatchupStart', async ({ matchupNum, totalMatchups, p1Id, p1Name, p2Id, p2Name, p1Beat, p2Beat, p1Hand, p2Hand, p1Custom, p2Custom, voteTimeLeft }) => {
     bbStopBeat();
+    bbMuted = {};   // build-only mutes must not silence sounds during battle playback
     bbBattleHasVoted = false; bbBattleLoopEnabled = false;
     const lb = document.getElementById('bb-loop-btn');
     if (lb) { lb.textContent = '🔁 LOOP'; lb.style.borderColor = '#2a3450'; lb.style.color = '#4a6a8a'; }
@@ -5594,25 +5659,24 @@ socket.on('bbLobby', () => {
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
-  <div style="font-size:0.62em;color:#4a6a8a;text-align:center;padding:8px 16px 4px;flex-shrink:0;">Pick a vibe, then tap a sound to tweak it</div>
-  <div style="display:flex;align-items:center;gap:6px;padding:2px 16px 8px;flex-shrink:0;overflow-x:auto;justify-content:center;">
-    <span style="font-size:0.58em;color:#4a6a8a;flex-shrink:0;">VIBE:</span>
-    <button onclick="bbApplyGroove(0)" style="flex-shrink:0;padding:5px 11px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#ccc;font-size:0.68em;cursor:pointer;">Boom Bap</button>
-    <button onclick="bbApplyGroove(1)" style="flex-shrink:0;padding:5px 11px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#ccc;font-size:0.68em;cursor:pointer;">Trap</button>
-    <button onclick="bbApplyGroove(2)" style="flex-shrink:0;padding:5px 11px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#ccc;font-size:0.68em;cursor:pointer;">House</button>
-    <button onclick="bbApplyGroove(3)" style="flex-shrink:0;padding:5px 11px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#ccc;font-size:0.68em;cursor:pointer;">Lo-fi</button>
+  <div style="font-size:0.6em;color:#5a7aaa;text-align:center;padding:8px 16px 6px;flex-shrink:0;"><b style="color:#ff9800;">1.</b> Tap a vibe to start &nbsp;·&nbsp; <b style="color:#ff9800;">2.</b> Tap a sound below to edit it</div>
+  <div style="display:flex;align-items:center;gap:7px;padding:0 16px 10px;flex-shrink:0;overflow-x:auto;justify-content:center;">
+    <button onclick="bbApplyGroove(0)" class="bb-vibe">Boom Bap</button>
+    <button onclick="bbApplyGroove(1)" class="bb-vibe">Trap</button>
+    <button onclick="bbApplyGroove(2)" class="bb-vibe">House</button>
+    <button onclick="bbApplyGroove(3)" class="bb-vibe">Lo-fi</button>
   </div>
-  <div style="flex-shrink:0;display:flex;justify-content:center;"><div id="bb-build-pads" class="bb-pads compact"></div></div>
-  <div style="margin:8px auto 0;width:100%;max-width:420px;padding:10px 12px;box-sizing:border-box;background:#0f1622;border-top:1px solid #1e2a3a;flex-shrink:0;">
-    <div style="font-size:0.62em;color:#4a6a8a;margin-bottom:6px;">EDITING: <span id="bb-foc-name" style="font-weight:800;">KICK</span></div>
-    <div id="bb-foc-lane" class="bb-steps" style="margin-bottom:10px;"></div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-      <span style="font-size:0.6em;color:#4a6a8a;width:46px;flex-shrink:0;">Deep</span>
+  <div id="bb-build-channels" style="width:100%;max-width:420px;margin:0 auto;padding:0 12px 6px;box-sizing:border-box;flex-shrink:0;"></div>
+  <div style="margin:4px auto 0;width:100%;max-width:420px;padding:10px 12px 12px;box-sizing:border-box;background:#0f1622;border-top:2px solid #1e2a3a;flex-shrink:0;">
+    <div style="font-size:0.64em;color:#5a7aaa;margin-bottom:7px;">Editing <span id="bb-foc-name" style="font-weight:800;font-size:1.05em;">KICK</span> — tap squares to add hits</div>
+    <div id="bb-foc-lane" class="bb-steps" style="margin-bottom:12px;"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+      <span style="font-size:0.62em;color:#4a6a8a;width:36px;flex-shrink:0;">Deep</span>
       <input type="range" id="bb-foc-pitch" min="0.5" max="2" step="0.01" value="1" style="flex:1;">
-      <span style="font-size:0.6em;color:#4a6a8a;width:30px;flex-shrink:0;text-align:right;">High</span>
+      <span style="font-size:0.62em;color:#4a6a8a;width:30px;flex-shrink:0;text-align:right;">High</span>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
-      <span style="font-size:0.6em;color:#4a6a8a;width:46px;flex-shrink:0;">Busy</span>
+      <span style="font-size:0.62em;color:#4a6a8a;width:36px;flex-shrink:0;">Fill</span>
       <button id="bb-dens-0" class="bb-dens">Chill</button>
       <button id="bb-dens-1" class="bb-dens">Med</button>
       <button id="bb-dens-2" class="bb-dens">Busy</button>
