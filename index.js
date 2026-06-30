@@ -1552,7 +1552,7 @@ function bb_beginScrub(room) {
 function bb_endScrub(room) {
     clearInterval(room.bbTimer); room.bbTimer = null;
     Object.keys(room.players).forEach(id => {
-        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 9, duration: 4, rate: 1 };
+        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 13, duration: 8, rate: 1 };
     });
 
     if (room.bbRoundType === 'voice') {
@@ -1570,7 +1570,7 @@ function bb_beginListenFromScrub(room) {
     const queue = ids.map(id => ({
         playerId: id, playerName: room.players[id]?.name || '?',
         beat: {}, hand: [],
-        loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+        loop: room.bbScrubLocks[id] || { start: 5, end: 13, duration: 8, rate: 1 },
         roundType: room.bbRoundType,
     }));
     room.bbPhase = 'LISTEN';
@@ -1594,7 +1594,7 @@ function bb_beginBuild(room) {
         io.to(id).emit('bbBuildPhase', {
             roundType: room.bbRoundType,
             hand: [],
-            myLoop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+            myLoop: room.bbScrubLocks[id] || { start: 5, end: 13, duration: 8, rate: 1 },
             audioProxyUrl,
             r2AudioUrl,
             r2Loop: isVoice ? (room.bbR2ScrubLocks?.[id] || null) : null,
@@ -1655,7 +1655,7 @@ function bb_endBuild(room) {
         playerId: id, playerName: room.players[id]?.name || '?',
         beat: room.bbBeats[id] || {},
         hand: [],
-        loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+        loop: room.bbScrubLocks[id] || { start: 5, end: 13, duration: 8, rate: 1 },
         r2Loop: isVoice ? (room.bbR2ScrubLocks?.[id] || null) : null,
         roundType: room.bbRoundType,
     }));

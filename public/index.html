@@ -4687,7 +4687,7 @@ let bbListenProxyUrl = null;
 let bbMediaRec       = null;
 let bbMediaStream    = null;
 let bbAudioEl        = null;
-let bbLoopDuration   = 4;    // 2 or 4 seconds, toggled by player
+let bbLoopDuration   = 8;    // seconds, toggled by player
 let bbPlaybackRate   = 1.0;  // pitch/speed control
 let bbR1LayerSrc    = null;
 let bbR1LayerGain   = null;  // gain node for R1 layer volume
@@ -4745,7 +4745,9 @@ function bbMakeCrackle() {
 
 function bbStartCrackle() {
     if (!bbAudioCtx || bbCrackleNode) return;
-    const gain = bbAudioCtx.createGain(); gain.gain.value = 0.12; gain.connect(bbMasterGain);
+    const gain = bbAudioCtx.createGain(); gain.gain.value = 0.04;
+    const hp = bbAudioCtx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2800;
+    gain.connect(hp); hp.connect(bbMasterGain);
     bbCrackleNode = bbAudioCtx.createBufferSource();
     bbCrackleNode.buffer = bbMakeCrackle(); bbCrackleNode.loop = true;
     bbCrackleNode.connect(gain); bbCrackleNode.start();
@@ -4780,7 +4782,7 @@ function bbPlayHit(soundId, role, when) {
 }
 
 // ── loop ──
-function bbSetLoop(s, e) { bbLoopStart=s; bbLoopEnd=e; bbLoopStepDur=(e-s)/8; }
+function bbSetLoop(s, e) { bbLoopStart=s; bbLoopEnd=e; bbLoopStepDur=(e-s)/8/(bbPlaybackRate||1); }
 
 function bbSetLoopDuration(d) {
     bbLoopDuration = d;
@@ -4790,7 +4792,7 @@ function bbSetLoopDuration(d) {
     bbAutoZoom();
     bbUpdateScrubOverlay();
     bbScrubRestart();
-    [4,6,8].forEach(n=>{
+    [8,12,16,20].forEach(n=>{
         const b=document.getElementById('bb-dur-'+n);
         if(!b) return;
         b.style.background  = n===d ? 'rgba(255,152,0,.15)' : '#0d1525';
@@ -4801,8 +4803,8 @@ function bbSetLoopDuration(d) {
 
 function bbAutoZoom() {
     const dur = bbSampleDuration || 180;
-    const win = 30; // seconds visible in zoomed view
-    let zs = Math.max(0, bbLoopStart - 12);
+    const win = 45; // seconds visible in zoomed view
+    let zs = Math.max(0, bbLoopStart - 15);
     let ze = zs + win;
     if (ze > dur) { ze = dur; zs = Math.max(0, ze - win); }
     bbZoomStart = zs; bbZoomEnd = ze;
@@ -4826,6 +4828,7 @@ function bbSetPlaybackRate(r) {
     bbPlaybackRate = r;
     if (bbAudioEl) bbAudioEl.playbackRate = r;
     if (bbLoopSrc) bbLoopSrc.playbackRate.value = r;
+    bbLoopStepDur = (bbLoopEnd - bbLoopStart) / 8 / (r || 1);
     const slider = document.getElementById('bb-pitch-slider');
     if (slider) slider.value = Math.round(r * 100);
     const label  = document.getElementById('bb-pitch-label');
@@ -4954,7 +4957,8 @@ function bbUpdateScrubOverlay() {
     region.style.left=lx+'px'; region.style.width=Math.max(2,rx-lx)+'px';
     head.style.left=lx+'px';
     const info=document.getElementById('bb-loop-info');
-    if(info) info.textContent=`${bbLoopDuration}s loop · ${bbLoopStart.toFixed(1)}s–${bbLoopEnd.toFixed(1)}s · viewing ${zs.toFixed(0)}s–${ze.toFixed(0)}s`;
+    const realDur = bbPlaybackRate && bbPlaybackRate !== 1 ? ` (${(bbLoopDuration/bbPlaybackRate).toFixed(1)}s real)` : '';
+    if(info) info.textContent=`${bbLoopDuration}s loop${realDur} · ${bbLoopStart.toFixed(1)}s–${bbLoopEnd.toFixed(1)}s · viewing ${zs.toFixed(0)}s–${ze.toFixed(0)}s`;
     const btn=document.getElementById('bb-lock-btn');
     if(btn) btn.disabled=false;
 }
@@ -5174,9 +5178,9 @@ function bbWireRecordScreen() {
 // ── build screen ──
 function bbShowBuildScreen(data) {
     const isVoice = data.roundType === 'voice';
-    bbMyLoop = data.myLoop || {start:5,end:9,duration:4,rate:1};
-    bbSetLoop(bbMyLoop.start,bbMyLoop.end);
-    if(bbMyLoop.rate) bbPlaybackRate=bbMyLoop.rate;
+    bbMyLoop = data.myLoop || {start:5,end:13,duration:8,rate:1};
+    bbPlaybackRate = bbMyLoop.rate || 1;
+    bbSetLoop(bbMyLoop.start, bbMyLoop.end);
 
     if(isVoice) {
         // R3: 4 synth pads, no dealt sounds
@@ -5264,8 +5268,8 @@ function bbPlayListenBeat(playerId) {
             <div style="font-size:1.3em">${active?'▶️':(i<idx?'✅':'⏳')}</div>
             <div><div class="bb-deal-name">${q.playerName}</div></div></div>`;
     }).join('');
-    bbSetLoop(entry.loop.start,entry.loop.end);
     bbPlaybackRate = entry.loop.rate || 1;
+    bbSetLoop(entry.loop.start, entry.loop.end);
     const isVoice = entry.roundType === 'voice';
     // For voice round use static synth pads; otherwise use dealt hand
     bbMyHand = isVoice ? BB_R3_PADS.map(p=>({...p})) : (entry.hand || []);
@@ -5314,7 +5318,7 @@ socket.on('bbCratePhase',({round,totalRounds,loading,roundType,tutorial})=>{
     bbStreamStop(); bbStopLoop(); bbStopBeat();
     try{bbR1LayerSrc?.stop();}catch(e){} bbR1LayerSrc=null; bbR1LayerActive=false; bbR1LayerBuffer=null; bbR1LayerUrl=null;
     bbStopR2Loop(); bbR2LoopBuffer=null; bbR2AudioUrl=null; bbR2LoopData=null;
-    bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0;
+    bbLoopStart=0; bbLoopEnd=8; bbLoopDuration=8; bbPlaybackRate=1.0;
     bbZoomStart=0; bbZoomEnd=0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
     const wfl=document.getElementById('bb-waveform-loading');
@@ -5538,11 +5542,12 @@ socket.on('bbLobby',()=>{
     </div>
   </div>
 
-  <!-- Loop length picker: 4 / 6 / 8 sec -->
-  <div style="width:100%;max-width:440px;display:flex;gap:8px;">
-    <button id="bb-dur-4" onclick="bbSetLoopDuration(4)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">4 SEC</button>
-    <button id="bb-dur-6" onclick="bbSetLoopDuration(6)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">6 SEC</button>
-    <button id="bb-dur-8" onclick="bbSetLoopDuration(8)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">8 SEC</button>
+  <!-- Loop length picker: 8 / 12 / 16 / 20 sec -->
+  <div style="width:100%;max-width:440px;display:flex;gap:6px;">
+    <button id="bb-dur-8"  onclick="bbSetLoopDuration(8)"  style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.75em;font-weight:800;letter-spacing:.04em;cursor:pointer;">8s</button>
+    <button id="bb-dur-12" onclick="bbSetLoopDuration(12)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.75em;font-weight:800;letter-spacing:.04em;cursor:pointer;">12s</button>
+    <button id="bb-dur-16" onclick="bbSetLoopDuration(16)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.75em;font-weight:800;letter-spacing:.04em;cursor:pointer;">16s</button>
+    <button id="bb-dur-20" onclick="bbSetLoopDuration(20)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.75em;font-weight:800;letter-spacing:.04em;cursor:pointer;">20s</button>
   </div>
 
   <!-- Waveform — tall, always visible -->
@@ -5570,7 +5575,7 @@ socket.on('bbLobby',()=>{
       style="width:100%;height:6px;accent-color:#5ee6c5;cursor:pointer;">
     <div style="text-align:center;margin-top:4px;">
       <span id="bb-pitch-label" style="font-size:0.72em;font-weight:800;color:#5ee6c5;">1.00×</span>
-      <span style="font-size:0.6em;color:#4a6a8a;margin-left:6px;">drag to pitch up/down</span>
+      <span style="font-size:0.6em;color:#4a6a8a;margin-left:6px;">set speed first, then drag your loop</span>
     </div>
   </div>
 
