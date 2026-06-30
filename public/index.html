@@ -4662,9 +4662,10 @@ let bbLoopStart    = 5;
 let bbLoopEnd      = 9;
 let bbLoopStepDur  = 0.5;
 let bbMyLoop       = null;
-let bbMyHand       = {};
-let bbMyRecordings = {};
-let bbMyBeat       = {};
+let bbMyHand       = [];   // array of {id, ownerId, ownerName, slot, dataUrl}
+let bbMySounds     = [null, null, null]; // voice round: my 3 recorded dataUrls
+let bbCurrentSlot  = 0;    // which slot is selected in RECORD screen
+let bbMyBeat       = {};   // {soundId: Set<stepIndex>}
 let bbSoundBuffers = {};
 let bbSchedulerTm  = null;
 let bbNextStepTime = 0;
@@ -4678,8 +4679,6 @@ let bbScrubMode      = 'none';
 let bbScrubAnchorX   = 0;
 let bbScrubAnchorS   = 0;
 let bbScrubAnchorE   = 0;
-let bbRecState       = {};
-let bbCurrentRoleIdx = 0;
 let bbListenQueue    = [];
 let bbListenProxyUrl = null;
 let bbMediaRec       = null;
@@ -4844,9 +4843,9 @@ function bbSchedTick() {
     const ctx = bbEnsureAudio();
     while (bbNextStepTime < ctx.currentTime + 0.1) {
         const step = bbCurrentStep;
-        BB_ROLES_V2.forEach(role => {
-            const set = bbMyBeat[role]; if (!set||!set.has(step)) return;
-            const hand = bbMyHand[role]; if (hand) bbPlayHit(hand.id, role, bbNextStepTime);
+        Object.keys(bbMyBeat).forEach(sid => {
+            const set = bbMyBeat[sid]; if (!set||!set.has(step)) return;
+            const sound = bbMyHand.find(s=>s.id===sid); if (sound) bbPlayHit(sound.id, 'voice', bbNextStepTime);
         });
         const s = step;
         requestAnimationFrame(() => {
@@ -4935,24 +4934,18 @@ function bbWireScrub() {
 
 // ── record screen ──
 function bbRenderRecordScreen() {
-    const role=BB_ROLES_V2[bbCurrentRoleIdx], color=BB_ROLE_COLORS_V2[role];
-    const icon=BB_ROLE_ICONS_V2[role], hint=BB_ROLE_HINTS_V2[role];
-    const nm=document.getElementById('bb-rec-role-name'), ic=document.getElementById('bb-rec-role-icon');
-    const ht=document.getElementById('bb-rec-hint'), st=document.getElementById('bb-rec-status');
-    if(nm){nm.textContent=role.toUpperCase();nm.style.color=color;} if(ic) ic.textContent=icon;
-    if(ht) ht.textContent=hint;
-    const dots=document.getElementById('bb-rec-dots');
-    if(dots) dots.innerHTML=BB_ROLES_V2.map((r,i)=>{
-        const cls=i===bbCurrentRoleIdx?'active':(bbRecState[r]?'done':'');
-        return `<div class="bb-role-dot ${cls}" style="color:${BB_ROLE_COLORS_V2[r]}"><div class="bb-dot-circle"></div><div>${r}</div></div>`;
-    }).join('');
-    if(st) st.textContent=bbRecState[role]?`✓ ${bbRecState[role].dur.toFixed(1)}s recorded`:'';
-    BB_ROLES_V2.forEach(r=>{
-        const pad=document.getElementById(`bb-rec-pad-${r}`);
-        if(!pad) return;
-        if(bbRecState[r]) pad.classList.add('done'); else pad.classList.remove('done');
-        pad.style.boxShadow=r===role?`0 0 0 3px ${BB_ROLE_COLORS_V2[r]}`:'';
-    });
+    for(let i=0;i<3;i++){
+        const pad=document.getElementById(`bb-rec-pad-${i}`); if(!pad) continue;
+        const dur=document.getElementById(`bb-rec-dur-${i}`);
+        const hasSound=!!bbMySounds[i];
+        pad.style.borderColor=i===bbCurrentSlot?'#ff9800':(hasSound?'#26c47c':'rgba(255,152,0,.25)');
+        pad.style.boxShadow=i===bbCurrentSlot?'0 0 0 3px rgba(255,152,0,.5)':'';
+        pad.style.background=hasSound?'rgba(38,196,124,.1)':'rgba(255,152,0,.06)';
+        if(dur) dur.textContent=hasSound?`✓ recorded`:'empty';
+        if(dur) dur.style.color=hasSound?'#26c47c':'#7a9abf';
+    }
+    const sub=document.getElementById('bb-rec-submit');
+    if(sub) sub.disabled=bbMySounds.filter(Boolean).length===0;
 }
 
 function bbStartRecording() {
@@ -4964,18 +4957,16 @@ function bbStartRecording() {
         const chunks=[];
         bbMediaRec.ondataavailable=e=>{if(e.data.size) chunks.push(e.data);};
         bbMediaRec.onstop=()=>{
+            const slot=bbCurrentSlot;
             const blob=new Blob(chunks,{type:bbMediaRec.mimeType}), reader=new FileReader();
             reader.onload=()=>{
-                const dataUrl=reader.result, role=BB_ROLES_V2[bbCurrentRoleIdx];
-                bbMyRecordings[role]=dataUrl;
+                bbMySounds[slot]=reader.result;
                 bbEnsureAudio();
-                const soundId=`${bbMyId}_${role}`;
-                bbDecodeSound(soundId,dataUrl,role).then(()=>{
-                    bbRecState[role]={dataUrl,dur:bbSoundBuffers[soundId]?.duration||0.5};
-                    bbRenderRecordScreen();
-                    const next=BB_ROLES_V2.findIndex((r,i)=>i>bbCurrentRoleIdx&&!bbRecState[r]);
-                    if(next!==-1) setTimeout(()=>{bbCurrentRoleIdx=next;bbRenderRecordScreen();},400);
-                });
+                bbDecodeSound(`${bbMyId}_snd${slot}`,bbMySounds[slot],'voice').catch(()=>{});
+                bbRenderRecordScreen();
+                // auto-advance to next empty slot
+                const next=bbMySounds.findIndex((s,i)=>i>slot&&!s);
+                if(next!==-1) setTimeout(()=>{bbCurrentSlot=next;bbRenderRecordScreen();},400);
             };
             reader.readAsDataURL(blob);
             stream.getTracks().forEach(t=>t.stop());
@@ -4990,13 +4981,15 @@ function bbStopRecording() {
     const btn=document.getElementById('bb-rec-btn'); if(btn) btn.classList.remove('recording');
 }
 function bbWireRecordScreen() {
-    BB_ROLES_V2.forEach((role,i)=>{
-        const pad=document.getElementById(`bb-rec-pad-${role}`); if(!pad||pad._wired) return; pad._wired=true;
+    for(let i=0;i<3;i++){
+        const pad=document.getElementById(`bb-rec-pad-${i}`);
+        if(!pad||pad._wired) continue; pad._wired=true;
+        const idx=i;
         pad.addEventListener('click',()=>{
-            bbCurrentRoleIdx=i; bbRenderRecordScreen();
-            if(bbRecState[role]){bbEnsureAudio();bbPlayHit(`${bbMyId}_${role}`,role,bbAudioCtx.currentTime+0.01);}
+            bbCurrentSlot=idx; bbRenderRecordScreen();
+            if(bbMySounds[idx]){ bbEnsureAudio(); bbPlayHit(`${bbMyId}_snd${idx}`,'voice',bbAudioCtx.currentTime+0.01); }
         });
-    });
+    }
     const btn=document.getElementById('bb-rec-btn');
     if(btn&&!btn._wired){btn._wired=true;
         btn.addEventListener('pointerdown',e=>{e.preventDefault();bbEnsureAudio();bbStartRecording();});
@@ -5004,51 +4997,65 @@ function bbWireRecordScreen() {
     }
     const sub=document.getElementById('bb-rec-submit');
     if(sub&&!sub._wired){sub._wired=true;sub.addEventListener('click',()=>{
-        socket.emit('bbSubmitRecordings',{recordings:bbMyRecordings});
+        socket.emit('bbSubmitRecordings',{sounds:bbMySounds});
         sub.disabled=true;sub.textContent='SUBMITTED ✓';
     });}
 }
 
 // ── build screen ──
 function bbShowBuildScreen(data) {
-    bbMyHand={};
-    (data.hand||[]).forEach(s=>{bbMyHand[s.role]=s;});
-    bbMyLoop=data.myLoop||{start:5,end:9,duration:4,rate:1};
+    bbMyHand = data.hand || [];   // array of sound objects
+    bbMyLoop = data.myLoop || {start:5,end:9,duration:4,rate:1};
     bbSetLoop(bbMyLoop.start,bbMyLoop.end);
     if(bbMyLoop.rate) bbPlaybackRate=bbMyLoop.rate;
-    bbMyBeat={}; BB_ROLES_V2.forEach(r=>{bbMyBeat[r]=new Set();});
+    bbMyBeat = {};
+    bbMyHand.forEach(s=>{ bbMyBeat[s.id]=new Set(); });
     bbShowScreen('bb-build-screen');
     const timer=document.getElementById('bb-build-timer'); if(timer) timer.textContent=data.timeLeft;
+    const hint=document.getElementById('bb-build-hint');
+    if(hint) hint.textContent=bbMyHand.length?'8 steps · tap to toggle · use at least 1 sound · loop plays underneath':'Loop playing — listening round';
     bbBuildRenderGrid();
-    bbStreamStop(); bbStopLoop(); bbStartLoop(); // precise AudioBufferSourceNode with correct rate
-    bbStartBeat();
+    bbStreamStop(); bbStopLoop(); bbStartLoop();
+    if(bbMyHand.length) bbStartBeat();
 }
 function bbBuildRenderGrid() {
-    BB_ROLES_V2.forEach(role=>{
-        const sound=bbMyHand[role], color=BB_ROLE_COLORS_V2[role], steps=bbMyBeat[role]||new Set();
-        const row=document.getElementById(`bb-build-row-${role}`); if(!row) return;
-        const grid=row.querySelector('.bb-build-steps'); if(!grid) return;
-        grid.innerHTML='';
-        const lbl=row.querySelector('.bb-build-label');
-        if(lbl) lbl.innerHTML=`${BB_ROLE_ICONS_V2[role]}<br><span style="font-size:0.85em;color:#5a7a9a">${sound?sound.ownerName:'—'}</span>`;
+    const container=document.getElementById('bb-build-rows'); if(!container) return;
+    container.innerHTML='';
+    if(!bbMyHand.length){
+        container.innerHTML='<div style="text-align:center;font-size:0.7em;color:#4a6a8a;padding:24px 0;">No sounds to place — just your loop plays</div>';
+        return;
+    }
+    const colors=['#ff9800','#5ee6c5','#c792ea'];
+    bbMyHand.forEach((sound,idx)=>{
+        const color=colors[idx%colors.length];
+        const steps=bbMyBeat[sound.id]||new Set();
+        const row=document.createElement('div'); row.className='bb-build-row';
+        const lbl=document.createElement('div'); lbl.className='bb-build-label';
+        lbl.innerHTML=`<span style="font-size:1.1em">${idx+1}</span><br><span style="color:#4a7a9a">${sound.ownerName}</span>`;
+        const grid=document.createElement('div'); grid.className='bb-build-steps';
         for(let i=0;i<8;i++){
             const cell=document.createElement('div');
-            cell.className='bb-build-step'+(role==='sneak'?' bb-sneak-step':'');
-            cell.dataset.step=i;
+            cell.className='bb-build-step'; cell.dataset.step=i;
             if(steps.has(i)){cell.classList.add('on');cell.style.background=color;}
             cell.addEventListener('pointerdown',e=>{
                 e.preventDefault();
-                if(role==='sneak'&&!steps.has(i)&&steps.size>=2){showToast('SNEAK: max 2 slots!');return;}
                 if(steps.has(i)){steps.delete(i);cell.classList.remove('on');cell.style.background='';}
                 else{steps.add(i);cell.classList.add('on');cell.style.background=color;}
-                if(sound){bbEnsureAudio();bbPlayHit(sound.id,role,bbAudioCtx.currentTime+0.01);}
+                bbEnsureAudio(); bbPlayHit(sound.id,'voice',bbAudioCtx.currentTime+0.01);
             });
             grid.appendChild(cell);
         }
+        row.appendChild(lbl); row.appendChild(grid);
+        container.appendChild(row);
     });
 }
 function bbBuildSubmit() {
-    const beat={}; BB_ROLES_V2.forEach(r=>{beat[r]=[...(bbMyBeat[r]||new Set())];});
+    if(bbMyHand.length){
+        const anyActive=bbMyHand.some(s=>(bbMyBeat[s.id]||new Set()).size>0);
+        if(!anyActive){showToast('Use at least 1 sound!');return;}
+    }
+    const beat={};
+    bbMyHand.forEach(s=>{beat[s.id]=[...(bbMyBeat[s.id]||new Set())];});
     socket.emit('bbSubmitBeat',{beat});
     const btn=document.getElementById('bb-build-submit'); if(btn){btn.disabled=true;btn.textContent='LOCKED IN ✓';}
 }
@@ -5074,8 +5081,9 @@ function bbPlayListenBeat(playerId) {
     }).join('');
     bbSetLoop(entry.loop.start,entry.loop.end);
     bbPlaybackRate = entry.loop.rate || 1;
-    bbMyHand={}; (entry.hand||[]).forEach(s=>{bbMyHand[s.role]=s;});
-    bbMyBeat={}; BB_ROLES_V2.forEach(r=>{bbMyBeat[r]=new Set(entry.beat[r]||[]);});
+    bbMyHand = entry.hand || [];
+    bbMyBeat = {};
+    bbMyHand.forEach(s=>{ bbMyBeat[s.id]=new Set(entry.beat[s.id]||[]); });
     bbStopLoop();
     if(bbListenProxyUrl&&bbSampleBuffer) bbStartLoop();
     bbStartBeat();
@@ -5098,7 +5106,7 @@ function bbShowScreen(id) {
 // ── socket events ──
 socket.on('bbCratePhase',({round,totalRounds,loading,roundType})=>{
     bbMyId=socket.id; bbSampleBuffer=null; bbSoundBuffers={};
-    bbMyRecordings={}; bbMyHand={}; bbMyBeat={}; bbRecState={};
+    bbMySounds=[null,null,null]; bbCurrentSlot=0; bbMyHand=[]; bbMyBeat={};
     bbStreamStop(); bbStopLoop(); bbStopBeat();
     bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
@@ -5157,15 +5165,16 @@ socket.on('bbScrubLocked',({start,end,duration})=>{
     showToast(`Loop locked: ${duration.toFixed(1)}s ✓`);
 });
 
-socket.on('bbRecordPhase',({timeLeft,playerCount,myLoop,audioProxyUrl})=>{
-    if(myLoop){ bbMyLoop=myLoop; bbSetLoop(myLoop.start,myLoop.end); if(myLoop.rate) bbPlaybackRate=myLoop.rate; }
-    bbMyRecordings={}; bbRecState={}; bbCurrentRoleIdx=0;
+socket.on('bbRecordPhase',({timeLeft})=>{
+    bbMySounds=[null,null,null]; bbCurrentSlot=0;
     bbShowScreen('bb-record-screen');
     const timer=document.getElementById('bb-rec-timer'); if(timer) timer.textContent=timeLeft;
+    bbStreamStop(); bbStopLoop(); bbStopBeat();
+    // reset pad wiring so bbWireRecordScreen re-attaches
+    for(let i=0;i<3;i++){const p=document.getElementById(`bb-rec-pad-${i}`);if(p) p._wired=false;}
+    const btn=document.getElementById('bb-rec-btn'); if(btn) btn._wired=false;
+    const sub=document.getElementById('bb-rec-submit'); if(sub){sub._wired=false;sub.disabled=false;sub.textContent='SUBMIT ALL 3 SOUNDS →';}
     bbRenderRecordScreen(); bbWireRecordScreen();
-    // Play the locked loop as reference; prefer precise loop, fall back to stream
-    if(bbSampleBuffer) { bbStreamStop(); bbStopLoop(); bbStartLoop(); }
-    else if(audioProxyUrl) { if(!bbAudioEl) bbStreamStart(audioProxyUrl); }
 });
 
 socket.on('bbRecordingIn',()=>{
@@ -5173,16 +5182,16 @@ socket.on('bbRecordingIn',()=>{
     if(sub&&!sub.disabled) sub.textContent='Others submitting…';
 });
 
-socket.on('bbDealPhase',({hand,fromNames})=>{
-    bbMyHand={}; hand.forEach(s=>{bbMyHand[s.role]=s;});
+socket.on('bbDealPhase',({hand})=>{
+    bbMyHand = hand || [];
     bbShowScreen('bb-deal-screen');
     const list=document.getElementById('bb-deal-list');
-    if(list) list.innerHTML=hand.map(s=>`
+    if(list) list.innerHTML=bbMyHand.map((s,i)=>`
         <div class="bb-deal-card">
-            <div class="bb-deal-icon">${BB_ROLE_ICONS_V2[s.role]||'\u{1F3B5}'}</div>
-            <div><div class="bb-deal-name">${s.role.toUpperCase()}</div><div class="bb-deal-from">from ${s.ownerName}</div></div>
+            <div class="bb-deal-icon" style="font-size:1.4em">${i+1}</div>
+            <div><div class="bb-deal-name">Sound from ${s.ownerName}</div></div>
         </div>`).join('');
-    Promise.all(hand.map(s=>bbDecodeSound(s.id,s.dataUrl,s.role))).catch(()=>{});
+    Promise.all(bbMyHand.map(s=>bbDecodeSound(s.id,s.dataUrl,'voice'))).catch(()=>{});
 });
 
 socket.on('bbBuildPhase',data=>{bbShowBuildScreen(data);});
@@ -5243,7 +5252,7 @@ socket.on('bbTimeTick',({timeLeft})=>{
     if(timeLeft<=5){
         const recSub=document.getElementById('bb-rec-submit');
         if(recSub&&!recSub.disabled&&document.getElementById('bb-record-screen')?.style.display==='flex'){
-            socket.emit('bbSubmitRecordings',{recordings:bbMyRecordings});
+            socket.emit('bbSubmitRecordings',{sounds:bbMySounds});
             recSub.disabled=true;recSub.textContent='AUTO-SUBMITTED';
         }
         const buildSub=document.getElementById('bb-build-submit');
@@ -5333,22 +5342,19 @@ socket.on('bbLobby',()=>{
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
-  <div id="bb-rec-dots" class="bb-role-dots" style="width:100%;max-width:420px;"></div>
-  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-    <div id="bb-rec-role-icon" style="font-size:3em;"></div>
-    <div id="bb-rec-role-name" style="font-size:1.1em;font-weight:900;letter-spacing:.05em;"></div>
-    <div id="bb-rec-hint" style="font-size:0.68em;color:#7a9abf;text-align:center;max-width:260px;"></div>
-    <div id="bb-rec-status" style="font-size:0.64em;color:#26c47c;min-height:18px;"></div>
-  </div>
-  <div class="bb-pads">
-    <div id="bb-rec-pad-thump" class="bb-pad2" style="background:rgba(255,107,61,.1);border-color:rgba(255,107,61,.3);">
-      <div class="bb-pad2-icon">🥁</div><div class="bb-pad2-role" style="color:#ff6b3d">THUMP</div>
+  <div style="font-size:0.68em;color:#7a9abf;text-align:center;max-width:360px;">Tap a slot to select it · Hold the button to record · Tap a filled slot to replay</div>
+  <div class="bb-pads" style="gap:10px;">
+    <div id="bb-rec-pad-0" class="bb-pad2" style="background:rgba(255,152,0,.06);border-color:rgba(255,152,0,.25);flex-direction:column;gap:4px;">
+      <div style="font-size:1.6em;">1</div>
+      <div id="bb-rec-dur-0" style="font-size:0.55em;color:#7a9abf;">empty</div>
     </div>
-    <div id="bb-rec-pad-snap" class="bb-pad2" style="background:rgba(94,230,197,.08);border-color:rgba(94,230,197,.25);">
-      <div class="bb-pad2-icon">👏</div><div class="bb-pad2-role" style="color:#5ee6c5">SNAP</div>
+    <div id="bb-rec-pad-1" class="bb-pad2" style="background:rgba(255,152,0,.06);border-color:rgba(255,152,0,.25);flex-direction:column;gap:4px;">
+      <div style="font-size:1.6em;">2</div>
+      <div id="bb-rec-dur-1" style="font-size:0.55em;color:#7a9abf;">empty</div>
     </div>
-    <div id="bb-rec-pad-sneak" class="bb-pad2" style="background:rgba(199,146,234,.08);border-color:rgba(199,146,234,.25);">
-      <div class="bb-pad2-icon">🤫</div><div class="bb-pad2-role" style="color:#c792ea">SNEAK</div>
+    <div id="bb-rec-pad-2" class="bb-pad2" style="background:rgba(255,152,0,.06);border-color:rgba(255,152,0,.25);flex-direction:column;gap:4px;">
+      <div style="font-size:1.6em;">3</div>
+      <div id="bb-rec-dur-2" style="font-size:0.55em;color:#7a9abf;">empty</div>
     </div>
   </div>
   <button id="bb-rec-btn" class="bb-pad2" style="width:100%;max-width:420px;aspect-ratio:3;border-radius:14px;background:#1a0a0a;border:2px solid #ff3b3b;font-size:0.9em;font-weight:900;letter-spacing:.06em;color:#ff3b3b;justify-content:center;">
@@ -5376,21 +5382,8 @@ socket.on('bbLobby',()=>{
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
-  <div style="font-size:0.62em;color:#4a6a8a;width:100%;max-width:420px;text-align:center;">8 steps · tap to toggle · loop plays underneath · SNEAK max 2 slots</div>
-  <div style="width:100%;max-width:420px;">
-    <div id="bb-build-row-thump" class="bb-build-row">
-      <div class="bb-build-label"></div>
-      <div class="bb-build-steps"></div>
-    </div>
-    <div id="bb-build-row-snap" class="bb-build-row">
-      <div class="bb-build-label"></div>
-      <div class="bb-build-steps"></div>
-    </div>
-    <div id="bb-build-row-sneak" class="bb-build-row">
-      <div class="bb-build-label"></div>
-      <div class="bb-build-steps"></div>
-    </div>
-  </div>
+  <div id="bb-build-hint" style="font-size:0.62em;color:#4a6a8a;width:100%;max-width:420px;text-align:center;">8 steps · tap to toggle · loop plays underneath</div>
+  <div id="bb-build-rows" style="width:100%;max-width:420px;"></div>
   <button id="bb-build-submit" onclick="bbBuildSubmit()" style="padding:14px 28px;border:2px solid #ff9800;border-radius:12px;background:rgba(255,152,0,.1);color:#ff9800;font-size:0.85em;font-weight:900;cursor:pointer;width:100%;max-width:420px;margin-top:4px;">
     LOCK IN BEAT →
   </button>

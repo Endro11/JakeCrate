@@ -8,19 +8,15 @@ const io = new Server(server, { maxHttpBufferSize: 5e7 }); // 50MB for photo upl
 
 app.use(express.static('public'));
 
-// ─── Bad Pitches audio proxy ──────────────────────────────────────────────────
-// Streams the Archive.org track through our server (bypasses CORS inconsistency).
-// Caches bytes in room.bbSampleBytes after first download.
-app.get('/api/bb-audio/:code', async (req, res) => {
-    const room = rooms[req.params.code];
-    if (!room?.bbSample?.audioUrl) return res.status(404).end();
-    if (room.bbSampleBytes) {
+// ─── Bad Pitches audio proxies ────────────────────────────────────────────────
+async function bbProxyAudio(audioUrl, cacheKey, room, res) {
+    if (room[cacheKey]) {
         res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Content-Length', room.bbSampleBytes.length);
-        return res.send(room.bbSampleBytes);
+        res.setHeader('Content-Length', room[cacheKey].length);
+        return res.send(room[cacheKey]);
     }
     try {
-        const upstream = await fetch(room.bbSample.audioUrl);
+        const upstream = await fetch(audioUrl);
         if (!upstream.ok) return res.status(502).end();
         res.setHeader('Content-Type', 'audio/mpeg');
         const chunks = [];
@@ -29,15 +25,26 @@ app.get('/api/bb-audio/:code', async (req, res) => {
             const { done, value } = await reader.read();
             if (done) break;
             const buf = Buffer.from(value);
-            chunks.push(buf);
-            res.write(buf);
+            chunks.push(buf); res.write(buf);
         }
         res.end();
-        room.bbSampleBytes = Buffer.concat(chunks);
+        room[cacheKey] = Buffer.concat(chunks);
     } catch(e) {
         console.error('bb-audio proxy error:', e.message);
         if (!res.headersSent) res.status(502).end(); else res.end();
     }
+}
+// Current round's sample
+app.get('/api/bb-audio/:code', async (req, res) => {
+    const room = rooms[req.params.code];
+    if (!room?.bbSample?.audioUrl) return res.status(404).end();
+    await bbProxyAudio(room.bbSample.audioUrl, 'bbSampleBytes', room, res);
+});
+// Round-1 sample (used as background in round 3)
+app.get('/api/bb-audio-r1/:code', async (req, res) => {
+    const room = rooms[req.params.code];
+    if (!room?.bbR1Sample?.audioUrl) return res.status(404).end();
+    await bbProxyAudio(room.bbR1Sample.audioUrl, 'bbR1SampleBytes', room, res);
 });
 
 // ─── Room registry ────────────────────────────────────────────────────────────
@@ -1331,23 +1338,23 @@ function bb_parseDuration(len) {
     return parseFloat(s) || 0;
 }
 
-async function bb_fetchSample(drumOnly = false) {
+// Fetch up to `n` valid samples from Archive.org in one parallel batch
+async function bb_fetchBatch(n, drumOnly = false) {
     const api = 'https://archive.org/advancedsearch.php';
     const drumFilter = drumOnly ? ' AND (title:drum OR title:rhythm OR subject:percussion)' : '';
     const q = `collection:georgeblood AND mediatype:audio${drumFilter}`;
     const enc = encodeURIComponent(q);
+    const results = [];
 
-    // Try up to 3 search pages; for each page fetch ALL metadata in parallel
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5 && results.length < n; attempt++) {
         try {
             const srchRes = await fetch(
-                `${api}?q=${enc}&fl[]=identifier,title,creator,date,subject&rows=25&sort[]=random&output=json`,
+                `${api}?q=${enc}&fl[]=identifier,title,creator,date,subject&rows=50&sort[]=random&output=json`,
                 { signal: AbortSignal.timeout(10000) }
             );
             const { response: { docs } } = await srchRes.json();
             if (!docs?.length) continue;
 
-            // Fetch all 25 metadata files in parallel — one round-trip instead of 25 sequential ones
             const candidates = await Promise.all(docs.map(doc =>
                 fetch(`https://archive.org/metadata/${doc.identifier}`, { signal: AbortSignal.timeout(8000) })
                     .then(r => r.json())
@@ -1374,17 +1381,53 @@ async function bb_fetchSample(drumOnly = false) {
                     .catch(() => null)
             ));
 
-            const valid = candidates.filter(Boolean);
-            if (valid.length) {
-                const pick = valid[Math.floor(Math.random() * valid.length)];
-                console.log(`[BB] ${drumOnly?'break':'sample'}: ${pick.identifier} — ${pick.title}`);
-                return pick;
+            for (const v of candidates.filter(Boolean)) {
+                if (results.length >= n) break;
+                if (!results.find(r => r.identifier === v.identifier)) results.push(v);
             }
-        } catch(e) { console.error(`[BB] fetch attempt ${attempt} error:`, e.message); }
+        } catch(e) { console.error(`[BB] fetchBatch attempt ${attempt}:`, e.message); }
     }
+    // Drum search: fall back to general if we came up short
+    if (drumOnly && results.length < n) {
+        const fill = await bb_fetchBatch(n - results.length, false);
+        fill.forEach(s => { if (!results.find(r => r.identifier === s.identifier)) results.push(s); });
+    }
+    return results;
+}
 
-    if (drumOnly) return bb_fetchSample(false); // fall back to general search
-    return null;
+// ── Pre-fetched sample pool — filled on startup and refreshed every 2 hours ──
+const bbSamplePool = []; // jazz/blues vinyl records
+const bbBreakPool  = []; // drum/rhythm tracks
+
+async function bb_refreshPool() {
+    console.log('[BB] refreshing sample pool…');
+    const [samples, breaks] = await Promise.all([
+        bb_fetchBatch(20, false),
+        bb_fetchBatch(10, true),
+    ]);
+    samples.forEach(s => { if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s); });
+    breaks.forEach(s => { if (!bbBreakPool.find(x => x.identifier === s.identifier)) bbBreakPool.push(s); });
+    console.log(`[BB] pool ready: ${bbSamplePool.length} samples, ${bbBreakPool.length} breaks`);
+}
+bb_refreshPool().catch(console.error);
+setInterval(() => bb_refreshPool().catch(console.error), 2 * 60 * 60 * 1000);
+
+// Pick one sample from the pool that this room hasn't used yet; fall back to live fetch
+async function bb_pickSample(room, drumOnly) {
+    const pool = drumOnly ? bbBreakPool : bbSamplePool;
+    const used = room.bbUsedIds;
+    const available = pool.filter(s => !used.has(s.identifier));
+    if (available.length) {
+        const pick = available[Math.floor(Math.random() * available.length)];
+        used.add(pick.identifier);
+        console.log(`[BB] pool pick (${drumOnly?'break':'sample'}): ${pick.identifier}`);
+        return pick;
+    }
+    // Pool empty or exhausted — live fetch
+    console.log('[BB] pool exhausted, live fetch…');
+    const fresh = await bb_fetchBatch(1, drumOnly);
+    if (fresh[0]) used.add(fresh[0].identifier);
+    return fresh[0] || null;
 }
 
 function bb_startGame(room) {
@@ -1392,6 +1435,8 @@ function bb_startGame(room) {
     room.bbPhase     = 'LOBBY';
     room.bbRound     = 0;
     room.bbCumScores = {};
+    room.bbUsedIds   = new Set(); // identifiers served to this room — no repeats
+    room.bbR1Sample  = null;      // round 1 vinyl saved for round 3 background
     Object.keys(room.players).forEach(id => { room.bbCumScores[id] = 0; });
     bb_startRound(room);
 }
@@ -1420,7 +1465,7 @@ function bb_startRound(room) {
         return;
     }
 
-    // Rounds 1 (sample) and 2 (break) — fetch vinyl from Archive.org
+    // Rounds 1 (sample) and 2 (break) — serve from pool, fall back to live fetch
     const drumOnly = roundType === 'break';
     room.bbTimeLeft = BB_CRATE_SECS;
     room.bbTimer = setInterval(() => {
@@ -1428,16 +1473,17 @@ function bb_startRound(room) {
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
         if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endCrate(room); }
     }, 1000);
-    bb_fetchSample(drumOnly).then(sample => {
+    bb_pickSample(room, drumOnly).then(sample => {
         if (!sample || !rooms[room.code]) return;
         room.bbSample = sample;
+        if (roundType === 'sample') room.bbR1Sample = sample; // save for round 3 background
         broadcastRoom(room, 'bbSampleReady', {
             title: sample.title, creator: sample.creator, date: sample.date,
             thumbUrl: sample.thumbUrl,
             audioProxyUrl: `/api/bb-audio/${room.code}`,
             duration: sample.duration,
         });
-    }).catch(e => console.error('[BB] bb_fetchSample rejected:', e.message));
+    }).catch(e => console.error('[BB] bb_pickSample rejected:', e.message));
 }
 
 function bb_endCrate(room) {
@@ -1474,60 +1520,93 @@ function bb_endScrub(room) {
     Object.keys(room.players).forEach(id => {
         if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 9, duration: 4, rate: 1 };
     });
-    room.bbPhase = 'RECORD';
-    room.bbTimeLeft = BB_RECORD_SECS;
-    Object.keys(room.players).forEach(id => {
-        io.to(id).emit('bbRecordPhase', {
-            timeLeft: BB_RECORD_SECS,
-            playerCount: Object.keys(room.players).length,
-            myLoop: room.bbScrubLocks[id],
-            audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
+
+    if (room.bbRoundType === 'voice') {
+        // Round 3: record 3 free-form sounds then deal them
+        room.bbPhase = 'RECORD';
+        room.bbTimeLeft = BB_RECORD_SECS;
+        Object.keys(room.players).forEach(id => {
+            io.to(id).emit('bbRecordPhase', { timeLeft: BB_RECORD_SECS });
+        });
+        room.bbTimer = setInterval(() => {
+            room.bbTimeLeft--;
+            broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+            if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endRecord(room); }
+        }, 1000);
+    } else {
+        // Rounds 1 & 2: no recording, no build — go straight to listening to loops
+        bb_beginListenFromScrub(room);
+    }
+}
+
+function bb_beginListenFromScrub(room) {
+    const ids = Object.keys(room.players);
+    const audioProxyUrl = room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null;
+    const queue = ids.map(id => ({
+        playerId: id, playerName: room.players[id]?.name || '?',
+        beat: {}, hand: [],
+        loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+        roundType: room.bbRoundType,
+    }));
+    room.bbPhase = 'LISTEN';
+    room.bbListenQueue = ids;
+    room.bbListenIdx   = -1;
+    broadcastRoom(room, 'bbListenPhase', { queue, audioProxyUrl });
+    room.bbTimer = setTimeout(() => bb_listenNext(room), 1500);
+}
+
+function bb_beginBuild(room) {
+    room.bbPhase = 'BUILD';
+    room.bbTimeLeft = BB_BUILD_SECS;
+    const ids = Object.keys(room.players);
+    // For round 3, background audio is the round-1 vinyl (R1 sample stored separately)
+    const audioProxyUrl = room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}`
+        : (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null);
+    ids.forEach(id => {
+        io.to(id).emit('bbBuildPhase', {
+            roundType: room.bbRoundType,
+            hand: room.bbHands[id] || [],          // empty for rounds 1&2
+            myLoop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+            audioProxyUrl,
+            timeLeft: BB_BUILD_SECS,
         });
     });
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endRecord(room); }
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endBuild(room); }
     }, 1000);
 }
 
 function bb_endRecord(room) {
     clearInterval(room.bbTimer); room.bbTimer = null;
     const ids = Object.keys(room.players);
-    BB_ROLES_V2.forEach(role => {
-        const pool = ids.map(id => ({
-            id: `${id}_${role}`, ownerId: id,
-            ownerName: room.players[id]?.name || '?', role,
-            dataUrl: (room.bbRecordings[id] || {})[role] || null,
-        })).sort(() => Math.random() - 0.5);
-        ids.forEach((id, i) => {
-            if (!room.bbHands[id]) room.bbHands[id] = {};
-            const others = pool.filter(s => s.ownerId !== id);
-            room.bbHands[id][role] = others.length ? others[i % others.length] : pool[i % pool.length];
-        });
-    });
-    room.bbPhase = 'DEAL';
-    ids.forEach(id => {
-        const hand = BB_ROLES_V2.map(r => room.bbHands[id][r]);
-        io.to(id).emit('bbDealPhase', { hand, fromNames: hand.map(s => s.ownerName) });
-    });
-    room.bbTimer = setTimeout(() => {
-        room.bbPhase = 'BUILD';
-        room.bbTimeLeft = BB_BUILD_SECS;
-        ids.forEach(id => {
-            io.to(id).emit('bbBuildPhase', {
-                hand: BB_ROLES_V2.map(r => room.bbHands[id][r]),
-                myLoop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4 },
-                audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
-                timeLeft: BB_BUILD_SECS,
+
+    // Pool every sound from every player; deal 3 to each player (none from themselves)
+    const allSounds = [];
+    ids.forEach(ownerId => {
+        const sounds = room.bbRecordings[ownerId] || [];
+        sounds.forEach((dataUrl, idx) => {
+            if (dataUrl) allSounds.push({
+                id: `${ownerId}_${idx}`, ownerId,
+                ownerName: room.players[ownerId]?.name || '?',
+                slot: idx, dataUrl,
             });
         });
-        room.bbTimer = setInterval(() => {
-            room.bbTimeLeft--;
-            broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-            if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endBuild(room); }
-        }, 1000);
-    }, 6000);
+    });
+
+    room.bbHands = {};
+    ids.forEach(playerId => {
+        const pool = allSounds.filter(s => s.ownerId !== playerId).sort(() => Math.random() - 0.5);
+        // Take up to 3; if fewer players recorded enough, take what's available
+        room.bbHands[playerId] = pool.slice(0, 3);
+    });
+
+    room.bbPhase = 'DEAL';
+    ids.forEach(id => {
+        io.to(id).emit('bbDealPhase', { hand: room.bbHands[id] });
+    });
+    room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_beginBuild(room); }, 6000);
 }
 
 function bb_endBuild(room) {
@@ -1537,15 +1616,16 @@ function bb_endBuild(room) {
     room.bbPhase = 'LISTEN';
     room.bbListenQueue = ids;
     room.bbListenIdx   = -1;
+    const audioProxyUrl = room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}`
+        : (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null);
     const queue = ids.map(id => ({
         playerId: id, playerName: room.players[id]?.name || '?',
         beat: room.bbBeats[id] || {},
-        hand: BB_ROLES_V2.map(r => room.bbHands[id]?.[r]).filter(Boolean),
+        hand: room.bbHands[id] || [],    // array format for voice round
         loop: room.bbScrubLocks[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+        roundType: room.bbRoundType,
     }));
-    broadcastRoom(room, 'bbListenPhase', {
-        queue, audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
-    });
+    broadcastRoom(room, 'bbListenPhase', { queue, audioProxyUrl });
     room.bbTimer = setTimeout(() => bb_listenNext(room), 1500);
 }
 
@@ -2582,10 +2662,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('bbSubmitRecordings', ({ recordings }) => {
+    socket.on('bbSubmitRecordings', ({ sounds }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'RECORD') return;
-        room.bbRecordings[socket.id] = recordings || {};
+        room.bbRecordings[socket.id] = (sounds || []).slice(0, 3); // array of up to 3 dataUrls
         broadcastRoom(room, 'bbRecordingIn', { playerId: socket.id });
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbRecordings[id])) {
