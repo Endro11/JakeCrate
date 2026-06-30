@@ -532,16 +532,16 @@
 
         /* ── Bad Pitches ── */
         @keyframes bb-pulse { from { box-shadow:0 0 0 0 rgba(255,59,59,.4); } to { box-shadow:0 0 0 16px rgba(255,59,59,0); } }
-        .bb-step-row { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
-        .bb-row-label { width:76px; flex-shrink:0; font-size:0.58em; font-weight:700; color:#4a6a8a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.3; }
-        .bb-steps { display:flex; gap:3px; flex-wrap:nowrap; overflow-x:auto; flex:1; padding-bottom:2px; }
-        .bb-steps::-webkit-scrollbar { height:3px; }
-        .bb-steps::-webkit-scrollbar-thumb { background:#2a3450; border-radius:2px; }
-        .bb-step { width:30px; height:30px; flex-shrink:0; border-radius:6px; border:1.5px solid #2a3450; background:#111827; cursor:pointer; position:relative; transition:transform .08s; }
-        .bb-step:active { transform:scale(.88); }
+        .bb-step-row { display:flex; align-items:flex-start; gap:6px; margin-bottom:10px; }
+        .bb-row-label { width:68px; flex-shrink:0; font-size:0.58em; font-weight:700; color:#4a6a8a; line-height:1.3; }
+        .bb-fill-btn { display:block; margin-top:5px; padding:2px 0; width:100%; border:1px solid #2a3450; border-radius:4px; background:#151d2c; color:#4a6a8a; font-size:0.8em; cursor:pointer; text-align:center; }
+        .bb-fill-btn:active { background:#1e2a40; }
+        .bb-steps { display:grid; grid-template-columns:repeat(8,1fr); gap:3px; flex:1; }
+        .bb-step { border-radius:5px; border:1.5px solid #2a3450; background:#111827; cursor:pointer; aspect-ratio:1; position:relative; transition:transform .08s; min-width:0; }
+        .bb-step:active { transform:scale(.85); }
         .bb-step.on { border-color:transparent; }
         .bb-step.playing { box-shadow:0 0 0 2px #fff,0 0 8px rgba(255,255,255,.35); }
-        .bb-step.bar-mark::after { content:''; position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:3px; height:3px; border-radius:50%; background:#2a3450; }
+        .bb-step.bar2 { margin-top:2px; }
         .bb-role-dots { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
         .bb-role-dot { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:0.58em; font-weight:700; min-width:36px; }
         .bb-dot-circle { width:12px; height:12px; border-radius:50%; border:2px solid #2a3450; }
@@ -4620,6 +4620,35 @@ const BB_ROLE_HINTS = {
 const BB_ROLE_ICONS = { kick:'💥', snare:'🥁', hihat:'🎩', synth:'🎹', bass:'🔊', sfx:'✨' };
 const BB_STEPS = 16;
 
+// Groove presets — realistic beat templates, pre-applied when build phase starts
+const BB_GROOVE_PRESETS = [
+    { name:'Simple',
+      kick:[0,8], snare:[4,12], hihat:[0,4,8,12],
+      synth:[0,8], bass:[0,8], sfx:[] },
+    { name:'Trap',
+      kick:[0,8], snare:[4,12], hihat:[0,2,4,6,8,10,12,14],
+      synth:[0,6,10], bass:[0,8], sfx:[4] },
+    { name:'Bounce',
+      kick:[0,3,8,11], snare:[4,12], hihat:[0,2,4,6,8,10,12,14],
+      synth:[0,4,8,12], bass:[0,3,8], sfx:[4,12] },
+    { name:'Hyper',
+      kick:[0,4,8,12], snare:[4,12], hihat:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+      synth:[0,3,8,11], bass:[0,4,8,12], sfx:[0,8] },
+];
+const BB_FILL_DENSITIES = [[], [0,4,8,12], [0,2,4,6,8,10,12,14], [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]];
+const BB_FILL_ICONS = ['☐','▪▫▫▫','▪▫▪▫','▪▪▪▪'];
+
+function bbApplyGroove(presetIdx) {
+    const preset = BB_GROOVE_PRESETS[presetIdx];
+    if (!preset) return;
+    bbMyHand.forEach(sound => {
+        bbMyBeat[sound.id] = new Set(preset[sound.role] || []);
+    });
+    const container = document.getElementById('bb-build-grid');
+    if (container) bbBuildGrid(container);
+    showToast(`${preset.name} groove loaded`);
+}
+
 // ─ Audio ─
 let bbAudioCtx = null;
 let bbSoundBuffers = {};   // soundId → AudioBuffer
@@ -4892,19 +4921,46 @@ function bbBuildGrid(container) {
         const color = BB_ROLE_COLORS[sound.role] || '#aaa';
         const isOwn = sound.ownerId === bbMyId;
         const steps = bbMyBeat[sound.id] instanceof Set ? bbMyBeat[sound.id] : new Set();
+
         const row = document.createElement('div');
         row.className = 'bb-step-row';
+
+        // Label + density fill button
         const lbl = document.createElement('div');
         lbl.className = 'bb-row-label';
         lbl.style.color = color;
         lbl.innerHTML = `<div>${BB_ROLE_ICONS[sound.role] || ''} ${sound.role.toUpperCase()}</div><div style="opacity:.5;font-size:.85em;">${isOwn ? 'you' : sound.ownerName}</div>`;
+
+        const fillBtn = document.createElement('button');
+        fillBtn.className = 'bb-fill-btn';
+        fillBtn.title = 'Cycle fill density';
+        const cur = bbMyBeat[sound.id] ? bbMyBeat[sound.id].size : 0;
+        const curDensityIdx = BB_FILL_DENSITIES.findIndex(d => d.length > cur);
+        fillBtn.textContent = BB_FILL_ICONS[curDensityIdx === -1 ? 0 : curDensityIdx];
+        fillBtn.addEventListener('click', () => {
+            const curSize = bbMyBeat[sound.id] ? bbMyBeat[sound.id].size : 0;
+            let nextIdx = BB_FILL_DENSITIES.findIndex(d => d.length > curSize);
+            if (nextIdx === -1) nextIdx = 0;
+            const nextPattern = BB_FILL_DENSITIES[nextIdx];
+            bbMyBeat[sound.id] = new Set(nextPattern);
+            fillBtn.textContent = BB_FILL_ICONS[nextIdx === BB_FILL_DENSITIES.length - 1 ? 0 : nextIdx + 1] || BB_FILL_ICONS[0];
+            container.querySelectorAll(`.bb-step[data-sid="${sound.id}"]`).forEach(s => {
+                const si = parseInt(s.dataset.step);
+                const on = nextPattern.includes(si);
+                s.classList.toggle('on', on);
+                s.style.background = on ? color : '';
+            });
+        });
+        lbl.appendChild(fillBtn);
         row.appendChild(lbl);
+
+        // 16 steps as 2×8 grid (CSS grid handles the wrapping)
         const wrap = document.createElement('div');
         wrap.className = 'bb-steps';
         for (let i = 0; i < BB_STEPS; i++) {
             const s = document.createElement('div');
             const isOn = steps.has(i);
-            s.className = 'bb-step' + (i % 8 === 0 ? ' bar-mark' : '') + (isOn ? ' on' : '');
+            s.className = 'bb-step' + (i >= 8 ? ' bar2' : '') + (isOn ? ' on' : '');
             s.dataset.step = i; s.dataset.sid = sound.id;
             if (isOn) s.style.background = color;
             s.addEventListener('click', () => {
@@ -5018,6 +5074,10 @@ socket.on('bbRecordingIn', ({ playerId }) => {
 socket.on('bbBuildPhase', async ({ hand, timeLeft, tempo }) => {
     bbTempo = tempo || 88;
     bbMyHand = hand; bbMyBeat = {};
+    // Pre-fill with Simple groove so there's a playable beat from the start
+    hand.forEach(sound => {
+        bbMyBeat[sound.id] = new Set(BB_GROOVE_PRESETS[0][sound.role] || []);
+    });
     bbEnsureAudio(); bbLoadFallbacks();
     await Promise.all(hand.map(s => bbDecodeSound(s.id, s.dataUrl, s.role)));
     const container = document.getElementById('bb-build-grid');
@@ -5137,8 +5197,15 @@ socket.on('bbLobby', () => { bbCleanup(); show('room-lobby'); renderRoomLobby();
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
-  <div style="font-size:0.65em;color:#4a6a8a;padding:6px 16px 2px;flex-shrink:0;">Tap steps to toggle — tap a sound label to preview it</div>
-  <div id="bb-build-grid" style="width:100%;padding:6px 12px;flex:1;"></div>
+  <div style="display:flex;align-items:center;gap:6px;padding:8px 12px 4px;flex-shrink:0;overflow-x:auto;">
+    <span style="font-size:0.6em;color:#4a6a8a;flex-shrink:0;">GROOVE:</span>
+    <button onclick="bbApplyGroove(0)" style="flex-shrink:0;padding:5px 10px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#aaa;font-size:0.7em;cursor:pointer;">Simple</button>
+    <button onclick="bbApplyGroove(1)" style="flex-shrink:0;padding:5px 10px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#aaa;font-size:0.7em;cursor:pointer;">Trap</button>
+    <button onclick="bbApplyGroove(2)" style="flex-shrink:0;padding:5px 10px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#aaa;font-size:0.7em;cursor:pointer;">Bounce</button>
+    <button onclick="bbApplyGroove(3)" style="flex-shrink:0;padding:5px 10px;background:#1a2030;border:1px solid #2a3450;border-radius:7px;color:#aaa;font-size:0.7em;cursor:pointer;">Hyper</button>
+  </div>
+  <div style="font-size:0.6em;color:#4a6a8a;padding:0 12px 4px;flex-shrink:0;">Tap steps • Row button cycles density • Top row = bar 1, bottom = bar 2</div>
+  <div id="bb-build-grid" style="width:100%;padding:4px 12px;flex:1;"></div>
   <div style="display:flex;gap:10px;padding:10px 16px 20px;flex-shrink:0;">
     <button id="bb-build-preview" style="padding:10px 16px;background:#1a2030;border:1px solid #2a3450;border-radius:9px;color:#aaa;font-size:0.8em;cursor:pointer;flex:1;">▶ PREVIEW</button>
     <button id="bb-build-submit" style="padding:10px 20px;background:#0d47a1;border:none;border-radius:9px;color:#fff;font-weight:bold;font-size:0.85em;cursor:pointer;flex:2;">LOCK IN BEAT ✓</button>
