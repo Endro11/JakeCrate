@@ -114,12 +114,15 @@ function makeRoom(code) {
         scPyroId: null,
         scTimer: null,
         scTimeLeft: 0,
-        // Beat Battle state
+        // Bad Pitches state
         bbPhase: 'LOBBY',
-        bbRoles: {},
-        bbSounds: {},
-        bbPattern: {},
-        bbVotes: {},
+        bbRecordings: {},
+        bbPool: [],
+        bbHands: {},
+        bbBeats: {},
+        bbMatchups: [],
+        bbCurrentMatchup: -1,
+        bbScores: {},
         bbTimer: null,
         bbTimeLeft: 0,
     };
@@ -1265,106 +1268,117 @@ function rr_returnToLobby(room) {
     broadcastGameState(room);
 }
 
-// ─── Beat Battle ──────────────────────────────────────────────────────────────
+// ─── Bad Pitches ───────────────────────────────────────────────────────────────
 
 const BB_ROLES = ['kick','snare','hihat','synth','bass','sfx'];
-const BB_ROLE_LABELS = { kick:'💥 KICK', snare:'🥁 SNARE', hihat:'🎩 HI-HAT', synth:'🎹 MELODY', bass:'🔊 BASS', sfx:'✨ EFFECT' };
-const BB_DEFAULT_PATTERNS = {
-    kick:  [0, 4, 8, 12],
-    snare: [2, 6, 10, 14],
-    hihat: [0, 2, 4, 6, 8, 10, 12, 14],
-    synth: [0, 3, 8, 11],
-    bass:  [0, 8],
-    sfx:   [4, 12],
-};
 const BB_STEPS = 16;
 const BB_TEMPO = 88;
-const BB_RECORD_SECS = 45;
-const BB_REMIX_SECS = 45;
+const BB_RECORD_SECS = 60;
+const BB_BUILD_SECS = 60;
+
+function bb_shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
 
 function bb_startGame(room) {
     room.gamePhase = 'PLAYING';
     room.bbPhase = 'RECORD';
-    room.bbSounds = {};
-    room.bbVotes = {};
+    room.bbRecordings = {}; room.bbPool = []; room.bbHands = {};
+    room.bbBeats = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1;
+    room.bbScores = {};
     const ids = Object.keys(room.players);
-    room.bbRoles = {};
-    ids.forEach((id, i) => { room.bbRoles[id] = BB_ROLES[i % BB_ROLES.length]; });
-    room.bbPattern = {};
-    ids.forEach(id => { room.bbPattern[id] = [...BB_DEFAULT_PATTERNS[room.bbRoles[id]]]; });
-    const assignments = {};
-    ids.forEach(id => { assignments[id] = { role: room.bbRoles[id], name: room.players[id].name }; });
+    ids.forEach(id => { room.bbScores[id] = 0; });
     room.bbTimeLeft = BB_RECORD_SECS;
-    broadcastRoom(room, 'bbRecordPhase', { assignments, timeLeft: BB_RECORD_SECS });
+    broadcastRoom(room, 'bbRecordPhase', { timeLeft: BB_RECORD_SECS, playerCount: ids.length });
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_startListen(room); }
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_endRecord(room); }
     }, 1000);
 }
 
-function bb_serializePattern(room) {
-    const out = {};
-    Object.entries(room.bbPattern).forEach(([id, steps]) => { out[id] = [...steps]; });
-    return out;
-}
-
-function bb_startListen(room) {
+function bb_endRecord(room) {
     clearInterval(room.bbTimer);
-    room.bbPhase = 'LISTEN';
-    const loopsToPlay = 4;
-    const secsPerLoop = BB_STEPS * (60 / BB_TEMPO / 2);
-    const listenDuration = Math.ceil(loopsToPlay * secsPerLoop) + 2;
-    broadcastRoom(room, 'bbListenPhase', {
-        pattern: bb_serializePattern(room),
-        sounds: room.bbSounds,
-        loopsToPlay,
-        tempo: BB_TEMPO,
+    room.bbPhase = 'BUILD';
+    const ids = Object.keys(room.players);
+    room.bbPool = [];
+    ids.forEach(id => {
+        const recs = room.bbRecordings[id] || {};
+        BB_ROLES.forEach(role => {
+            room.bbPool.push({ id: `${id}_${role}`, ownerId: id, ownerName: room.players[id]?.name || '?', role, dataUrl: recs[role] || null });
+        });
     });
-    room.bbTimer = setTimeout(() => bb_startRemix(room), listenDuration * 1000);
-}
-
-function bb_startRemix(room) {
-    clearTimeout(room.bbTimer);
-    room.bbPhase = 'REMIX';
-    room.bbTimeLeft = BB_REMIX_SECS;
-    broadcastRoom(room, 'bbRemixPhase', {
-        pattern: bb_serializePattern(room),
-        sounds: room.bbSounds,
-        timeLeft: BB_REMIX_SECS,
-        tempo: BB_TEMPO,
+    room.bbHands = {};
+    ids.forEach(id => {
+        const hand = [];
+        BB_ROLES.forEach(role => {
+            const opts = bb_shuffle(room.bbPool.filter(s => s.role === role));
+            if (opts.length) hand.push(opts[0]);
+        });
+        const dealtIds = new Set(hand.map(s => s.id));
+        const extras = bb_shuffle(room.bbPool.filter(s => !dealtIds.has(s.id)));
+        for (let i = 0; i < 2 && i < extras.length; i++) hand.push(extras[i]);
+        room.bbHands[id] = hand;
+    });
+    room.bbTimeLeft = BB_BUILD_SECS;
+    ids.forEach(id => {
+        io.to(id).emit('bbBuildPhase', { hand: room.bbHands[id], timeLeft: BB_BUILD_SECS, tempo: BB_TEMPO });
     });
     room.bbTimer = setInterval(() => {
         room.bbTimeLeft--;
         broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
-        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_startVote(room); }
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); bb_endBuild(room); }
     }, 1000);
 }
 
-function bb_startVote(room) {
+function bb_endBuild(room) {
     clearInterval(room.bbTimer);
-    room.bbPhase = 'VOTE';
-    broadcastRoom(room, 'bbVotePhase', {
-        players: Object.entries(room.players).map(([id, p]) => ({
-            id, name: p.name,
-            role: room.bbRoles[id],
-            roleLabel: BB_ROLE_LABELS[room.bbRoles[id]] || room.bbRoles[id],
-        })),
+    room.bbPhase = 'BATTLE';
+    const ids = Object.keys(room.players);
+    room.bbMatchups = [];
+    for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++)
+            room.bbMatchups.push({ p1Id: ids[i], p2Id: ids[j], votes: {}, winner: null });
+    room.bbCurrentMatchup = -1;
+    bb_nextMatchup(room);
+}
+
+function bb_nextMatchup(room) {
+    room.bbCurrentMatchup++;
+    if (room.bbCurrentMatchup >= room.bbMatchups.length) { bb_gameOver(room); return; }
+    const m = room.bbMatchups[room.bbCurrentMatchup];
+    broadcastRoom(room, 'bbMatchupStart', {
+        matchupNum: room.bbCurrentMatchup + 1,
+        totalMatchups: room.bbMatchups.length,
+        p1Id: m.p1Id, p1Name: room.players[m.p1Id]?.name || '?',
+        p2Id: m.p2Id, p2Name: room.players[m.p2Id]?.name || '?',
+        p1Beat: room.bbBeats[m.p1Id] || {},
+        p2Beat: room.bbBeats[m.p2Id] || {},
+        p1Hand: room.bbHands[m.p1Id] || [],
+        p2Hand: room.bbHands[m.p2Id] || [],
     });
 }
 
-function bb_endVote(room) {
+function bb_endMatchupVote(room) {
+    const m = room.bbMatchups[room.bbCurrentMatchup];
+    if (!m) return;
+    let p1v = 0, p2v = 0;
+    Object.values(m.votes).forEach(v => { if (v === 'p1') p1v++; else p2v++; });
+    m.winner = p1v >= p2v ? 'p1' : 'p2';
+    const winnerId = m.winner === 'p1' ? m.p1Id : m.p2Id;
+    room.bbScores[winnerId] = (room.bbScores[winnerId] || 0) + 1;
+    broadcastRoom(room, 'bbMatchupResult', {
+        winner: m.winner, winnerId, winnerName: room.players[winnerId]?.name || '?',
+        p1Votes: p1v, p2Votes: p2v,
+    });
+    setTimeout(() => bb_nextMatchup(room), 3000);
+}
+
+function bb_gameOver(room) {
     room.bbPhase = 'RESULT';
     room.gamePhase = 'LOBBY';
-    const tally = {};
-    Object.values(room.bbVotes).forEach(tid => { tally[tid] = (tally[tid] || 0) + 1; });
     const scores = Object.keys(room.players).map(id => ({
-        id, name: room.players[id].name,
-        role: room.bbRoles[id],
-        roleLabel: BB_ROLE_LABELS[room.bbRoles[id]] || room.bbRoles[id],
-        votes: tally[id] || 0,
-    })).sort((a, b) => b.votes - a.votes);
-    broadcastRoom(room, 'bbResult', { scores });
+        id, name: room.players[id]?.name || '?', wins: room.bbScores[id] || 0,
+    })).sort((a, b) => b.wins - a.wins);
+    broadcastRoom(room, 'bbGameOver', { scores });
     broadcastGameState(room);
 }
 
@@ -2279,7 +2293,7 @@ io.on('connection', (socket) => {
         rr_returnToLobby(room);
     });
 
-    // ── Beat Battle events ────────────────────────────────────────────────────
+    // ── Bad Pitches events ────────────────────────────────────────────────────
 
     socket.on('bbStartGame', () => {
         const room = socketRoom(socket);
@@ -2288,46 +2302,39 @@ io.on('connection', (socket) => {
         bb_startGame(room);
     });
 
-    socket.on('bbSubmitSound', ({ dataUrl }) => {
+    socket.on('bbSubmitRecordings', ({ recordings }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'RECORD') return;
-        room.bbSounds[socket.id] = {
-            dataUrl,
-            name: room.players[socket.id]?.name || '?',
-            role: room.bbRoles[socket.id],
-            roleLabel: BB_ROLE_LABELS[room.bbRoles[socket.id]] || room.bbRoles[socket.id],
-        };
-        broadcastRoom(room, 'bbSoundIn', {
-            playerId: socket.id,
-            dataUrl,
-            role: room.bbRoles[socket.id],
-        });
-        if (Object.keys(room.bbSounds).length >= Object.keys(room.players).length) {
+        room.bbRecordings[socket.id] = recordings || {};
+        broadcastRoom(room, 'bbRecordingIn', { playerId: socket.id });
+        const ids = Object.keys(room.players);
+        if (ids.every(id => room.bbRecordings[id])) {
             clearInterval(room.bbTimer);
-            setTimeout(() => bb_startListen(room), 800);
+            setTimeout(() => bb_endRecord(room), 800);
         }
     });
 
-    socket.on('bbToggleStep', ({ stepIdx }) => {
+    socket.on('bbSubmitBeat', ({ beat }) => {
         const room = socketRoom(socket);
-        if (!room || room.bbPhase !== 'REMIX') return;
-        if (!room.bbPattern[socket.id]) room.bbPattern[socket.id] = [];
-        const pat = room.bbPattern[socket.id];
-        const idx = pat.indexOf(stepIdx);
-        const on = idx === -1;
-        if (on) pat.push(stepIdx); else pat.splice(idx, 1);
-        broadcastRoom(room, 'bbStepUpdate', { playerId: socket.id, stepIdx, on });
+        if (!room || room.bbPhase !== 'BUILD') return;
+        room.bbBeats[socket.id] = beat || {};
+        const ids = Object.keys(room.players);
+        if (ids.every(id => room.bbBeats[id])) {
+            clearInterval(room.bbTimer);
+            setTimeout(() => bb_endBuild(room), 800);
+        }
     });
 
-    socket.on('bbVote', ({ targetId }) => {
+    socket.on('bbVote', ({ vote }) => {
         const room = socketRoom(socket);
-        if (!room || room.bbPhase !== 'VOTE' || socket.id === targetId) return;
-        if (room.bbVotes[socket.id]) return; // already voted
-        room.bbVotes[socket.id] = targetId;
-        const voteCount = Object.keys(room.bbVotes).length;
+        if (!room || room.bbPhase !== 'BATTLE') return;
+        const m = room.bbMatchups[room.bbCurrentMatchup];
+        if (!m || m.votes[socket.id] || (vote !== 'p1' && vote !== 'p2')) return;
+        m.votes[socket.id] = vote;
+        const voteCount = Object.keys(m.votes).length;
         const playerCount = Object.keys(room.players).length;
-        broadcastRoom(room, 'bbVoteCast', { voterCount: voteCount, total: playerCount });
-        if (voteCount >= playerCount - 1) bb_endVote(room);
+        broadcastRoom(room, 'bbVoteCast', { voteCount, total: playerCount });
+        if (voteCount >= playerCount) bb_endMatchupVote(room);
     });
 
     socket.on('bbReturnToLobby', () => {
@@ -2335,7 +2342,8 @@ io.on('connection', (socket) => {
         if (!room || !isHost(room, socket)) return;
         clearInterval(room.bbTimer); clearTimeout(room.bbTimer);
         room.bbPhase = 'LOBBY'; room.gamePhase = 'LOBBY';
-        room.bbSounds = {}; room.bbPattern = {}; room.bbVotes = {};
+        room.bbRecordings = {}; room.bbPool = []; room.bbHands = {};
+        room.bbBeats = {}; room.bbMatchups = []; room.bbCurrentMatchup = -1; room.bbScores = {};
         broadcastRoom(room, 'bbLobby', {});
         broadcastGameState(room);
     });
