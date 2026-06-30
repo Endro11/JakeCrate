@@ -1457,7 +1457,7 @@ function bb_startRound(room) {
     room.bbListenQueue = [];
     room.bbListenIdx   = -1;
     Object.keys(room.players).forEach(id => { room.bbRoundScores[id] = 0; });
-    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, roundType, loading: roundType !== 'voice' });
+    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, roundType, loading: roundType !== 'voice', tutorial: roundType === 'voice' });
 
     if (roundType === 'voice') {
         // No vinyl — short crate screen then jump straight to RECORD
@@ -1559,9 +1559,10 @@ function bb_beginBuild(room) {
     room.bbPhase = 'BUILD';
     room.bbTimeLeft = BB_BUILD_SECS;
     const ids = Object.keys(room.players);
-    // For round 3, background audio is the round-1 vinyl (R1 sample stored separately)
-    const audioProxyUrl = room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}`
-        : (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null);
+    // Voice round always uses round-1 vinyl as background; other rounds use current sample
+    const audioProxyUrl = room.bbRoundType === 'voice'
+        ? (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null)
+        : (room.bbSample?.audioUrl   ? `/api/bb-audio/${room.code}`    : null);
     ids.forEach(id => {
         io.to(id).emit('bbBuildPhase', {
             roundType: room.bbRoundType,
@@ -1632,7 +1633,13 @@ function bb_endBuild(room) {
 function bb_listenNext(room) {
     room.bbListenIdx++;
     if (room.bbListenIdx >= room.bbListenQueue.length) {
-        room.bbTimer = setTimeout(() => bb_openVote(room), 1500);
+        if (room.bbRound < BB_TOTAL_ROUNDS) {
+            // Rounds 1 & 2 — no vote yet, straight to next round
+            room.bbTimer = setTimeout(() => bb_startRound(room), 2000);
+        } else {
+            // Final round — vote
+            room.bbTimer = setTimeout(() => bb_openVote(room), 1500);
+        }
         return;
     }
     broadcastRoom(room, 'bbListenBeat', {

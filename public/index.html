@@ -4655,6 +4655,9 @@ const BB_ROLE_HINTS_V2  = {
 let bbAudioCtx     = null;
 let bbMasterGain   = null;
 let bbMasterComp   = null;
+let bbMasterShelf  = null;
+let bbZoomStart    = 0;
+let bbZoomEnd      = 0;
 let bbSampleBuffer = null;
 let bbLoopSrc      = null;
 let bbCrackleNode  = null;
@@ -4691,12 +4694,14 @@ let bbPlaybackRate   = 1.0;  // pitch/speed control
 function bbEnsureAudio() {
     if (bbAudioCtx) return bbAudioCtx;
     bbAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-    bbMasterGain = bbAudioCtx.createGain(); bbMasterGain.gain.value = 0.85;
+    bbMasterGain = bbAudioCtx.createGain(); bbMasterGain.gain.value = 0.8;
+    bbMasterShelf = bbAudioCtx.createBiquadFilter();
+    bbMasterShelf.type = 'highshelf'; bbMasterShelf.frequency.value = 6000; bbMasterShelf.gain.value = -8;
     bbMasterComp = bbAudioCtx.createDynamicsCompressor();
-    bbMasterComp.threshold.value = -18; bbMasterComp.knee.value = 6;
-    bbMasterComp.ratio.value = 3.5; bbMasterComp.attack.value = 0.003;
+    bbMasterComp.threshold.value = -22; bbMasterComp.knee.value = 8;
+    bbMasterComp.ratio.value = 4; bbMasterComp.attack.value = 0.003;
     bbMasterComp.release.value = 0.25;
-    bbMasterGain.connect(bbMasterComp); bbMasterComp.connect(bbAudioCtx.destination);
+    bbMasterGain.connect(bbMasterShelf); bbMasterShelf.connect(bbMasterComp); bbMasterComp.connect(bbAudioCtx.destination);
     return bbAudioCtx;
 }
 
@@ -4725,7 +4730,7 @@ function bbMakeCrackle() {
 
 function bbStartCrackle() {
     if (!bbAudioCtx || bbCrackleNode) return;
-    const gain = bbAudioCtx.createGain(); gain.gain.value = 0.28; gain.connect(bbMasterGain);
+    const gain = bbAudioCtx.createGain(); gain.gain.value = 0.12; gain.connect(bbMasterGain);
     bbCrackleNode = bbAudioCtx.createBufferSource();
     bbCrackleNode.buffer = bbMakeCrackle(); bbCrackleNode.loop = true;
     bbCrackleNode.connect(gain); bbCrackleNode.start();
@@ -4764,6 +4769,7 @@ function bbSetLoopDuration(d) {
     bbLoopEnd = Math.min(bbLoopStart + d, bbSampleDuration || 180);
     bbLoopStart = Math.max(0, bbLoopEnd - d);
     bbSetLoop(bbLoopStart, bbLoopEnd);
+    bbAutoZoom();
     bbUpdateScrubOverlay();
     bbScrubRestart();
     [4,6,8].forEach(n=>{
@@ -4773,6 +4779,28 @@ function bbSetLoopDuration(d) {
         b.style.borderColor = n===d ? '#ff9800' : '#2a3450';
         b.style.color       = n===d ? '#ff9800' : '#9fb0cc';
     });
+}
+
+function bbAutoZoom() {
+    const dur = bbSampleDuration || 180;
+    const win = 30; // seconds visible in zoomed view
+    let zs = Math.max(0, bbLoopStart - 12);
+    let ze = zs + win;
+    if (ze > dur) { ze = dur; zs = Math.max(0, ze - win); }
+    bbZoomStart = zs; bbZoomEnd = ze;
+    bbDrawWaveform();
+}
+function bbZoomScroll(dir) { // dir: -1 (left) or +1 (right)
+    const dur = bbSampleDuration || 180;
+    const win = bbZoomEnd - bbZoomStart;
+    const shift = win * 0.5;
+    bbZoomStart = Math.max(0, Math.min(bbZoomStart + dir * shift, dur - win));
+    bbZoomEnd = bbZoomStart + win;
+    bbDrawWaveform(); bbUpdateScrubOverlay();
+}
+function bbZoomReset() {
+    bbZoomStart = 0; bbZoomEnd = bbSampleDuration || 180;
+    bbDrawWaveform(); bbUpdateScrubOverlay();
 }
 
 function bbSetPlaybackRate(r) {
@@ -4802,39 +4830,50 @@ function bbStopLoop() {
     if (bbLoopSrc) { try{bbLoopSrc.stop();}catch(e){} bbLoopSrc=null; } bbStopCrackle();
 }
 
-// ── stream audio (for crate/scrub before decode finishes) ──
+// ── stream audio ──
+// Preview: plays forward from start, no looping, auto-stops after 10s
+function bbStreamPreview(proxyUrl) {
+    bbStreamStop();
+    if (!proxyUrl) return;
+    bbAudioEl = new Audio(proxyUrl);
+    bbAudioEl.volume = 0.55;
+    bbAudioEl.addEventListener('canplay', ()=>{ bbAudioEl.play().catch(()=>{}); }, {once:true});
+    bbAudioEl.load();
+    setTimeout(()=>{ if(bbAudioEl) bbStreamStop(); }, 10000);
+}
+// Looping stream: used as fallback in SCRUB when decode hasn't finished
 function bbStreamStart(proxyUrl) {
     bbStreamStop();
     if (!proxyUrl) return;
     bbAudioEl = new Audio(proxyUrl);
     bbAudioEl.volume = 0.65;
     bbAudioEl.playbackRate = bbPlaybackRate;
-    // Seek to loop start once enough is buffered, then loop the region
     bbAudioEl.addEventListener('canplay', ()=>{
         try { bbAudioEl.currentTime = bbLoopStart; } catch(e){}
         bbAudioEl.play().catch(()=>{});
     }, {once:true});
     bbAudioEl.addEventListener('timeupdate', ()=>{
         if (!bbAudioEl) return;
-        // Loop the selected region
         if (bbAudioEl.currentTime >= bbLoopEnd - 0.08) {
             try { bbAudioEl.currentTime = bbLoopStart; } catch(e){}
         }
-        // Drive the waveform playhead
+        // Playhead in zoomed waveform
         if (!bbSampleDuration) return;
         const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap) return;
         let head=wrap.querySelector('.bb-scrub-head');
         if(!head){head=document.createElement('div');head.className='bb-scrub-head';wrap.appendChild(head);}
-        head.style.left=((bbAudioEl.currentTime/bbSampleDuration)*wrap.offsetWidth)+'px';
+        const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration;
+        const frac=(bbAudioEl.currentTime-zs)/(ze-zs);
+        head.style.left=(Math.max(0,Math.min(1,frac))*wrap.offsetWidth)+'px';
     });
     bbAudioEl.load();
 }
 function bbStreamStop() {
     if (bbAudioEl) { try{bbAudioEl.pause();}catch(e){} bbAudioEl.src=''; bbAudioEl=null; }
 }
-// Restart playback at current loop position (called when loop region changes)
+// Jump to new loop position — stop+restart BufferSource for instant repositioning
 function bbScrubRestart() {
-    if (bbLoopSrc) { bbLoopSrc.loopStart=bbLoopStart; bbLoopSrc.loopEnd=bbLoopEnd; return; }
+    if (bbSampleBuffer) { bbStopLoop(); bbStartLoop(); return; }
     if (bbAudioEl) { try { bbAudioEl.currentTime = bbLoopStart; } catch(e){} }
 }
 
@@ -4870,28 +4909,34 @@ function bbDrawWaveform() {
     const canvas = document.getElementById('bb-waveform-canvas'); if (!canvas||!bbSampleBuffer) return;
     const ldr = document.getElementById('bb-waveform-loading'); if(ldr) ldr.style.display='none';
     canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight||110;
-    const W=canvas.width,H=canvas.height, ch=bbSampleBuffer.getChannelData(0);
-    const step=Math.floor(ch.length/W), ctx=canvas.getContext('2d');
-    ctx.clearRect(0,0,W,H); ctx.strokeStyle='#2a4a7a'; ctx.lineWidth=1; ctx.beginPath();
+    const W=canvas.width, H=canvas.height, ch=bbSampleBuffer.getChannelData(0);
+    const dur=bbSampleBuffer.duration;
+    const zs=bbZoomStart||0, ze=bbZoomEnd||dur;
+    const iStart=Math.floor((zs/dur)*ch.length);
+    const iEnd  =Math.floor((ze/dur)*ch.length);
+    const step  =Math.max(1,Math.floor((iEnd-iStart)/W));
+    const ctx2=canvas.getContext('2d');
+    ctx2.clearRect(0,0,W,H); ctx2.strokeStyle='#2a4a7a'; ctx2.lineWidth=1; ctx2.beginPath();
     for (let x=0;x<W;x++) {
-        let mn=0,mx=0; const base=x*step;
+        let mn=0,mx=0; const base=iStart+x*step;
         for (let j=0;j<step;j++){const v=ch[base+j]||0;if(v<mn)mn=v;if(v>mx)mx=v;}
-        ctx.moveTo(x,H/2+mn*(H/2-4)); ctx.lineTo(x,H/2+mx*(H/2-4));
+        ctx2.moveTo(x,H/2+mn*(H/2-4)); ctx2.lineTo(x,H/2+mx*(H/2-4));
     }
-    ctx.stroke(); bbUpdateScrubOverlay();
+    ctx2.stroke(); bbUpdateScrubOverlay();
 }
 function bbUpdateScrubOverlay() {
     const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap||!bbSampleDuration) return;
     const W=wrap.offsetWidth;
-    const toX=t=>(t/bbSampleDuration)*W;
+    const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration, zd=ze-zs;
+    const toX=t=>((t-zs)/zd)*W;
     let region=wrap.querySelector('.bb-scrub-region'),head=wrap.querySelector('.bb-scrub-head');
     if(!region){region=document.createElement('div');region.className='bb-scrub-region';wrap.appendChild(region);}
     if(!head){head=document.createElement('div');head.className='bb-scrub-head';wrap.appendChild(head);}
-    region.style.left=toX(bbLoopStart)+'px';
-    region.style.width=(toX(bbLoopEnd)-toX(bbLoopStart))+'px';
-    head.style.left=toX(bbLoopStart)+'px';
+    const lx=Math.max(0,toX(bbLoopStart)), rx=Math.min(W,toX(bbLoopEnd));
+    region.style.left=lx+'px'; region.style.width=Math.max(2,rx-lx)+'px';
+    head.style.left=lx+'px';
     const info=document.getElementById('bb-loop-info');
-    if(info) info.textContent=`${bbLoopDuration}s loop · starts at ${bbLoopStart.toFixed(1)}s`;
+    if(info) info.textContent=`${bbLoopDuration}s loop · ${bbLoopStart.toFixed(1)}s–${bbLoopEnd.toFixed(1)}s · viewing ${zs.toFixed(0)}s–${ze.toFixed(0)}s`;
     const btn=document.getElementById('bb-lock-btn');
     if(btn) btn.disabled=false;
 }
@@ -4911,17 +4956,36 @@ async function bbLoadSample(proxyUrl) {
 // ── scrub ──
 function bbWireScrub() {
     const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap||wrap._bbWired) return; wrap._bbWired=true;
-    function xToTime(clientX){const r=wrap.getBoundingClientRect();return Math.max(0,Math.min(1,(clientX-r.left)/r.width))*bbSampleDuration;}
-    function setStart(t) {
-        bbLoopStart=Math.max(0,Math.min(t,bbSampleDuration-bbLoopDuration));
+    function xToTime(clientX) {
+        const r=wrap.getBoundingClientRect();
+        const frac=Math.max(0,Math.min(1,(clientX-r.left)/r.width));
+        const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
+        return zs + frac*(ze-zs);
+    }
+    function setStartVisual(t) {
+        // Update loop region + overlay instantly while dragging — no audio restart
+        bbLoopStart=Math.max(0,Math.min(t,(bbSampleDuration||180)-bbLoopDuration));
         bbLoopEnd=bbLoopStart+bbLoopDuration;
         bbSetLoop(bbLoopStart,bbLoopEnd);
         bbUpdateScrubOverlay();
-        bbScrubRestart();
     }
-    function onDown(e){e.preventDefault(); bbScrubDragging=true; setStart(xToTime(e.touches?e.touches[0].clientX:e.clientX));}
-    function onMove(e){if(!bbScrubDragging) return; e.preventDefault(); setStart(xToTime(e.touches?e.touches[0].clientX:e.clientX));}
-    function onUp(){bbScrubDragging=false;}
+    function commitPosition() {
+        // Jump audio to new position on pointer release
+        if (bbSampleBuffer) { bbStopLoop(); bbStartLoop(); }
+    }
+    function onDown(e){
+        e.preventDefault(); bbScrubDragging=true;
+        setStartVisual(xToTime(e.touches?e.touches[0].clientX:e.clientX));
+        commitPosition(); // preview start position immediately on tap
+    }
+    function onMove(e){
+        if(!bbScrubDragging) return; e.preventDefault();
+        setStartVisual(xToTime(e.touches?e.touches[0].clientX:e.clientX));
+    }
+    function onUp(){
+        if(!bbScrubDragging) return;
+        bbScrubDragging=false; commitPosition();
+    }
     wrap.addEventListener('mousedown',onDown); wrap.addEventListener('touchstart',onDown,{passive:false});
     document.addEventListener('mousemove',onMove); document.addEventListener('touchmove',onMove,{passive:false});
     document.addEventListener('mouseup',onUp); document.addEventListener('touchend',onUp);
@@ -5110,28 +5174,43 @@ function bbShowScreen(id) {
 }
 
 // ── socket events ──
-socket.on('bbCratePhase',({round,totalRounds,loading,roundType})=>{
+socket.on('bbCratePhase',({round,totalRounds,loading,roundType,tutorial})=>{
     bbMyId=socket.id; bbSampleBuffer=null; bbSoundBuffers={};
     bbMySounds=[null,null,null]; bbCurrentSlot=0; bbMyHand=[]; bbMyBeat={};
     bbStreamStop(); bbStopLoop(); bbStopBeat();
     bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0;
+    bbZoomStart=0; bbZoomEnd=0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
-    const wfl=document.getElementById('bb-waveform-loading'); if(wfl) wfl.style.display='flex';
+    const wfl=document.getElementById('bb-waveform-loading');
+    if(wfl){ wfl.style.display='flex'; wfl.textContent='Loading waveform…'; }
     const psl=document.getElementById('bb-pitch-slider'); if(psl) psl.value=100;
     const pll=document.getElementById('bb-pitch-label'); if(pll) pll.textContent='1.00×';
     bbShowScreen('bb-crate-screen');
     const rnd=document.getElementById('bb-crate-round');
-    const labels = {sample:'ROUND 1 — THE RECORD', break:'ROUND 2 — THE BREAK', voice:'ROUND 3 — YOUR VOICE'};
+    const labels={sample:'ROUND 1 — THE RECORD',break:'ROUND 2 — THE BREAK',voice:'ROUND 3 — YOUR SOUNDS'};
     if(rnd) rnd.textContent=labels[roundType]||`ROUND ${round} / ${totalRounds}`;
+    const tit=document.getElementById('bb-crate-title');
+    const art=document.getElementById('bb-crate-artist');
+    const yr=document.getElementById('bb-crate-year');
     const ldr=document.getElementById('bb-crate-loading');
-    const msgs = {sample:'Pulling from the crates…', break:'Hunting for the break…', voice:'Get your voice ready — recording starts in a moment'};
-    if(ldr) ldr.textContent=loading?(msgs[roundType]||'Loading…'):'';
+    if(tutorial){
+        // Voice round: show tutorial instead of vinyl reveal
+        if(tit) tit.textContent='Record 3 sounds';
+        if(art) art.textContent='Anything — mouth beats, words, weird noises';
+        if(yr)  yr.textContent='Your friends get your sounds and have to make a beat with them';
+        if(ldr) ldr.textContent='Recording starts in a moment…';
+        document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.remove('spinning'));
+    } else {
+        if(tit) tit.textContent=''; if(art) art.textContent=''; if(yr) yr.textContent='';
+        const msgs={sample:'Pulling from the crates…',break:'Hunting for the break…'};
+        if(ldr) ldr.textContent=loading?(msgs[roundType]||'Loading…'):'';
+        document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.remove('spinning'));
+    }
     bbEnsureAudio();
 });
 
 socket.on('bbSampleReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})=>{
     bbAudioProxyUrl=audioProxyUrl; bbSampleDuration=duration;
-    // Default loop to start-of-track for the selected duration
     bbLoopStart=Math.min(5,duration*0.1); bbLoopEnd=bbLoopStart+bbLoopDuration;
     bbSetLoop(bbLoopStart,bbLoopEnd);
     const tit=document.getElementById('bb-crate-title'),art=document.getElementById('bb-crate-artist');
@@ -5140,30 +5219,41 @@ socket.on('bbSampleReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})
     if(tit) tit.textContent=title; if(art) art.textContent=creator;
     if(yr)  yr.textContent=date;  if(img){img.src=thumbUrl;img.style.display='';}
     document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.add('spinning'));
-    // Decode in background for waveform; DON'T start audio yet (wait for SCRUB phase)
-    if(ldr) ldr.textContent='⏳ Waveform loading…';
+    // Play 10s non-looping preview so players can hear the track during the reveal
+    bbEnsureAudio();
+    bbStreamPreview(audioProxyUrl);
+    if(ldr) ldr.textContent='🎵 Previewing — waveform decoding…';
+    // Decode full buffer in background for the scrub waveform
     bbLoadSample(audioProxyUrl).then(()=>{
-        if(ldr) ldr.textContent='✓ Record loaded — get ready to scrub';
-        // If SCRUB screen is already showing, start the loop now
-        if(document.getElementById('bb-scrub-screen')?.style.display==='flex') {
-            bbStreamStop(); bbStartLoop(); bbDrawWaveform();
+        if(ldr) ldr.textContent='✓ Ready to scrub';
+        const scrubScreen=document.getElementById('bb-scrub-screen');
+        if(scrubScreen?.style.display==='flex'){
+            // SCRUB already showing — start precise loop and draw waveform
+            bbStreamStop(); bbStartLoop(); bbDrawWaveform(); bbAutoZoom();
+            const wldr=document.getElementById('bb-waveform-loading');
+            if(wldr) wldr.style.display='none';
         }
     });
 });
 
 socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration})=>{
     bbSampleDuration=duration||bbSampleDuration;
-    // Keep existing loop position if already set, else default
-    if(!bbLoopStart) { bbLoopStart=Math.min(5,bbSampleDuration*0.1); bbLoopEnd=bbLoopStart+bbLoopDuration; bbSetLoop(bbLoopStart,bbLoopEnd); }
+    if(!bbLoopStart){ bbLoopStart=Math.min(5,bbSampleDuration*0.1); bbLoopEnd=bbLoopStart+bbLoopDuration; bbSetLoop(bbLoopStart,bbLoopEnd); }
     bbShowScreen('bb-scrub-screen');
     const timer=document.getElementById('bb-scrub-timer'); if(timer) timer.textContent=timeLeft;
-    // Audio already playing from crate; if decode just finished, ensure precise loop is running
-    if(bbSampleBuffer && !bbLoopSrc) { bbStreamStop(); bbStartLoop(); }
-    else if(!bbLoopSrc && !bbAudioEl && audioProxyUrl) { bbStreamStart(audioProxyUrl); bbLoadSample(audioProxyUrl).then(()=>{ bbStreamStop(); bbStartLoop(); bbDrawWaveform(); }); }
-    if(bbSampleBuffer) bbDrawWaveform();
+    const wldr=document.getElementById('bb-waveform-loading');
+    if(bbSampleBuffer){
+        // Buffer decoded during CRATE preview — start precise loop immediately
+        bbStreamStop(); bbStartLoop(); bbDrawWaveform(); bbAutoZoom();
+        if(wldr) wldr.style.display='none';
+    } else {
+        // Still decoding — show loading state; bbLoadSample .then() above will switch over
+        if(wldr){ wldr.style.display='flex'; wldr.textContent='Decoding waveform — drag will work in a moment…'; }
+        // Start stream so there's audio while we wait (seeks won't work but at least there's sound)
+        if(!bbAudioEl && audioProxyUrl) bbStreamStart(audioProxyUrl);
+    }
     bbUpdateScrubOverlay();
     bbWireScrub();
-    // Init duration buttons
     bbSetLoopDuration(bbLoopDuration);
 });
 
@@ -5319,6 +5409,12 @@ socket.on('bbLobby',()=>{
     <div id="bb-waveform-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.65em;color:#4a6a8a;pointer-events:none;">Loading waveform…</div>
   </div>
   <div id="bb-loop-info" style="font-size:0.68em;color:#7a9abf;text-align:center;min-height:16px;"></div>
+  <!-- Zoom scroll controls — only useful once waveform is drawn -->
+  <div id="bb-zoom-row" style="width:100%;max-width:440px;display:flex;gap:6px;align-items:center;">
+    <button onclick="bbZoomScroll(-1)" style="flex:0 0 44px;padding:7px 0;border-radius:8px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:1em;cursor:pointer;">◀</button>
+    <button onclick="bbZoomReset()" style="flex:1;padding:7px 0;border-radius:8px;border:1.5px solid #2a3450;background:#0d1525;color:#4a6a8a;font-size:0.62em;font-weight:700;cursor:pointer;letter-spacing:.04em;">FULL TRACK</button>
+    <button onclick="bbZoomScroll(1)"  style="flex:0 0 44px;padding:7px 0;border-radius:8px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:1em;cursor:pointer;">▶</button>
+  </div>
 
   <!-- Pitch slider -->
   <div style="width:100%;max-width:440px;">
