@@ -542,7 +542,7 @@
         .bb-track-title { font-size:1.05em; font-weight:900; color:#fff; letter-spacing:-.01em; max-width:320px; text-align:center; }
         .bb-track-artist { font-size:0.72em; color:#7a9abf; font-weight:700; }
         .bb-track-year { font-size:0.64em; color:#4a6a8a; }
-        .bb-waveform-wrap { position:relative; width:100%; max-width:420px; height:70px; margin:0 auto; background:#0c1320; border-radius:10px; overflow:hidden; cursor:pointer; touch-action:none; }
+        .bb-waveform-wrap { position:relative; width:100%; max-width:440px; height:110px; margin:0 auto; background:#0c1320; border-radius:10px; overflow:hidden; cursor:pointer; touch-action:none; }
         .bb-waveform-canvas { position:absolute; inset:0; width:100%; height:100%; }
         .bb-scrub-region { position:absolute; top:0; bottom:0; background:rgba(255,152,0,.18); border-left:2px solid #ff9800; border-right:2px solid #ff9800; pointer-events:none; }
         .bb-scrub-head { position:absolute; top:0; bottom:0; width:2px; background:#fff; pointer-events:none; }
@@ -4762,28 +4762,29 @@ function bbSetLoop(s, e) { bbLoopStart=s; bbLoopEnd=e; bbLoopStepDur=(e-s)/8; }
 
 function bbSetLoopDuration(d) {
     bbLoopDuration = d;
-    bbLoopEnd = Math.min(bbLoopStart + d, bbSampleDuration);
+    bbLoopEnd = Math.min(bbLoopStart + d, bbSampleDuration || 180);
     bbLoopStart = Math.max(0, bbLoopEnd - d);
     bbSetLoop(bbLoopStart, bbLoopEnd);
     bbUpdateScrubOverlay();
     bbScrubRestart();
-    // Update duration button UI
-    [2,4].forEach(n=>{
+    [4,6,8].forEach(n=>{
         const b=document.getElementById('bb-dur-'+n);
-        if(b) b.style.borderColor = n===d ? '#ff9800' : '#2a3450';
-        if(b) b.style.color       = n===d ? '#ff9800' : '#9fb0cc';
+        if(!b) return;
+        b.style.background  = n===d ? 'rgba(255,152,0,.15)' : '#0d1525';
+        b.style.borderColor = n===d ? '#ff9800' : '#2a3450';
+        b.style.color       = n===d ? '#ff9800' : '#9fb0cc';
     });
 }
 
 function bbSetPlaybackRate(r) {
+    r = Math.round(r * 100) / 100;
     bbPlaybackRate = r;
     if (bbAudioEl) bbAudioEl.playbackRate = r;
     if (bbLoopSrc) bbLoopSrc.playbackRate.value = r;
-    document.querySelectorAll('.bb-rate-btn').forEach(b=>{
-        const active = parseFloat(b.dataset.rate) === r;
-        b.style.borderColor = active ? '#5ee6c5' : '#2a3450';
-        b.style.color       = active ? '#5ee6c5' : '#9fb0cc';
-    });
+    const slider = document.getElementById('bb-pitch-slider');
+    if (slider) slider.value = Math.round(r * 100);
+    const label  = document.getElementById('bb-pitch-label');
+    if (label)  label.textContent = r.toFixed(2) + '×';
 }
 
 function bbStartLoop() {
@@ -4868,7 +4869,8 @@ function bbStopBeat() {
 // ── waveform ──
 function bbDrawWaveform() {
     const canvas = document.getElementById('bb-waveform-canvas'); if (!canvas||!bbSampleBuffer) return;
-    canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight||70;
+    const ldr = document.getElementById('bb-waveform-loading'); if(ldr) ldr.style.display='none';
+    canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight||110;
     const W=canvas.width,H=canvas.height, ch=bbSampleBuffer.getChannelData(0);
     const step=Math.floor(ch.length/W), ctx=canvas.getContext('2d');
     ctx.clearRect(0,0,W,H); ctx.strokeStyle='#2a4a7a'; ctx.lineWidth=1; ctx.beginPath();
@@ -5100,6 +5102,9 @@ socket.on('bbCratePhase',({round,totalRounds,loading,roundType})=>{
     bbStreamStop(); bbStopLoop(); bbStopBeat();
     bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
+    const wfl=document.getElementById('bb-waveform-loading'); if(wfl) wfl.style.display='flex';
+    const psl=document.getElementById('bb-pitch-slider'); if(psl) psl.value=100;
+    const pll=document.getElementById('bb-pitch-label'); if(pll) pll.textContent='1.00×';
     bbShowScreen('bb-crate-screen');
     const rnd=document.getElementById('bb-crate-round');
     const labels = {sample:'ROUND 1 — THE RECORD', break:'ROUND 2 — THE BREAK', voice:'ROUND 3 — YOUR VOICE'};
@@ -5275,31 +5280,48 @@ socket.on('bbLobby',()=>{
 </div>
 
 <!-- Scrub screen -->
-<div id="bb-scrub-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:14px;padding:20px 14px;overflow-y:auto;">
-  <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:420px;">
+<div id="bb-scrub-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:12px;padding:18px 14px;overflow-y:auto;">
+  <!-- Header -->
+  <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:440px;">
     <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">FIND YOUR LOOP</div>
     <div style="display:flex;align-items:center;gap:6px;">
       <div id="bb-scrub-timer" style="font-size:1.6em;font-weight:900;"></div>
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
-  <!-- Loop length toggle -->
-  <div style="width:100%;max-width:420px;display:flex;gap:8px;">
-    <button id="bb-dur-2" onclick="bbSetLoopDuration(2)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.75em;font-weight:800;letter-spacing:.05em;cursor:pointer;">2 SEC</button>
-    <button id="bb-dur-4" onclick="bbSetLoopDuration(4)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #ff9800;background:#0d1525;color:#ff9800;font-size:0.75em;font-weight:800;letter-spacing:.05em;cursor:pointer;">4 SEC ✓</button>
+
+  <!-- Loop length picker: 4 / 6 / 8 sec -->
+  <div style="width:100%;max-width:440px;display:flex;gap:8px;">
+    <button id="bb-dur-4" onclick="bbSetLoopDuration(4)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">4 SEC</button>
+    <button id="bb-dur-6" onclick="bbSetLoopDuration(6)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">6 SEC</button>
+    <button id="bb-dur-8" onclick="bbSetLoopDuration(8)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">8 SEC</button>
   </div>
-  <!-- Pitch / speed -->
-  <div style="width:100%;max-width:420px;display:flex;gap:8px;">
-    <button class="bb-rate-btn" data-rate="0.75" onclick="bbSetPlaybackRate(0.75)" style="flex:1;padding:9px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.72em;font-weight:800;cursor:pointer;">🐢 SLOW</button>
-    <button class="bb-rate-btn" data-rate="1"    onclick="bbSetPlaybackRate(1)"    style="flex:1;padding:9px 0;border-radius:10px;border:2px solid #5ee6c5;background:#0d1525;color:#5ee6c5;font-size:0.72em;font-weight:800;cursor:pointer;">🎵 NORM ✓</button>
-    <button class="bb-rate-btn" data-rate="1.33" onclick="bbSetPlaybackRate(1.33)" style="flex:1;padding:9px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.72em;font-weight:800;cursor:pointer;">⚡ FAST</button>
-  </div>
-  <div id="bb-waveform-wrap" class="bb-waveform-wrap">
+
+  <!-- Waveform — tall, always visible -->
+  <div id="bb-waveform-wrap" class="bb-waveform-wrap" style="height:110px;">
     <canvas id="bb-waveform-canvas" class="bb-waveform-canvas"></canvas>
+    <div id="bb-waveform-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.65em;color:#4a6a8a;pointer-events:none;">Loading waveform…</div>
   </div>
-  <div id="bb-loop-info" class="bb-loop-info">Drag waveform to place your loop</div>
-  <button id="bb-lock-btn" class="bb-lock-btn">LOCK LOOP</button>
-  <div style="font-size:0.62em;color:#4a6a8a;text-align:center;">Everyone picks their own loop · pitch carries through to your beat</div>
+  <div id="bb-loop-info" style="font-size:0.68em;color:#7a9abf;text-align:center;min-height:16px;"></div>
+
+  <!-- Pitch slider -->
+  <div style="width:100%;max-width:440px;">
+    <div style="display:flex;justify-content:space-between;font-size:0.6em;color:#4a6a8a;margin-bottom:4px;">
+      <span>🐢 slow</span>
+      <span style="color:#9fb0cc;font-weight:700;">PITCH / SPEED</span>
+      <span>fast ⚡</span>
+    </div>
+    <input type="range" id="bb-pitch-slider" min="50" max="200" value="100" step="1"
+      oninput="bbSetPlaybackRate(this.value/100)"
+      style="width:100%;height:6px;accent-color:#5ee6c5;cursor:pointer;">
+    <div style="text-align:center;margin-top:4px;">
+      <span id="bb-pitch-label" style="font-size:0.72em;font-weight:800;color:#5ee6c5;">1.00×</span>
+      <span style="font-size:0.6em;color:#4a6a8a;margin-left:6px;">drag to pitch up/down</span>
+    </div>
+  </div>
+
+  <button id="bb-lock-btn" class="bb-lock-btn" style="padding:14px 0;width:100%;max-width:440px;font-size:0.85em;">LOCK LOOP</button>
+  <div style="font-size:0.6em;color:#4a6a8a;text-align:center;">Drag waveform to place · pitch carries to your beat</div>
 </div>
 
 <!-- Record screen -->
