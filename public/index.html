@@ -4684,6 +4684,7 @@ let bbListenQueue    = [];
 let bbListenProxyUrl = null;
 let bbMediaRec       = null;
 let bbMediaStream    = null;
+let bbAudioEl        = null;
 
 // ── audio core ──
 function bbEnsureAudio() {
@@ -4770,6 +4771,24 @@ function bbStartLoop() {
 }
 function bbStopLoop() {
     if (bbLoopSrc) { try{bbLoopSrc.stop();}catch(e){} bbLoopSrc=null; } bbStopCrackle();
+}
+function bbStreamPlay(proxyUrl) {
+    if (bbAudioEl) { bbAudioEl.pause(); bbAudioEl.src=''; bbAudioEl=null; }
+    if (!proxyUrl) return;
+    bbAudioEl = new Audio(proxyUrl);
+    bbAudioEl.volume = 0.65;
+    bbAudioEl.play().catch(()=>{});
+    // Drive the waveform playhead while streaming
+    bbAudioEl.addEventListener('timeupdate', ()=>{
+        if (!bbSampleDuration) return;
+        const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap) return;
+        let head=wrap.querySelector('.bb-scrub-head');
+        if(!head){head=document.createElement('div');head.className='bb-scrub-head';wrap.appendChild(head);}
+        head.style.left=((bbAudioEl.currentTime/bbSampleDuration)*wrap.offsetWidth)+'px';
+    });
+}
+function bbStreamStop() {
+    if (bbAudioEl) { bbAudioEl.pause(); bbAudioEl.src=''; bbAudioEl=null; }
 }
 
 // ── beat scheduler ──
@@ -4964,6 +4983,7 @@ function bbShowBuildScreen(data) {
     bbShowScreen('bb-build-screen');
     const timer=document.getElementById('bb-build-timer'); if(timer) timer.textContent=data.timeLeft;
     bbBuildRenderGrid();
+    bbStreamStop(); // hand off to precise AudioBufferSourceNode
     if(data.audioProxyUrl&&bbSampleBuffer) bbStartLoop();
     bbStartBeat();
 }
@@ -5047,17 +5067,19 @@ socket.on('bbCratePhase',({round,totalRounds,loading})=>{
     bbEnsureAudio();
 });
 
-socket.on('bbSampleReady',async({title,creator,date,thumbUrl,audioProxyUrl,duration})=>{
+socket.on('bbSampleReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})=>{
     bbAudioProxyUrl=audioProxyUrl; bbSampleDuration=duration;
     const tit=document.getElementById('bb-crate-title'),art=document.getElementById('bb-crate-artist');
     const yr=document.getElementById('bb-crate-year'),img=document.getElementById('bb-vinyl-img');
     const ldr=document.getElementById('bb-crate-loading');
     if(tit) tit.textContent=title; if(art) art.textContent=creator;
     if(yr)  yr.textContent=date;  if(img){img.src=thumbUrl;img.style.display='';}
-    if(ldr) ldr.textContent='Loading audio…';
-    await bbLoadSample(audioProxyUrl);
-    if(ldr) ldr.textContent='✓ Record loaded';
     document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.add('spinning'));
+    // Stream immediately — no waiting for full decode
+    bbStreamPlay(audioProxyUrl);
+    if(ldr) ldr.textContent='🎵 Playing — waveform loading…';
+    // Decode in background for waveform + build-phase scheduler
+    bbLoadSample(audioProxyUrl).then(()=>{ if(ldr) ldr.textContent='✓ Record loaded'; bbDrawWaveform(); });
 });
 
 socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration})=>{
@@ -5066,8 +5088,10 @@ socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration})=>{
     bbSetLoop(bbLoopStart,bbLoopEnd);
     bbShowScreen('bb-scrub-screen');
     const timer=document.getElementById('bb-scrub-timer'); if(timer) timer.textContent=timeLeft;
-    if(audioProxyUrl&&!bbSampleBuffer) bbLoadSample(audioProxyUrl).then(()=>{bbDrawWaveform();if(bbSampleBuffer) bbStartLoop();});
-    else if(bbSampleBuffer){bbDrawWaveform();bbStartLoop();}
+    // Audio already streaming from crate phase; decode in background if not done yet
+    if(!bbSampleBuffer && audioProxyUrl) bbLoadSample(audioProxyUrl).then(()=>bbDrawWaveform());
+    else if(bbSampleBuffer) bbDrawWaveform();
+    if(!bbAudioEl && audioProxyUrl) bbStreamPlay(audioProxyUrl);
     bbUpdateScrubOverlay();
     bbWireScrub();
 });
@@ -5083,7 +5107,10 @@ socket.on('bbRecordPhase',({timeLeft,playerCount,myLoop,audioProxyUrl})=>{
     bbShowScreen('bb-record-screen');
     const timer=document.getElementById('bb-rec-timer'); if(timer) timer.textContent=timeLeft;
     bbRenderRecordScreen(); bbWireRecordScreen();
-    if(audioProxyUrl&&bbSampleBuffer) bbStartLoop();
+    // Keep stream playing as background reference during recording
+    if(!bbAudioEl && audioProxyUrl) bbStreamPlay(audioProxyUrl);
+    // Switch to precise loop once buffer is decoded
+    if(audioProxyUrl&&bbSampleBuffer) { bbStreamStop(); bbStartLoop(); }
 });
 
 socket.on('bbRecordingIn',()=>{
@@ -5170,7 +5197,7 @@ socket.on('bbTimeTick',({timeLeft})=>{
 });
 
 socket.on('bbLobby',()=>{
-    bbStopBeat(); bbStopLoop();
+    bbStopBeat(); bbStopLoop(); bbStreamStop();
     BB_SCREENS.forEach(id=>{const el=document.getElementById(id);if(el) el.style.display='none';});
 });
 </script>
