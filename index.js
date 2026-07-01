@@ -1330,10 +1330,22 @@ const BB_RECORD_SECS  = 90;
 const BB_BUILD_SECS   = 75;
 const BB_VOTE_SECS    = 45;
 const BB_LISTEN_SECS  = 10;
-const BB_TOTAL_ROUNDS = 3;
-const BB_ROLES_V2     = ['thump', 'snap', 'sneak'];
-// Round 1 = vinyl jazz sample, Round 2 = drum/rhythm track, Round 3 = player mouth sounds (no vinyl)
-const BB_ROUND_TYPES  = ['sample', 'break', 'voice'];
+const BB_TOTAL_ROUNDS = 2;
+// Round 1 = vinyl jazz sample, Round 2 = drum break (curated — guaranteed drums)
+const BB_ROUND_TYPES  = ['sample', 'break'];
+
+// Curated drum breaks from the Ultimate Breaks and Beats collection on Archive.org
+// breakAt = seconds into the track where the break / drum section begins
+const BB_DRUM_BREAKS = [
+    { title: 'Apache',                      artist: 'Incredible Bongo Band', file: '503.2 Apache.mp3',                          breakAt: 0   },
+    { title: "Dance To The Drummer's Beat", artist: 'Herman Kelly & Life',   file: "503.3 Dance To The Drummer's Beat.mp3",      breakAt: 0   },
+    { title: 'Synthetic Substitution',      artist: 'Melvin Bliss',          file: '505.4 Synthetic Substitution.mp3',           breakAt: 0   },
+    { title: 'Amen Brother',                artist: 'The Winstons',          file: '501.3 Amen Brother.mp3',                     breakAt: 83  },
+    { title: 'Different Strokes',           artist: 'Syl Johnson',           file: '504.1 Different Strokes.mp3',                breakAt: 0   },
+    { title: 'Bongo Rock',                  artist: 'Incredible Bongo Band', file: '503.4 Bongo Rock.mp3',                      breakAt: 0   },
+    { title: 'Cold Sweat',                  artist: 'James Brown',           file: '506.2 Cold Sweat.mp3',                      breakAt: 0   },
+    { title: 'Give It Up Or Turn It Loose', artist: 'James Brown',           file: '507.1 Give It Up Or Turn It Loose.mp3',      breakAt: 24  },
+];
 
 function bb_parseDuration(len) {
     if (!len) return 0;
@@ -1399,38 +1411,41 @@ async function bb_fetchBatch(n, drumOnly = false) {
     return results;
 }
 
-// ── Pre-fetched sample pool — filled on startup and refreshed every 2 hours ──
+// ── Pre-fetched jazz sample pool — filled on startup and refreshed every 2 hours ──
 const bbSamplePool = []; // jazz/blues vinyl records
-const bbBreakPool  = []; // drum/rhythm tracks
 
 async function bb_refreshPool() {
     console.log('[BB] refreshing sample pool…');
-    // Sequential — don't hammer Archive.org with parallel requests
     const samples = await bb_fetchBatch(5, false);
     samples.forEach(s => { if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s); });
-    const breaks = await bb_fetchBatch(3, true);
-    breaks.forEach(s => { if (!bbBreakPool.find(x => x.identifier === s.identifier)) bbBreakPool.push(s); });
-    console.log(`[BB] pool ready: ${bbSamplePool.length} samples, ${bbBreakPool.length} breaks`);
+    console.log(`[BB] pool ready: ${bbSamplePool.length} jazz samples`);
 }
 bb_refreshPool().catch(console.error);
 setInterval(() => bb_refreshPool().catch(console.error), 2 * 60 * 60 * 1000);
 
-// Pick one sample from the pool that this room hasn't used yet; fall back to live fetch
-async function bb_pickSample(room, drumOnly) {
-    const pool = drumOnly ? bbBreakPool : bbSamplePool;
+// Pick one jazz sample from the pool that this room hasn't used yet; fall back to live fetch
+async function bb_pickSample(room) {
     const used = room.bbUsedIds;
-    const available = pool.filter(s => !used.has(s.identifier));
+    const available = bbSamplePool.filter(s => !used.has(s.identifier));
     if (available.length) {
         const pick = available[Math.floor(Math.random() * available.length)];
         used.add(pick.identifier);
-        console.log(`[BB] pool pick (${drumOnly?'break':'sample'}): ${pick.identifier}`);
+        console.log(`[BB] pool pick: ${pick.identifier}`);
         return pick;
     }
-    // Pool empty or exhausted — live fetch
     console.log('[BB] pool exhausted, live fetch…');
-    const fresh = await bb_fetchBatch(1, drumOnly);
+    const fresh = await bb_fetchBatch(1, false);
     if (fresh[0]) used.add(fresh[0].identifier);
     return fresh[0] || null;
+}
+
+// Pick a drum break — instant, no API call needed
+function bb_pickDrumBreak(room) {
+    const available = BB_DRUM_BREAKS.filter(b => !room.bbUsedIds.has(b.file));
+    if (!available.length) return BB_DRUM_BREAKS[Math.floor(Math.random() * BB_DRUM_BREAKS.length)];
+    const pick = available[Math.floor(Math.random() * available.length)];
+    room.bbUsedIds.add(pick.file);
+    return pick;
 }
 
 function bb_startGame(room) {
@@ -1462,18 +1477,36 @@ function bb_startRound(room) {
     room.bbListenQueue = [];
     room.bbListenIdx   = -1;
     Object.keys(room.players).forEach(id => { room.bbRoundScores[id] = 0; });
-    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, roundType, loading: roundType !== 'voice', tutorial: roundType === 'voice' });
+    broadcastRoom(room, 'bbCratePhase', { round: room.bbRound, totalRounds: BB_TOTAL_ROUNDS, roundType, loading: true });
 
-    if (roundType === 'voice') {
-        // No vinyl — short crate screen then jump straight to RECORD
-        room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_endScrub(room); }, 8000);
+    if (roundType === 'break') {
+        // Instant pick from curated drum break list — no API call
+        const pick = bb_pickDrumBreak(room);
+        const sample = {
+            identifier: 'ultimate-break-beats-complete',
+            title: pick.title, creator: pick.artist, date: '',
+            audioUrl: `https://archive.org/download/ultimate-break-beats-complete/${encodeURIComponent(pick.file)}`,
+            thumbUrl: `https://archive.org/services/img/ultimate-break-beats-complete`,
+            duration: 300,
+            breakAt: pick.breakAt,
+        };
+        room.bbSample = room.bbR2Sample = sample;
+        console.log(`[BB] drum break: ${pick.title}`);
+        room.bbTimer = setTimeout(() => {
+            room.bbTimer = null;
+            broadcastRoom(room, 'bbSampleReady', {
+                title: sample.title, creator: sample.creator, date: '',
+                thumbUrl: sample.thumbUrl,
+                audioProxyUrl: `/api/bb-audio/${room.code}`,
+                duration: sample.duration,
+                breakAt: sample.breakAt,
+            });
+            room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_beginScrub(room); }, (BB_PREVIEW_SECS + 3) * 1000);
+        }, 1200); // 1.2s reveal pause for drama
         return;
     }
 
-    // Rounds 1 (sample) and 2 (break) — serve from pool, fall back to live fetch
-    const drumOnly = roundType === 'break';
-
-    // Hard cap: if no track arrives within BB_CRATE_TIMEOUT, give up and start scrub
+    // Round 1 (sample) — serve from jazz pool, fall back to live fetch
     room.bbTimer = setTimeout(() => {
         room.bbTimer = null;
         if (!room.bbSample) {
@@ -1483,27 +1516,22 @@ function bb_startRound(room) {
         }
     }, BB_CRATE_TIMEOUT * 1000);
 
-    bb_pickSample(room, drumOnly).then(sample => {
+    bb_pickSample(room).then(sample => {
         if (!rooms[room.code]) return;
         clearTimeout(room.bbTimer); room.bbTimer = null;
         if (!sample) {
-            console.log('[BB] no sample found, starting scrub with silence');
             room.bbSample = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
             bb_beginScrub(room);
             return;
         }
-        room.bbSample = sample;
-        if (roundType === 'sample') room.bbR1Sample = sample;
-        if (roundType === 'break')  room.bbR2Sample = sample;
+        room.bbSample = room.bbR1Sample = sample;
         broadcastRoom(room, 'bbSampleReady', {
             title: sample.title, creator: sample.creator, date: sample.date,
             thumbUrl: sample.thumbUrl,
             audioProxyUrl: `/api/bb-audio/${room.code}`,
             duration: sample.duration,
         });
-        // Let players hear the 10s preview, then start scrub
-        room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_beginScrub(room); },
-            (BB_PREVIEW_SECS + 3) * 1000);
+        room.bbTimer = setTimeout(() => { room.bbTimer = null; bb_beginScrub(room); }, (BB_PREVIEW_SECS + 3) * 1000);
     }).catch(e => {
         console.error('[BB] bb_pickSample error:', e.message);
         if (!rooms[room.code]) return;
@@ -1537,9 +1565,10 @@ function bb_beginScrub(room) {
             timeLeft: BB_SCRUB_SECS,
             roundType: room.bbRoundType,
             audioProxyUrl: room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null,
-            duration: room.bbSample?.duration || 180,
+            duration: room.bbSample?.duration || 300,
             r1AudioUrl,
             r1Loop: isBreak ? (room.bbR1ScrubLocks?.[pid] || null) : null,
+            breakAt: isBreak ? (room.bbSample?.breakAt || 0) : null,
         });
     });
     room.bbTimer = setInterval(() => {
@@ -1552,14 +1581,14 @@ function bb_beginScrub(room) {
 function bb_endScrub(room) {
     clearInterval(room.bbTimer); room.bbTimer = null;
     Object.keys(room.players).forEach(id => {
-        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 13, duration: 8, rate: 1 };
+        if (!room.bbScrubLocks[id]) room.bbScrubLocks[id] = { start: 5, end: 9, duration: 4, rate: 1 };
     });
 
-    if (room.bbRoundType === 'voice') {
-        // Round 3: both loops locked — go straight to build with synth pads
+    if (room.bbRoundType === 'break') {
+        // R2 scrub done — both loops locked, go to BUILD
         bb_beginBuild(room);
     } else {
-        // Rounds 1 & 2: no recording — go straight to next round
+        // R1 done — go to R2 drum break
         bb_startRound(room);
     }
 }
@@ -1584,20 +1613,15 @@ function bb_beginBuild(room) {
     room.bbPhase = 'BUILD';
     room.bbTimeLeft = BB_BUILD_SECS;
     const ids = Object.keys(room.players);
-    const isVoice = room.bbRoundType === 'voice';
-    // Voice round: R1 vinyl as primary background, R2 break as secondary
-    const audioProxyUrl = isVoice
-        ? (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null)
-        : (room.bbSample?.audioUrl   ? `/api/bb-audio/${room.code}`    : null);
-    const r2AudioUrl = isVoice && room.bbR2Sample?.audioUrl ? `/api/bb-audio-r2/${room.code}` : null;
+    // R1 jazz via its own proxy route; R2 drums still in bbSampleBytes (not cleared)
+    const r1AudioUrl = room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null;
+    const r2AudioUrl = room.bbSample?.audioUrl   ? `/api/bb-audio/${room.code}`    : null;
     ids.forEach(id => {
         io.to(id).emit('bbBuildPhase', {
-            roundType: room.bbRoundType,
-            hand: [],
-            myLoop: room.bbScrubLocks[id] || { start: 5, end: 13, duration: 8, rate: 1 },
-            audioProxyUrl,
+            r1AudioUrl,
+            r1Loop: room.bbR1ScrubLocks?.[id] || { start: 5, end: 9, duration: 4, rate: 1 },
             r2AudioUrl,
-            r2Loop: isVoice ? (room.bbR2ScrubLocks?.[id] || null) : null,
+            r2Loop: room.bbScrubLocks[id]     || { start: 5, end: 9, duration: 4, rate: 1 },
             timeLeft: BB_BUILD_SECS,
         });
     });
@@ -1642,44 +1666,40 @@ function bb_endRecord(room) {
 function bb_endBuild(room) {
     clearInterval(room.bbTimer); room.bbTimer = null;
     const ids = Object.keys(room.players);
-    ids.forEach(id => { if (!room.bbBeats[id]) room.bbBeats[id] = {}; });
+    ids.forEach(id => { if (!room.bbBeats[id]) room.bbBeats[id] = { slots: [{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true}], slotLen: 4 }; });
     room.bbPhase = 'LISTEN';
     room.bbListenQueue = ids;
     room.bbListenIdx   = -1;
-    const isVoice = room.bbRoundType === 'voice';
-    const audioProxyUrl = isVoice
-        ? (room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null)
-        : (room.bbSample?.audioUrl ? `/api/bb-audio/${room.code}` : null);
-    const r2AudioUrl = isVoice && room.bbR2Sample?.audioUrl ? `/api/bb-audio-r2/${room.code}` : null;
-    const queue = ids.map(id => ({
-        playerId: id, playerName: room.players[id]?.name || '?',
-        beat: room.bbBeats[id] || {},
-        hand: [],
-        loop: room.bbScrubLocks[id] || { start: 5, end: 13, duration: 8, rate: 1 },
-        r2Loop: isVoice ? (room.bbR2ScrubLocks?.[id] || null) : null,
-        roundType: room.bbRoundType,
-    }));
-    broadcastRoom(room, 'bbListenPhase', { queue, audioProxyUrl, r2AudioUrl });
+    const r1AudioUrl = room.bbR1Sample?.audioUrl ? `/api/bb-audio-r1/${room.code}` : null;
+    const r2AudioUrl = room.bbSample?.audioUrl   ? `/api/bb-audio/${room.code}`    : null;
+    const queue = ids.map(id => {
+        const beat = room.bbBeats[id] || {};
+        return {
+            playerId: id, playerName: room.players[id]?.name || '?',
+            slots:   beat.slots   || [{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true}],
+            slotLen: beat.slotLen || 4,
+            r1Loop:  room.bbR1ScrubLocks?.[id] || { start: 5, end: 9, duration: 4, rate: 1 },
+            r2Loop:  room.bbScrubLocks[id]     || { start: 5, end: 9, duration: 4, rate: 1 },
+        };
+    });
+    broadcastRoom(room, 'bbListenPhase', { queue, r1AudioUrl, r2AudioUrl });
     room.bbTimer = setTimeout(() => bb_listenNext(room), 1500);
 }
 
 function bb_listenNext(room) {
     room.bbListenIdx++;
     if (room.bbListenIdx >= room.bbListenQueue.length) {
-        if (room.bbRound < BB_TOTAL_ROUNDS) {
-            // Rounds 1 & 2 — no vote yet, straight to next round
-            room.bbTimer = setTimeout(() => bb_startRound(room), 2000);
-        } else {
-            // Final round — vote
-            room.bbTimer = setTimeout(() => bb_openVote(room), 1500);
-        }
+        room.bbTimer = setTimeout(() => bb_openVote(room), 1500);
         return;
     }
+    const pid = room.bbListenQueue[room.bbListenIdx];
     broadcastRoom(room, 'bbListenBeat', {
         idx: room.bbListenIdx, total: room.bbListenQueue.length,
-        playerId: room.bbListenQueue[room.bbListenIdx],
+        playerId: pid,
     });
-    room.bbTimer = setTimeout(() => bb_listenNext(room), (BB_LISTEN_SECS + 3) * 1000);
+    const beat = room.bbBeats[pid] || {};
+    const beatDur = Math.max(4, (beat.slots?.length || 4) * (beat.slotLen || 4));
+    room.bbTimer = setTimeout(() => bb_listenNext(room), (beatDur + 2) * 1000);
 }
 
 function bb_openVote(room) {
@@ -2714,10 +2734,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('bbSubmitBeat', ({ beat }) => {
+    socket.on('bbSubmitBeat', ({ slots, slotLen }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'BUILD') return;
-        room.bbBeats[socket.id] = beat || {};
+        room.bbBeats[socket.id] = {
+            slots: slots || [{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true}],
+            slotLen: slotLen || 4,
+        };
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbBeats[id])) {
             clearInterval(room.bbTimer); room.bbTimer = null;
