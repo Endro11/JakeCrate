@@ -1,6 +1,9 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -8,8 +11,32 @@ const io = new Server(server, { maxHttpBufferSize: 5e7 }); // 50MB for photo upl
 
 app.use(express.static('public'));
 
+// ─── Bad Pitches offline cache ────────────────────────────────────────────────
+// When public/bb-cache/manifest.json exists (built by `node bb-cache-build.js`),
+// Bad Pitches serves pre-downloaded audio + art from disk and never touches the
+// network — so it works over a hotspot with no internet. On Render (no cache dir)
+// nothing changes. Set BB_OFFLINE=0 to force the live behaviour even with a cache.
+const BB_CACHE_DIR = path.join(__dirname, 'public', 'bb-cache');
+function bbHash(str) { return crypto.createHash('md5').update(String(str)).digest('hex'); }
+function bbAudioCacheFile(audioUrl) { return path.join(BB_CACHE_DIR, 'audio', bbHash(audioUrl) + '.mp3'); }
+function bbThumbCacheFile(id)       { return path.join(BB_CACHE_DIR, 'thumb', bbHash(id) + '.jpg'); }
+let bbManifest = null;
+try { bbManifest = JSON.parse(fs.readFileSync(path.join(BB_CACHE_DIR, 'manifest.json'), 'utf8')); } catch (_) {}
+const BB_OFFLINE = process.env.BB_OFFLINE === '0' ? false : !!bbManifest;
+if (BB_OFFLINE) console.log(`[BB] OFFLINE cache active — ${bbManifest.jazz?.length || 0} jazz samples pre-cached`);
+
 // ─── Bad Pitches audio proxies ────────────────────────────────────────────────
 async function bbProxyAudio(audioUrl, cacheKey, room, res) {
+    // Offline disk cache — serve pre-downloaded bytes without touching the network.
+    if (audioUrl) {
+        const f = bbAudioCacheFile(audioUrl);
+        if (fs.existsSync(f)) {
+            const buf = fs.readFileSync(f);
+            res.setHeader('Content-Type', 'audio/mpeg');
+            res.setHeader('Content-Length', buf.length);
+            return res.send(buf);
+        }
+    }
     if (room[cacheKey]) {
         res.setHeader('Content-Type', 'audio/mpeg');
         res.setHeader('Content-Length', room[cacheKey].length);
@@ -51,6 +78,22 @@ app.get('/api/bb-audio-r2/:code', async (req, res) => {
     const room = rooms[req.params.code];
     if (!room?.bbR2Sample?.audioUrl) return res.status(404).end();
     await bbProxyAudio(room.bbR2Sample.audioUrl, 'bbR2SampleBytes', room, res);
+});
+// Cover art — serves cached art offline, proxies Archive.org otherwise. Routing
+// thumbnails through the server (in offline mode) keeps them working with no net.
+app.get('/api/bb-thumb/:id', async (req, res) => {
+    const id = req.params.id;
+    const f = bbThumbCacheFile(id);
+    if (fs.existsSync(f)) {
+        res.setHeader('Content-Type', 'image/jpeg');
+        return res.send(fs.readFileSync(f));
+    }
+    try {
+        const up = await fetch(`https://archive.org/services/img/${id}`);
+        if (!up.ok) return res.status(404).end();
+        res.setHeader('Content-Type', up.headers.get('content-type') || 'image/jpeg');
+        res.send(Buffer.from(await up.arrayBuffer()));
+    } catch (_) { res.status(404).end(); }
 });
 
 // ─── Room registry ────────────────────────────────────────────────────────────
@@ -1347,6 +1390,15 @@ const BB_DRUM_BREAKS = [
     { title: 'Give It Up Or Turn It Loose', artist: 'James Brown',           file: '507.1 Give It Up Or Turn It Loose.mp3',      breakAt: 24  },
 ];
 
+// The break-beat mp3s live inside this subfolder of the Archive.org item. Building
+// the URL without it (as this used to) 404s. Encode each path segment separately
+// so the folder slash survives.
+const BB_BREAKS_DIR = 'BreakBeat Lou Flores - Ultimate Breaks and Beats - The Complete Collection';
+function bb_breakUrl(file) {
+    const p = `${BB_BREAKS_DIR}/${file}`.split('/').map(encodeURIComponent).join('/');
+    return `https://archive.org/download/ultimate-break-beats-complete/${p}`;
+}
+
 function bb_parseDuration(len) {
     if (!len) return 0;
     const s = String(len);
@@ -1420,8 +1472,17 @@ async function bb_refreshPool() {
     samples.forEach(s => { if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s); });
     console.log(`[BB] pool ready: ${bbSamplePool.length} jazz samples`);
 }
-bb_refreshPool().catch(console.error);
-setInterval(() => bb_refreshPool().catch(console.error), 2 * 60 * 60 * 1000);
+if (BB_OFFLINE) {
+    // Fill the pool from the pre-built cache; rewrite art to the local proxy route.
+    (bbManifest.jazz || []).forEach(s => {
+        s.thumbUrl = '/api/bb-thumb/' + encodeURIComponent(s.identifier);
+        if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s);
+    });
+    console.log(`[BB] pool loaded from cache: ${bbSamplePool.length} jazz samples`);
+} else {
+    bb_refreshPool().catch(console.error);
+    setInterval(() => bb_refreshPool().catch(console.error), 2 * 60 * 60 * 1000);
+}
 
 // Pick one jazz sample from the pool that this room hasn't used yet; fall back to live fetch
 async function bb_pickSample(room) {
@@ -1432,6 +1493,11 @@ async function bb_pickSample(room) {
         used.add(pick.identifier);
         console.log(`[BB] pool pick: ${pick.identifier}`);
         return pick;
+    }
+    if (BB_OFFLINE) {
+        // No network to fall back to — reuse a cached sample rather than fail.
+        if (!bbSamplePool.length) return null;
+        return bbSamplePool[Math.floor(Math.random() * bbSamplePool.length)];
     }
     console.log('[BB] pool exhausted, live fetch…');
     const fresh = await bb_fetchBatch(1, false);
@@ -1485,8 +1551,8 @@ function bb_startRound(room) {
         const sample = {
             identifier: 'ultimate-break-beats-complete',
             title: pick.title, creator: pick.artist, date: '',
-            audioUrl: `https://archive.org/download/ultimate-break-beats-complete/${encodeURIComponent(pick.file)}`,
-            thumbUrl: `https://archive.org/services/img/ultimate-break-beats-complete`,
+            audioUrl: bb_breakUrl(pick.file),
+            thumbUrl: BB_OFFLINE ? '/api/bb-thumb/ultimate-break-beats-complete' : `https://archive.org/services/img/ultimate-break-beats-complete`,
             duration: 300,
             breakAt: pick.breakAt,
         };
@@ -2886,3 +2952,6 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 JakeCrate running on port ${PORT}`));
+
+// Exported so a host wrapper (Spawnpoint) can read io for a live player count.
+module.exports = { app, server, io };
