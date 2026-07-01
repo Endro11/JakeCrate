@@ -1715,8 +1715,17 @@ function bb_startRound(room) {
 function bb_beginDig(room) {
     room.bbPhase = 'DIG';
     const ids = Object.keys(room.players);
+    const digStartedAt = Date.now();
     let settled = 0;
-    const trySettle = () => { settled++; if (settled >= ids.length) bb_beginChop(room); };
+    // Hold the crate/vinyl reveal for at least BB_PREVIEW_SECS even if every player's sample
+    // resolves fast (a quick Archive.org lookup shouldn't cut the reveal moment short).
+    const trySettle = () => {
+        settled++;
+        if (settled < ids.length) return;
+        if (!rooms[room.code]) return;
+        const waitMs = Math.max(0, BB_PREVIEW_SECS * 1000 - (Date.now() - digStartedAt));
+        setTimeout(() => { if (rooms[room.code]) bb_beginChop(room); }, waitMs);
+    };
 
     ids.forEach(pid => {
         let done = false;

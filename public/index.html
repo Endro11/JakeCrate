@@ -5133,21 +5133,16 @@ function bbStopScheduled() {
 // ── scrub ──
 function bbWireScrub() {
     const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap||wrap._bbWired) return; wrap._bbWired=true;
-    let isPanning=false, panStartX=0, panStartZs=0;
+    // Panning/zoom is handled entirely by the dedicated ◀ FULL TRACK ▶ controls (bbZoomScroll/
+    // bbZoomReset) — dragging on the waveform itself always repositions the loop, full stop.
+    // (Previously a drag only moved the loop within ~36px of its current position and panned
+    // the view otherwise, which meant most of the visible waveform didn't do what it looked
+    // like it should do when dragged.)
     function xToTime(clientX) {
         const r=wrap.getBoundingClientRect();
         const frac=Math.max(0,Math.min(1,(clientX-r.left)/r.width));
         const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
         return zs + frac*(ze-zs);
-    }
-    function isOnLoop(clientX) {
-        // Returns true if tap lands on or near the orange loop region
-        const r=wrap.getBoundingClientRect();
-        const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
-        const zd=ze-zs; if(zd<=0) return true;
-        const lx=r.left+((bbLoopStart-zs)/zd)*r.width;
-        const rx=r.left+((bbLoopEnd-zs)/zd)*r.width;
-        return clientX>=lx-36 && clientX<=rx+36;
     }
     function setStartVisual(t) {
         const snapped = bbSnapToOnset(t);
@@ -5162,34 +5157,19 @@ function bbWireScrub() {
     function onDown(e){
         e.preventDefault();
         const cx=e.touches?e.touches[0].clientX:e.clientX;
-        if(isOnLoop(cx)){
-            bbScrubDragging=true;
-            setStartVisual(xToTime(cx));
-            commitPosition();
-        } else {
-            isPanning=true; panStartX=cx; panStartZs=bbZoomStart||0;
-        }
+        bbScrubDragging=true;
+        setStartVisual(xToTime(cx));
+        commitPosition();
     }
     function onMove(e){
-        if(!bbScrubDragging && !isPanning) return; e.preventDefault();
+        if(!bbScrubDragging) return; e.preventDefault();
         const cx=e.touches?e.touches[0].clientX:e.clientX;
-        if(isPanning){
-            const r=wrap.getBoundingClientRect();
-            const zs=bbZoomStart||0, ze=bbZoomEnd||bbSampleDuration||180;
-            const zd=ze-zs; if(zd<=0||r.width<=0) return;
-            const secPerPx=zd/r.width;
-            // Drag right = view pans left (grab-and-drag feel, like a map)
-            bbZoomStart=Math.max(0,Math.min(panStartZs-(cx-panStartX)*secPerPx,(bbSampleDuration||180)-zd));
-            bbZoomEnd=bbZoomStart+zd;
-            bbDrawWaveform(); bbUpdateScrubOverlay();
-        } else {
-            setStartVisual(xToTime(cx));
-        }
+        setStartVisual(xToTime(cx));
     }
     function onUp(){
-        if(!bbScrubDragging && !isPanning) return;
-        if(!isPanning) commitPosition();
-        bbScrubDragging=false; isPanning=false;
+        if(!bbScrubDragging) return;
+        commitPosition();
+        bbScrubDragging=false;
     }
     wrap.addEventListener('mousedown',onDown); wrap.addEventListener('touchstart',onDown,{passive:false});
     document.addEventListener('mousemove',onMove); document.addEventListener('touchmove',onMove,{passive:false});
