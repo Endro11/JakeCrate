@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +25,27 @@ let bbManifest = null;
 try { bbManifest = JSON.parse(fs.readFileSync(path.join(BB_CACHE_DIR, 'manifest.json'), 'utf8')); } catch (_) {}
 const BB_OFFLINE = process.env.BB_OFFLINE === '0' ? false : !!bbManifest;
 if (BB_OFFLINE) console.log(`[BB] OFFLINE cache active — ${bbManifest.jazz?.length || 0} jazz samples pre-cached`);
+
+// ─── LAN address (for the scan-to-join QR when hosting over a hotspot) ─────────
+// Picks the best local IPv4 to advertise. Only used as a fallback when the host
+// opened the page via localhost; normally the client uses its own page origin.
+function jcLanIp() {
+    const ifaces = os.networkInterfaces();
+    let best = '127.0.0.1', bestScore = -1;
+    for (const name of Object.keys(ifaces)) {
+        for (const net of ifaces[name] || []) {
+            if (net.family !== 'IPv4' || net.internal) continue;
+            let s = 0;
+            if (/^(ap|wlan1|swlan|softap|rndis|usb|tether)/i.test(name)) s += 4;
+            if (net.address.endsWith('.1')) s += 3;
+            if (net.address.startsWith('192.168.')) s += 2;
+            else if (net.address.startsWith('10.') || net.address.startsWith('172.')) s += 1;
+            if (s > bestScore) { bestScore = s; best = net.address; }
+        }
+    }
+    return best;
+}
+app.get('/api/lan-ip', (req, res) => res.json({ ip: jcLanIp() }));
 
 // ─── Bad Pitches audio proxies ────────────────────────────────────────────────
 async function bbProxyAudio(audioUrl, cacheKey, room, res) {

@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
+    <script src="/vendor/qrcode.min.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         body, html { margin:0; padding:0; width:100%; height:100%; background:#050508; overflow:hidden; font-family:sans-serif; overscroll-behavior:none; touch-action:none; }
@@ -618,7 +619,9 @@
     <div class="rl-logo">🎮 JAKECRATE</div>
     <div style="font-family:monospace; color:#556; font-size:0.8em; letter-spacing:3px;">ROOM CODE</div>
     <div class="rl-code" id="rl-code-display">----</div>
-    <div class="rl-hint">Share this code with friends</div>
+    <div id="rl-qr" style="background:#fff;padding:12px;border-radius:14px;margin:12px auto 6px;width:196px;height:196px;display:none;align-items:center;justify-content:center;"></div>
+    <div id="rl-qr-cap" style="font-family:monospace;color:#66708a;font-size:0.68em;letter-spacing:1px;word-break:break-all;max-width:260px;margin:0 auto;"></div>
+    <div class="rl-hint">📷 Scan to join — or share the code</div>
     <div id="rl-players"></div>
     <div id="rl-game-pick">
         <div class="game-card" id="gc-ts" onclick="pickGame('tacostealth')">
@@ -1307,6 +1310,20 @@ socket.on('joinError', ({ message }) => { alert(message); });
 socket.on('connect', () => {
     const savedCode = localStorage.getItem('jc_room');
     const savedName = localStorage.getItem('jc_name');
+    // A scanned invite link (?room=CODE) wins over any previously-saved room.
+    const urlRoom = (new URLSearchParams(location.search).get('room') || '').trim().toUpperCase();
+    if (/^[A-Z0-9]{4}$/.test(urlRoom) && !isJoined) {
+        if (savedName) {
+            playerName = savedName;
+            document.getElementById('hubNameInput').value = savedName;
+            doJoinRoom(urlRoom);
+        } else {
+            show('hub-screen');
+            document.getElementById('hubCodeInput').value = urlRoom;
+            hubShowJoin();
+        }
+        return;
+    }
     if (savedCode && savedName && !isJoined) {
         playerName = savedName;
         document.getElementById('hubNameInput').value = savedName;
@@ -1341,7 +1358,29 @@ function showRoomLobby() {
     hidePodium();
     show('room-lobby');
     document.getElementById('rl-code-display').innerText = currentRoomCode || '----';
+    renderJoinQr();
     isJoined = true;
+}
+
+// Show a scannable QR of the join link (with the room code baked in) so friends can
+// point their camera and land straight on the join screen — works fully offline.
+async function renderJoinQr() {
+    const box = document.getElementById('rl-qr');
+    const cap = document.getElementById('rl-qr-cap');
+    if (!box || !currentRoomCode || typeof QRCode === 'undefined') return;
+    let origin = window.location.origin;
+    // If the host opened the page via localhost, swap in the LAN IP others can reach.
+    if (/\/\/(localhost|127\.|0\.0\.0\.0)/.test(origin)) {
+        try {
+            const { ip } = await (await fetch('/api/lan-ip')).json();
+            if (ip && ip !== '127.0.0.1') origin = `http://${ip}:${location.port || '3000'}`;
+        } catch (_) {}
+    }
+    const url = `${origin}/?room=${currentRoomCode}`;
+    box.style.display = 'flex';
+    box.innerHTML = '';
+    new QRCode(box, { text: url, width: 172, height: 172, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+    if (cap) cap.textContent = url.replace(/^https?:\/\//, '');
 }
 
 function pickGame(gameId) {
