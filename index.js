@@ -580,91 +580,67 @@ function ts_startSeeking(room) {
 
 // ─── Stroke Off game logic ────────────────────────────────────────────────────
 
+// All images are local files under public/memes/ (committed to the repo — small enough that a
+// gitignored cache-build step like Bad Pitches' audio isn't needed). Previously these were live
+// hotlinks to i.imgflip.com; one (This Is Fine) had already gone dead (404 via Cloudflare) by the
+// time this was checked, silently breaking that meme in-game with no error surfaced anywhere.
+// Local files fix reliability, rendering consistency, AND offline/Spawnpoint play in one move.
 const PAINTINGS = [
-    {
-        title: 'Distracted Boyfriend', artist: 'Antonio Guillem · 2017',
-        imageUrl: 'https://i.imgflip.com/1ur9b0.jpg',
-        parts: ['the boyfriend turning his head to look','his girlfriend\'s horrified expression beside him','the attractive woman he\'s looking at','the boyfriend\'s outstretched arm','the woman\'s red outfit','the background street and parked cars','the girlfriend\'s hand on her hip','the boyfriend\'s blue t-shirt'],
-    },
-    {
-        title: 'Drake Approving / Disapproving', artist: 'Hotline Bling · 2016',
-        imageUrl: 'https://i.imgflip.com/30b1gx.jpg',
-        parts: ['top panel: Drake\'s dismissive hand wave','top panel: Drake\'s disgusted side-eye','bottom panel: Drake\'s pointing finger','bottom panel: Drake\'s approving smile','Drake\'s turtleneck and chain','the warm yellow-brown background','the horizontal dividing line between panels','Drake\'s relaxed body language (bottom)'],
-    },
-    {
-        title: 'Woman Yelling at Cat', artist: 'Real Housewives · 2019',
-        imageUrl: 'https://i.imgflip.com/345v97.jpg',
-        parts: ['the blonde woman pointing and yelling','the woman behind her gesturing','the white cat sitting at the dinner table','the cat\'s flat unimpressed face','the salad plate in front of the cat','the split-screen dividing line','the women\'s dramatic expressions','the cat\'s small front paws on the table'],
-    },
-    {
-        title: 'This Is Fine', artist: 'K.C. Green · 2013',
-        imageUrl: 'https://i.imgflip.com/wx5xt.jpg',
-        parts: ['the dog sitting calmly at the table','the coffee mug in the dog\'s hand/paw','the orange flames surrounding the room','the burning chair the dog sits on','the dog\'s little hat','the dog\'s calm smiling face','the room\'s flaming walls and ceiling','the open window with fire outside'],
-    },
-    {
-        title: 'Two Buttons', artist: 'Jake Clark · 2016',
-        imageUrl: 'https://i.imgflip.com/1g8my4.jpg',
-        parts: ['the sweating man\'s panicked face','the left red button','the right red button','the man\'s hovering uncertain hand','the sweat dripping down his forehead','the man\'s wide stressed eyes','the button panel and controls','the man\'s collared shirt'],
-    },
-    {
-        title: 'Spider-Man Pointing', artist: 'Spider-Man TV · 1967',
-        imageUrl: 'https://i.imgflip.com/1yxkcp.jpg',
-        parts: ['left Spider-Man pointing to the right','right Spider-Man pointing to the left','the web-shooter on left Spidey\'s wrist','the web-shooter on right Spidey\'s wrist','the two pointing index fingers','the red-and-blue costumes','the background setting','both Spideys\' face lenses'],
-    },
-    {
-        title: 'Change My Mind', artist: 'Steven Crowder · 2018',
-        imageUrl: 'https://i.imgflip.com/24y43o.jpg',
-        parts: ['the man sitting at the folding table','the printed sign on the table','the man\'s crossed arms','the man\'s baseball cap','the outdoor street background','the folding table metal legs','the coffee cup to the side','the man\'s challenging expression'],
-    },
-    {
-        title: 'Surprised Pikachu', artist: 'Pokémon Anime · 2018',
-        imageUrl: 'https://i.imgflip.com/3oevdk.jpg',
-        parts: ['Pikachu\'s wide-open O-shaped mouth','Pikachu\'s huge round black eyes','the red circle cheek patches','the yellow pointed ears with black tips','Pikachu\'s small stubby arms raised','the pudgy yellow body','the brown stripe markings on back','the blank background'],
-    },
-    {
-        title: 'Gru\'s Plan', artist: 'Despicable Me · 2010',
-        imageUrl: 'https://i.imgflip.com/26am.jpg',
-        parts: ['Gru pointing approvingly at panel 1','Gru pointing approvingly at panel 2','Gru\'s confused stare at panel 3 (same as panel 1)','the plan board with written steps','Gru\'s yellow scarf','Gru\'s long bald elongated head','Gru\'s overalls and boots','the four-panel grid layout'],
-    },
-    {
-        title: 'Expanding Brain', artist: 'Internet · 2017',
-        imageUrl: 'https://i.imgflip.com/1jwhww.jpg',
-        parts: ['the small dim brain in panel 1','the slightly glowing brain in panel 2','the brightly lit brain in panel 3','the massive galaxy-filled brain in panel 4','the glowing light halo effects','the panel borders and layout','the text area beside each brain','the increasing radiance from top to bottom'],
-    },
-    {
-        title: 'Disaster Girl', artist: 'Dave Roth · 2007',
-        imageUrl: 'https://i.imgflip.com/23ls.jpg',
-        parts: ['the young girl\'s evil sideways smirk','the girl looking directly at the camera','the burning house in the background','the firefighters battling the blaze','the fire hose and water stream','the orange flames on the house','the suburban street setting','the girl\'s braided pigtails'],
-    },
-    {
-        title: 'Doge', artist: 'Kabosu the Shiba · 2013',
-        imageUrl: 'https://upload.wikimedia.org/wikipedia/en/5/5f/Original_Doge_meme.jpg',
-        parts: ['the dog\'s iconic sideways glance','the dog\'s fluffy ruff around the face','the multicolored Comic Sans text floating around','the dog\'s perky pointed ears','the blurry couch/furniture background','the dog\'s visible front paws','the dog\'s small black nose and snout','the dog\'s fluffy body and coat'],
-    },
-    {
-        title: 'One Does Not Simply', artist: 'Lord of the Rings · 2001',
-        imageUrl: 'https://i.imgflip.com/1bij.jpg',
-        parts: ['Boromir\'s serious stern face','his hand raised in a cautionary gesture','his dark wavy hair','his chainmail and armor','his brown travel cloak','his beard and facial features','the dark stone background of Rivendell','his wide-set earnest eyes'],
-    },
-    {
-        title: 'Success Kid', artist: 'Sammy Griner · 2007',
-        imageUrl: 'https://i.imgflip.com/1bhf.jpg',
-        parts: ['the baby\'s triumphant raised fist','the sand clenched in his little fist','the baby\'s determined scrunched expression','his furrowed chubby brow','the beach sand in the background','the ocean water behind him','the baby\'s round chubby cheeks','his tiny clenched fingers'],
-    },
-    {
-        title: 'Bad Luck Brian', artist: 'Kyle Craven · 2012',
-        imageUrl: 'https://i.imgflip.com/1bik.jpg',
-        parts: ['Brian\'s awkward wide forced smile','his large gap-toothed grin','his plaid vest over a collared shirt','his wild reddish hair','his thick-rimmed glasses','the school photo blue background','his braces visible in the smile','his overall dorky yearbook expression'],
-    },
-    {
-        title: 'That Would Be Great', artist: 'Office Space · 1999',
-        imageUrl: 'https://i.imgflip.com/1bh8.jpg',
-        parts: ['Bill\'s passive-aggressive smug grin','his steepled fingers pressed together','his glasses pushed up on his nose','his business casual striped tie','his blue collared shirt','the office cubicle wall background','his eyebrows raised expectantly','his coffee mug held in one hand'],
-    },
+    { title: 'Distracted Boyfriend', artist: 'Antonio Guillem · 2017', imageUrl: '/memes/distracted-boyfriend.jpg' },
+    { title: 'Drake Approving / Disapproving', artist: 'Hotline Bling · 2016', imageUrl: '/memes/drake.jpg' },
+    { title: 'Woman Yelling at Cat', artist: 'Real Housewives · 2019', imageUrl: '/memes/woman-yelling-at-cat.jpg' },
+    { title: 'This Is Fine', artist: 'K.C. Green · 2013', imageUrl: '/memes/this-is-fine.jpg' },
+    { title: 'Two Buttons', artist: 'Jake Clark · 2016', imageUrl: '/memes/two-buttons.jpg' },
+    { title: 'Spider-Man Pointing', artist: 'Spider-Man TV · 1967', imageUrl: '/memes/spiderman-pointing.jpg' },
+    { title: 'Change My Mind', artist: 'Steven Crowder · 2018', imageUrl: '/memes/change-my-mind.jpg' },
+    { title: 'Surprised Pikachu', artist: 'Pokémon Anime · 2018', imageUrl: '/memes/surprised-pikachu.jpg' },
+    { title: 'Gru\'s Plan', artist: 'Despicable Me · 2010', imageUrl: '/memes/grus-plan.jpg' },
+    { title: 'Expanding Brain', artist: 'Internet · 2017', imageUrl: '/memes/expanding-brain.jpg' },
+    { title: 'Disaster Girl', artist: 'Dave Roth · 2007', imageUrl: '/memes/disaster-girl.jpg' },
+    { title: 'Doge', artist: 'Kabosu the Shiba · 2013', imageUrl: '/memes/doge.jpg' },
+    { title: 'One Does Not Simply', artist: 'Lord of the Rings · 2001', imageUrl: '/memes/one-does-not-simply.jpg' },
+    { title: 'Success Kid', artist: 'Sammy Griner · 2007', imageUrl: '/memes/success-kid.jpg' },
+    { title: 'Bad Luck Brian', artist: 'Kyle Craven · 2012', imageUrl: '/memes/bad-luck-brian.jpg' },
+    { title: 'That Would Be Great', artist: 'Office Space · 1999', imageUrl: '/memes/that-would-be-great.jpg' },
+    { title: 'Roll Safe', artist: 'Ted Kalidis · 2015', imageUrl: '/memes/roll-safe.jpg' },
+    { title: 'Hide the Pain Harold', artist: 'András Arató · 2011', imageUrl: '/memes/hide-the-pain-harold.jpg' },
+    { title: 'Mocking SpongeBob', artist: 'SpongeBob SquarePants · 2017', imageUrl: '/memes/mocking-spongebob.jpg' },
+    { title: 'Ancient Aliens Guy', artist: 'Ancient Aliens (History Channel) · 2010', imageUrl: '/memes/ancient-aliens.jpg' },
+    { title: 'Is This a Pigeon', artist: 'The Brave Police: Patlabor · 2018', imageUrl: '/memes/is-this-a-pigeon.jpg' },
+    { title: 'Y U No', artist: 'Internet · 2011', imageUrl: '/memes/y-u-no.jpg' },
+    { title: 'Grumpy Cat', artist: 'Tardar Sauce · 2012', imageUrl: '/memes/grumpy-cat.jpg' },
+    { title: 'Philosoraptor', artist: 'Internet · 2008', imageUrl: '/memes/philosoraptor.jpg' },
+    { title: 'Epic Handshake', artist: 'Internet · 2013', imageUrl: '/memes/epic-handshake.jpg' },
+    { title: 'Waiting Skeleton', artist: 'Internet · 2013', imageUrl: '/memes/waiting-skeleton.jpg' },
+    { title: 'First World Problems', artist: 'Internet · 2012', imageUrl: '/memes/first-world-problems.jpg' },
+    { title: 'Unsettled Tom', artist: 'Tom and Jerry · 2020', imageUrl: '/memes/unsettled-tom.jpg' },
 ];
 
 const MEMORIZE_SECONDS = 20;
 const DRAW_SECONDS = 75;
+
+// Divides the image into just enough grid cells for `n` real players — never fewer than needed,
+// so no two players are ever assigned the same fragment (the old hardcoded-8-parts array used to
+// wrap via modulo past 8 players, silently handing out duplicate fragments and breaking the
+// deception mechanic). Cell fractions (0-1) are resolution-independent; the client multiplies by
+// whatever size the image actually renders at.
+function so_computeGrid(n) {
+    n = Math.max(1, n);
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+    const cells = [];
+    for (let r = 0; r < rows && cells.length < n; r++) {
+        for (let c = 0; c < cols && cells.length < n; c++) {
+            cells.push({ x: c / cols, y: r / rows, w: 1 / cols, h: 1 / rows, label: so_cellLabel(r, c, rows, cols) });
+        }
+    }
+    return cells;
+}
+function so_cellLabel(r, c, rows, cols) {
+    const v = rows <= 1 ? '' : r === 0 ? 'top' : r === rows - 1 ? 'bottom' : 'middle';
+    const h = cols <= 1 ? '' : c === 0 ? 'left' : c === cols - 1 ? 'right' : 'center';
+    return [v, h].filter(Boolean).join('-') || 'center';
+}
 
 function so_startDrawing(room, fakeId) {
     const painting = PAINTINGS[Math.random() * PAINTINGS.length | 0];
@@ -677,20 +653,32 @@ function so_startDrawing(room, fakeId) {
     room.strokePhase = 'MEMORIZE';
     room.strokePlayerParts = {};
 
-    // Assign one part per real player; wrap if more players than parts
-    let partIndex = 0;
-    Object.keys(room.players).forEach(sid => {
-        if (sid === fakeId) { room.strokePlayerParts[sid] = '???'; }
-        else { room.strokePlayerParts[sid] = painting.parts[partIndex++ % painting.parts.length]; }
-    });
+    // One grid cell per real player — always enough cells, so fragments never repeat.
+    const realIds = Object.keys(room.players).filter(sid => sid !== fakeId);
+    const grid = so_computeGrid(realIds.length);
+    realIds.forEach((sid, i) => { room.strokePlayerParts[sid] = grid[i]; });
 
-    // Send painting + individual part to each player
+    // The fake gets the exact same UI treatment (a highlighted fragment to study and draw) so
+    // there's no "blank prompt" tell in the interface itself — but their fragment is silently
+    // pulled from a DIFFERENT, randomly chosen meme. They confidently draw something plausible
+    // that just won't quite match anything in the real image once everyone's work is compared
+    // during voting — a real (if subtle) mismatch to catch, instead of an obvious empty slot.
+    if (fakeId) {
+        const decoyPool = PAINTINGS.filter(p => p !== painting);
+        const decoyPainting = decoyPool.length ? decoyPool[Math.random() * decoyPool.length | 0] : painting;
+        const decoyGrid = so_computeGrid(Math.max(1, realIds.length));
+        const decoyCell = decoyGrid[Math.random() * decoyGrid.length | 0];
+        room.strokePlayerParts[fakeId] = { ...decoyCell, decoyImageUrl: decoyPainting.imageUrl, isFake: true };
+    }
+
+    // Send painting + individual part to each player (the fake's imageUrl points at the decoy)
     Object.keys(room.players).forEach(sid => {
+        const part = room.strokePlayerParts[sid];
         io.to(sid).emit('soShowPainting', {
-            imageUrl: painting.imageUrl,
+            imageUrl: (part && part.isFake) ? part.decoyImageUrl : painting.imageUrl,
             title: painting.title,
             artist: painting.artist,
-            yourPart: room.strokePlayerParts[sid],
+            yourPart: part || null,
             memorizeSeconds: MEMORIZE_SECONDS,
         });
     });
@@ -707,7 +695,7 @@ function so_beginDrawing(room) {
     Object.keys(room.players).forEach(sid => {
         io.to(sid).emit('soBeginDrawing', {
             prompt: room.strokePrompt,
-            part: room.strokePlayerParts[sid] || '???',
+            part: room.strokePlayerParts[sid] || null,
         });
     });
 
@@ -874,6 +862,31 @@ const SQ_PROMPTS = [
     "What your GPS is thinking right now",
     "A knockoff version of a famous cartoon character",
     "The group chat's most unhinged member, as an animal",
+    "A wizard's Yelp review",
+    "Two rocks in a committed relationship",
+    "A sneeze, caught mid-sneeze",
+    "The forbidden button nobody should press",
+    "A staring contest between a cat and a vacuum",
+    "Grandma's secret weapon",
+    "A hug between mortal enemies",
+    "The last slice of pizza, having feelings about it",
+    "A traffic cone living its best life",
+    "Two socks that lost their match, years later",
+    "A snowman's summer vacation photo",
+    "The bravest squirrel in recorded history",
+    "A handshake that has gone on way too long",
+    "Your alarm clock, plotting its revenge",
+    "A tiny, personal apocalypse",
+    "The tooth fairy's side hustle",
+    "A cloud filing a formal complaint",
+    "Two strangers who just made unbearable eye contact",
+    "A doorbell that regrets its life choices",
+    "The world's least convincing disguise",
+    "A fork that has simply given up",
+    "Someone's houseplant staging a coup",
+    "A pigeon with a business plan",
+    "The last balloon at the party, alone",
+    "A high-five gone horribly wrong",
 ];
 
 // Canvas is a tall portrait rect (450x800) — the renderer (sqDrawSquiggle in public/index.html)
