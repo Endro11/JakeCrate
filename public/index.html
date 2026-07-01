@@ -95,8 +95,11 @@
         #poke-counter, #vp-points-hud { position:absolute; top:calc(88px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:10; font-family:monospace; font-weight:bold; pointer-events:none; text-align:center; white-space:nowrap; }
         #poke-counter { color:#ff5252; font-size:1em; text-shadow:0 0 8px rgba(255,60,60,0.6),1px 1px 2px #000; }
         #vp-points-hud { color:#ffeb3b; font-size:1.15em; text-shadow:0 0 10px rgba(255,200,0,0.8),1px 1px 2px #000; }
-        /* Find Me — its own button on the right, lower down (out of the top clutter) */
-        #findMeBtn { position:absolute; right:calc(6px + env(safe-area-inset-right)); top:60%; z-index:10; flex-grow:0; padding:9px 12px; background:rgba(25,25,30,0.92); color:#fff; border:1px solid #555; border-radius:10px; font-size:0.78em; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.6); }
+        /* Find Me — bottom-right corner, above the bottom dock. Anchored to the bottom (not a
+           top:% offset) so it stays clear of #float-tools regardless of screen height — float-tools
+           is pinned to top:50% and its footprint is a fixed pixel height, so a percentage-based
+           position for this button could land inside it on shorter screens (that was the bug). */
+        #findMeBtn { position:absolute; right:calc(6px + env(safe-area-inset-right)); bottom:calc(64px + env(safe-area-inset-bottom)); z-index:10; flex-grow:0; padding:9px 12px; background:rgba(25,25,30,0.92); color:#fff; border:1px solid #555; border-radius:10px; font-size:0.78em; font-weight:bold; box-shadow:0 2px 8px rgba(0,0,0,0.6); }
 
         /* ── TacoStealth UI ── */
         button, .btn-custom { padding:10px; font-weight:bold; cursor:pointer; border:none; border-radius:6px; background:#333; color:#fff; font-size:0.85em; flex-grow:1; text-align:center; text-transform:uppercase; user-select:none; -webkit-user-select:none; }
@@ -2198,8 +2201,16 @@ function brushStep(d){
     updateBrushPreview();
 }
 let drawerOpen=false;
-function toggleDrawer(){ drawerOpen=!drawerOpen; document.getElementById('ts-drawer').style.display=drawerOpen?'flex':'none'; document.getElementById('drawerToggle').textContent=drawerOpen?'✕':'🧰'; }
-function closeDrawer(){ drawerOpen=false; document.getElementById('ts-drawer').style.display='none'; document.getElementById('drawerToggle').textContent='🧰'; }
+function toggleDrawer(){
+    drawerOpen=!drawerOpen;
+    document.getElementById('ts-drawer').style.display=drawerOpen?'flex':'none';
+    document.getElementById('drawerToggle').textContent=drawerOpen?'✕':'🧰';
+    // The open drawer's footprint can reach the findMeBtn corner on narrow/short screens — hide it
+    // while the drawer is open rather than fight over the same space, restore via the normal
+    // visibility rules (role/phase/etc) on close instead of assuming it should always come back.
+    if (drawerOpen) document.getElementById('findMeBtn').style.display='none'; else applyChromeVisibility();
+}
+function closeDrawer(){ drawerOpen=false; document.getElementById('ts-drawer').style.display='none'; document.getElementById('drawerToggle').textContent='🧰'; applyChromeVisibility(); }
 function toggleReactRow(){ const r=document.getElementById('react-row'); r.style.display=(r.style.display==='flex')?'none':'flex'; }
 
 let tsLocked=false;
