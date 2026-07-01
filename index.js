@@ -1469,7 +1469,8 @@ function bb_parseDuration(len) {
 async function bb_fetchBatch(n, drumOnly = false) {
     const api = 'https://archive.org/advancedsearch.php';
     const drumFilter = drumOnly ? ' AND (title:drum OR title:rhythm OR subject:percussion)' : '';
-    const q = `collection:georgeblood AND mediatype:audio${drumFilter}`;
+    const genreFilter = drumOnly ? '' : ' AND (subject:blues OR subject:"rhythm and blues" OR subject:gospel OR subject:boogie OR subject:jazz) AND NOT subject:(waltz OR "military band" OR "dance orchestra" OR christmas OR children OR symphony)';
+    const q = `collection:georgeblood AND mediatype:audio${drumFilter}${genreFilter}`;
     const enc = encodeURIComponent(q);
     const results = [];
 
@@ -1519,8 +1520,8 @@ async function bb_fetchBatch(n, drumOnly = false) {
     return results;
 }
 
-// ── Pre-fetched jazz sample pool — filled on startup and refreshed every 2 hours ──
-const bbSamplePool = []; // jazz/blues vinyl records
+// ── Pre-fetched sample pool — filled on startup and refreshed every 2 hours ──
+const bbSamplePool = []; // blues / gospel / boogie / bebop-jazz 78s
 
 async function bb_refreshPool() {
     console.log('[BB] refreshing sample pool…');
