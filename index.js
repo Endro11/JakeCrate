@@ -8,7 +8,7 @@ const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 5e7 }); // 50MB for photo uploads
+const io = new Server(server, { maxHttpBufferSize: 8e6 }); // 8MB cap per message (was 50MB — DoS surface)
 
 app.use(express.static('public'));
 
@@ -46,6 +46,40 @@ function jcLanIp() {
     return best;
 }
 app.get('/api/lan-ip', (req, res) => res.json({ ip: jcLanIp() }));
+
+// ─── Input sanitation (XSS + oversized-upload hardening) ───────────────────────
+// Player-controlled fields are the attack surface: names/colors get rendered and
+// media gets stored in RAM. Clamp everything at the trust boundary (here) so the
+// rest of the server — and every client render site — can treat them as safe.
+function sanitizeName(raw) {
+    let out = '';
+    for (const ch of String(raw ?? '')) {
+        const code = ch.codePointAt(0);
+        if (code < 0x20 || code === 0x7f) continue;                 // drop control chars
+        if (ch === '<' || ch === '>' || ch === '"' || ch === '`') continue; // drop HTML-danger chars
+        out += ch;
+    }
+    return out.trim().slice(0, 16) || 'Player';
+}
+const COLOR_RE = /^(#[0-9a-f]{3,8}|rgb\(\s*\d{1,3}(\s*,\s*\d{1,3}){2}\s*\)|hsl\(\s*\d{1,3}(\.\d+)?\s*,\s*\d{1,3}(\.\d+)?%\s*,\s*\d{1,3}(\.\d+)?%\s*\))$/i;
+function validColor(c, fallback = '#8ab4f8') {
+    return (typeof c === 'string' && COLOR_RE.test(c.trim())) ? c.trim() : fallback;
+}
+// dataURL guard: correct MIME family + within a hard byte ceiling (string length ≈ bytes).
+function validDataUrl(s, kind, maxBytes) {
+    return typeof s === 'string' && s.startsWith(`data:${kind}/`) && s.length <= maxBytes;
+}
+// Coerce a drawing stroke to safe primitives (finite coords, clamped brush, valid color).
+function sanitizeStroke(stroke, socketId) {
+    const n = v => (Number.isFinite(v) ? v : 0);
+    return {
+        socketId, x1: n(stroke.x1), y1: n(stroke.y1), x2: n(stroke.x2), y2: n(stroke.y2),
+        color: validColor(stroke.color, '#000'),
+        size: Math.min(Math.max(Number(stroke.size) || 2, 1), 80),
+        t: Date.now(), gid: stroke.gid || 0,
+    };
+}
+const STROKE_CAP = 6000; // max strokes retained per drawing surface (spam/DoS guard)
 
 // ─── Bad Pitches audio proxies ────────────────────────────────────────────────
 async function bbProxyAudio(audioUrl, cacheKey, room, res) {
@@ -2235,10 +2269,10 @@ io.on('connection', (socket) => {
 
         room.players[socket.id] = {
             id: socket.id, token,
-            name: playerData.name,
+            name: sanitizeName(playerData.name),
             x: typeof playerData.x === 'number' ? playerData.x : 500,
             y: typeof playerData.y === 'number' ? playerData.y : 279,
-            color: playerData.color,
+            color: validColor(playerData.color),
             pose: playerData.pose,
             isDead: restored.isDead,
         };
@@ -2337,13 +2371,13 @@ io.on('connection', (socket) => {
         if (typeof data.x === 'number') room.players[socket.id].x = data.x;
         if (typeof data.y === 'number') room.players[socket.id].y = data.y;
         room.players[socket.id].pose = data.pose;
-        room.players[socket.id].color = data.color;
+        room.players[socket.id].color = validColor(data.color, room.players[socket.id].color);
         socket.broadcast.to(room.code).emit('updatePlayers', room.players);
     });
 
     socket.on('avatarUpdate', ({ avatar }) => {
         const room = socketRoom(socket);
-        if (!room || !room.players[socket.id] || typeof avatar !== 'string') return;
+        if (!room || !room.players[socket.id] || !validDataUrl(avatar, 'image', 1.5 * 1024 * 1024)) return;
         room.avatars[socket.id] = avatar;
         socket.broadcast.to(room.code).emit('playerAvatar', { id: socket.id, avatar });
     });
@@ -2354,7 +2388,8 @@ io.on('connection', (socket) => {
         const now = Date.now();
         if (room.lastReactionTimes[socket.id] && now - room.lastReactionTimes[socket.id] < 2500) return;
         room.lastReactionTimes[socket.id] = now;
-        broadcastRoom(room, 'emojiReaction', { emoji: data.emoji, name: data.name });
+        // Broadcast the SERVER-stored name, never the client-sent one (XSS side channel).
+        broadcastRoom(room, 'emojiReaction', { emoji: String(data.emoji || '').slice(0, 32), name: room.players[socket.id]?.name || 'Someone' });
     });
 
     socket.on('claimHost', (token) => {
@@ -2373,7 +2408,7 @@ io.on('connection', (socket) => {
     socket.on('volunteerSeeker', (data) => {
         const room = socketRoom(socket);
         if (!room) return;
-        broadcastRoom(room, 'seekerVolunteer', { name: data.name });
+        broadcastRoom(room, 'seekerVolunteer', { name: room.players[socket.id]?.name || 'Someone' });
     });
 
     // ── Taco Stealth events ───────────────────────────────────────────────────
@@ -2381,9 +2416,10 @@ io.on('connection', (socket) => {
     socket.on('hostMap', ({ feedIndex, dataUrl, name }) => {
         const room = socketRoom(socket);
         if (!room || !isHost(room, socket)) return;
+        if (!validDataUrl(dataUrl, 'image', 4 * 1024 * 1024)) return;
         room.feedMaps[feedIndex] = dataUrl;
-        if (name) room.feedNames[feedIndex] = name;
-        socket.broadcast.to(room.code).emit('loadMap', { feedIndex, dataUrl, name });
+        if (name) room.feedNames[feedIndex] = sanitizeName(name);
+        socket.broadcast.to(room.code).emit('loadMap', { feedIndex, dataUrl, name: room.feedNames[feedIndex] });
     });
 
     socket.on('suggestPhoto', ({ dataUrl, from }) => {
@@ -2393,7 +2429,7 @@ io.on('connection', (socket) => {
         const entry = { dataUrl, from: (from || 'Someone').slice(0, 16) };
         room.suggestedPhotos.push(entry);
         if (room.suggestedPhotos.length > 4) room.suggestedPhotos.shift();
-        const hostSock = io.sockets.sockets.get(room.host);
+        const hostSock = io.sockets.sockets.get(room.hostSocketId);
         if (hostSock) hostSock.emit('photoSuggested', { from: entry.from, dataUrl: entry.dataUrl });
     });
 
@@ -2542,7 +2578,8 @@ io.on('connection', (socket) => {
     socket.on('soStroke', (stroke) => {
         const room = socketRoom(socket);
         if (!room || room.strokePhase !== 'DRAWING') return;
-        const s = { socketId: socket.id, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2, color: stroke.color, size: stroke.size, t: Date.now(), gid: stroke.gid || 0 };
+        if (room.strokeHistory.length >= STROKE_CAP) return;
+        const s = sanitizeStroke(stroke, socket.id);
         room.strokeHistory.push(s);
         socket.broadcast.to(room.code).emit('soStroke', s);
     });
@@ -2596,7 +2633,8 @@ io.on('connection', (socket) => {
         const room = socketRoom(socket);
         if (!room || room.sqPhase !== 'DRAW') return;
         if (!room.sqHistories[socket.id]) room.sqHistories[socket.id] = [];
-        const s = { socketId: socket.id, x1: stroke.x1, y1: stroke.y1, x2: stroke.x2, y2: stroke.y2, color: stroke.color, size: stroke.size, t: Date.now(), gid: stroke.gid || 0 };
+        if (room.sqHistories[socket.id].length >= STROKE_CAP) return;
+        const s = sanitizeStroke(stroke, socket.id);
         room.sqHistories[socket.id].push(s);
     });
 
@@ -2641,7 +2679,7 @@ io.on('connection', (socket) => {
             io.to(socket.id).emit('ppUploadError', { msg: 'No photos received — try again.' });
             return;
         }
-        let finalPhotos = photos.slice(0, 7);
+        let finalPhotos = photos.filter(p => validDataUrl(p, 'image', 800 * 1024)).slice(0, 7);
         while (finalPhotos.length < 7) {
             finalPhotos.push(PP_CURATED[Math.floor(Math.random() * PP_CURATED.length)]);
         }
@@ -2813,7 +2851,7 @@ io.on('connection', (socket) => {
     socket.on('bbSubmitRecordings', ({ sounds }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'RECORD') return;
-        room.bbRecordings[socket.id] = (sounds || []).slice(0, 3); // array of up to 3 dataUrls
+        room.bbRecordings[socket.id] = (sounds || []).filter(s => validDataUrl(s, 'audio', 1.6 * 1024 * 1024)).slice(0, 3); // ≤3 audio dataUrls
         broadcastRoom(room, 'bbRecordingIn', { playerId: socket.id });
         const ids = Object.keys(room.players);
         if (ids.every(id => room.bbRecordings[id])) {
@@ -2825,6 +2863,7 @@ io.on('connection', (socket) => {
     socket.on('bbSubmitBeat', ({ slots, slotLen }) => {
         const room = socketRoom(socket);
         if (!room || room.bbPhase !== 'BUILD') return;
+        if (JSON.stringify(slots || []).length > 24 * 1024) return; // reject oversized beat payloads
         room.bbBeats[socket.id] = {
             slots: slots || [{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true}],
             slotLen: slotLen || 4,

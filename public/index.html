@@ -1482,13 +1482,13 @@ function showPodium(entries, opts = {}) {
         const col = document.createElement('div');
         col.className = `podium-col podium-${idx + 1}`;
         col.innerHTML = `<div class="podium-medal">${medals[idx]}</div>
-            <div class="podium-name">${e.name}</div>
+            <div class="podium-name">${escapeHtml(e.name)}</div>
             <div class="podium-score">${lbl(e)}</div>
             <div class="podium-bar"><span class="podium-place">${idx + 1}</span></div>`;
         stage.appendChild(col);
     });
     document.getElementById('podium-rest').innerHTML = list.slice(3).map((e, i) =>
-        `<div class="podium-rest-row"><span><span class="pr-rank">${i + 4}</span>${e.name}</span><span class="pr-score">${lbl(e)}</span></div>`
+        `<div class="podium-rest-row"><span><span class="pr-rank">${i + 4}</span>${escapeHtml(e.name)}</span><span class="pr-score">${lbl(e)}</span></div>`
     ).join('');
     document.getElementById('podium-overlay').classList.add('open');
 }
@@ -1544,7 +1544,7 @@ function renderRoomLobby() {
             const chipStyle = p.disconnected ? ' style="opacity:0.5"' : '';
             const kickBtn = (isRoomHost && !isMe) ? ` <button class="kick-btn" onclick="kickPlayer('${p.id}')" title="Remove player">✕</button>` : '';
             const passBtn = (isRoomHost && !isMe && !p.disconnected) ? ` <button class="kick-btn" onclick="socket.emit('passHost',{targetId:'${p.id}'})" title="Pass host crown" style="background:#7c4dff;">👑</button>` : '';
-            return `<div class="lobby-chip"${chipStyle}>${playerBadge(p.token,p.name)} ${isMe ? '⭐ ' : ''}${p.name}${offline}${passBtn}${kickBtn}</div>`;
+            return `<div class="lobby-chip"${chipStyle}>${playerBadge(p.token,p.name)} ${isMe ? '⭐ ' : ''}${escapeHtml(p.name)}${offline}${passBtn}${kickBtn}</div>`;
           }).join('')
         : '<div class="lobby-chip" style="opacity:.6">No one here yet…</div>';
 
@@ -1938,9 +1938,14 @@ function setCamTitle() {
 function hashHue(s) { let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h%360; }
 const FOOD_HEADS = ['🌮','🌯','🥤','🧃','🌶️','🧀','🥑','🌽','🫔','🍅','🧅','🥬'];
 function foodHead(token) { return FOOD_HEADS[hashHue(token||'')%FOOD_HEADS.length]; }
+// Escape user-controlled text before it goes into innerHTML (defense-in-depth;
+// the server also sanitizes names, but this stops any render site we might miss).
+function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 function playerBadge(token, name) {
     const hue = hashHue(token || '');
-    return `<span class="pavt" style="background:hsl(${hue},62%,42%);">${(name||'?')[0].toUpperCase()}</span>`;
+    return `<span class="pavt" style="background:hsl(${hue},62%,42%);">${escapeHtml((name||'?')[0].toUpperCase())}</span>`;
 }
 let cHue = hashHue(myToken), cSat = 80, cLight = 55, activeColor = `hsl(${cHue},${cSat}%,${cLight}%)`;
 let showBrushPreview = false, brushPreviewTimeout;
@@ -2089,7 +2094,7 @@ function toggleSettingsModal(show) {
     if (show) {
         socket.emit('claimHost', myToken);
         const sel = document.getElementById('seekerName'), prev = sel.value, list = Object.values(otherPlayers);
-        sel.innerHTML = '<option value="">— PICK —</option>' + list.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        sel.innerHTML = '<option value="">— PICK —</option>' + list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
         if (prev && list.some(p => p.id === prev)) sel.value = prev;
         if (!bg) loadSampleBg('kitchen', 'TACO BELL');
         renderPhotoPool();
@@ -2314,7 +2319,7 @@ function dismissOnboarding(){document.getElementById('onboarding').style.display
 // Reactions
 let lastReactionTime=0;
 function sendReaction(emoji){if(!isJoined)return;const now=Date.now();if(now-lastReactionTime<2500)return;lastReactionTime=now;const row=document.getElementById('react-row');row.style.opacity='0.35';row.style.pointerEvents='none';setTimeout(()=>{row.style.opacity='1';row.style.pointerEvents='';},2500);socket.emit('emojiReaction',{emoji,name:playerName});}
-socket.on('emojiReaction',({emoji,name})=>{const el=document.createElement('div');el.className='emoji-bubble';el.innerHTML=`${emoji}<span class="eb-name">${name}</span>`;el.style.left=(80+Math.random()*(window.innerWidth-160))+'px';el.style.bottom='180px';document.body.appendChild(el);setTimeout(()=>el.remove(),3000);});
+socket.on('emojiReaction',({emoji,name})=>{const el=document.createElement('div');el.className='emoji-bubble';el.innerHTML=`${escapeHtml(emoji)}<span class="eb-name">${escapeHtml(name)}</span>`;el.style.left=(80+Math.random()*(window.innerWidth-160))+'px';el.style.bottom='180px';document.body.appendChild(el);setTimeout(()=>el.remove(),3000);});
 
 // ── Main render loop ──────────────────────────────────────────────────────
 function loop(){
@@ -2771,7 +2776,7 @@ socket.on('soRevealBegin', ({ history, players, prompt, emoji }) => {
 socket.on('soRevealNext', ({ player, idx, total }) => {
     if (soRevealAnimInterval) { clearInterval(soRevealAnimInterval); soRevealAnimInterval = null; }
     // No canvas clear — strokes accumulate to build the full picture
-    document.getElementById('so-reveal-player-name').innerHTML = `${playerBadge(player.token,player.name)} ${player.name}  [${idx + 1}/${total}]`;
+    document.getElementById('so-reveal-player-name').innerHTML = `${playerBadge(player.token,player.name)} ${escapeHtml(player.name)}  [${idx + 1}/${total}]`;
     document.getElementById('so-reveal-hint').innerText = 'Painting…';
 
     const strokes = (soRevealHistory || []).filter(s => s.socketId === player.id);
@@ -2805,7 +2810,7 @@ socket.on('soVoteOpen', ({ players, prompt, emoji, timeLeft }) => {
     // Color-coded buttons matching each player's stroke color
     document.getElementById('so-vote-list').innerHTML = players.map(p => {
         const color = soGetPlayerColor(p.id);
-        return `<button class="so-vote-btn" onclick="soVote('${p.id}')" data-pid="${p.id}" style="border-color:${color};box-shadow:0 0 0 1px ${color}22 inset;"><span style="color:${color};margin-right:3px;">●</span>${playerBadge(p.token,p.name)} ${p.name}</button>`;
+        return `<button class="so-vote-btn" onclick="soVote('${p.id}')" data-pid="${p.id}" style="border-color:${color};box-shadow:0 0 0 1px ${color}22 inset;"><span style="color:${color};margin-right:3px;">●</span>${playerBadge(p.token,p.name)} ${escapeHtml(p.name)}</button>`;
     }).join('');
     document.getElementById('so-vote-screen').style.display = 'flex';
 });
@@ -2832,7 +2837,7 @@ socket.on('soVoteResult', ({ fakeId, fakeName, fakeCaught, tallies, players, soS
     const msg = fakeCaught ? `🎯 ${fakeName} was the fake — CAUGHT!` : `🥷 ${fakeName} was the fake — got away!`;
     const tallyLines = (players || []).map(p => {
         const v = tallies[p.id] || 0;
-        return `${playerBadge(p.token,p.name)} ${p.name}${p.id === fakeId ? ' 🥷' : ''} — ${v} vote${v !== 1 ? 's' : ''}`;
+        return `${playerBadge(p.token,p.name)} ${escapeHtml(p.name)}${p.id === fakeId ? ' 🥷' : ''} — ${v} vote${v !== 1 ? 's' : ''}`;
     }).join('\n');
     const result = document.getElementById('so-vote-result');
     result.innerHTML = `<div style="font-size:1.15em;margin-bottom:8px;">${msg}</div><div style="color:#aaa;font-size:0.82em;white-space:pre-line;">${tallyLines}</div>`;
@@ -2910,7 +2915,7 @@ function renderUnifiedScoreboard() {
     }).sort((a, b) => b.total - a.total);
     const medals = ['🥇', '🥈', '🥉'];
     list.innerHTML = rows.map((r, i) =>
-        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${r.name}</span><span class="sb-col" style="color:#81c784;">${r.ts.survivals || 0}</span><span class="sb-col" style="color:#ef9a9a;">${r.ts.catches || 0}</span><span class="sb-col" style="color:#80cbc4;">${r.so.correct || 0}</span><span class="sb-col" style="color:#ce93d8;">${r.so.fakeWins || 0}</span></div>`
+        `<div class="sb-row"><span class="sb-rank">${medals[i] || (i + 1)}</span><span class="sb-name">${escapeHtml(r.name)}</span><span class="sb-col" style="color:#81c784;">${r.ts.survivals || 0}</span><span class="sb-col" style="color:#ef9a9a;">${r.ts.catches || 0}</span><span class="sb-col" style="color:#80cbc4;">${r.so.correct || 0}</span><span class="sb-col" style="color:#ce93d8;">${r.so.fakeWins || 0}</span></div>`
     ).join('');
 }
 
@@ -3506,7 +3511,7 @@ socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, vot
         const url = c.photoUrl.replace(/'/g, "\\'");
         return `<div class="pp-result-card${isST ? ' pp-storyteller-card' : ''}" onclick="ppLightbox('${url}')">
             <img src="${c.photoUrl}">
-            <div class="pp-result-label">${sub?.name||'?'}${isST?' 📖':''} · ${voteCount}v</div>
+            <div class="pp-result-label">${escapeHtml(sub?.name||'?')}${isST?' 📖':''} · ${voteCount}v</div>
         </div>`;
     }).join('');
 
@@ -3514,7 +3519,7 @@ socket.on('ppRoundResult', ({ storytellerId, storytellerCardId, clue, cards, vot
     scoreEl.innerHTML = players.map(p => {
         const delta = roundScores[p.id] || 0;
         const total = ppScores[p.name] || 0;
-        return `<div class="pp-score-row"><span>${p.name}</span><span style="color:#ffeb3b;">+${delta} → ${total} pts</span></div>`;
+        return `<div class="pp-score-row"><span>${escapeHtml(p.name)}</span><span style="color:#ffeb3b;">+${delta} → ${total} pts</span></div>`;
     }).join('');
 
     document.getElementById('pp-result-next').innerText = isLastRound ? '🏆 Game over! Final scores above.' : `Next round starting in ${10}s…`;
@@ -3893,7 +3898,7 @@ socket.on('scPitStart', ({ role, lap, timeLeft, tasks, driver }) => {
     if (role === 'crashed') {
         document.getElementById('sc-pit-role-label').innerText = '💥 YOUR CAR IS OUT';
         pyroView.style.display = 'flex';
-        pyroView.innerHTML = `<div style="font-size:3em;">💥</div><div class="sc-title" style="font-size:0.7em;">CAR ELIMINATED</div><div class="sc-sub" style="max-width:280px;line-height:1.7;">${driver ? driver.name + ' is done.' : 'Your car is done.'}<br>Watch the other teams suffer.</div>`;
+        pyroView.innerHTML = `<div style="font-size:3em;">💥</div><div class="sc-title" style="font-size:0.7em;">CAR ELIMINATED</div><div class="sc-sub" style="max-width:280px;line-height:1.7;">${driver ? escapeHtml(driver.name) + ' is done.' : 'Your car is done.'}<br>Watch the other teams suffer.</div>`;
         scShowOnly('sc-pit-screen');
         return;
     } else if (role === 'instructor') {
@@ -4478,7 +4483,7 @@ socket.on('scGameEnd', ({ standings }) => {
         div.innerHTML = `
             <div class="sc-podium-medal">${s.crashed ? '💥' : medals[i] || '🏁'}</div>
             <div class="sc-podium-info">
-                <div class="sc-podium-driver" style="display:flex;align-items:center;gap:6px;">${scPortrait(s.driver, 34)}<span>${s.driver.name}</span></div>
+                <div class="sc-podium-driver" style="display:flex;align-items:center;gap:6px;">${scPortrait(s.driver, 34)}<span>${escapeHtml(s.driver.name)}</span></div>
                 <div class="sc-podium-crew">📋 ${s.instructorName} &nbsp;🔧 ${s.executorName}</div>
             </div>
             <div class="sc-podium-speed">${s.crashed ? 'CRASHED L'+s.crashedOnLap : s.totalSpeed+' TOT'}</div>`;
@@ -4663,7 +4668,7 @@ socket.on('sqRoundEnd', ({ round, scores, players, final }) => {
         .forEach((p, i) => {
             const row = document.createElement('div');
             row.className = 'sq-result-row';
-            row.innerHTML = `<span class="sq-result-rank">${i+1}</span><span class="sq-result-name" style="color:${p.color}">${p.name}</span><span class="sq-result-pts">${p.pts}pt${p.pts!==1?'s':''}</span>`;
+            row.innerHTML = `<span class="sq-result-rank">${i+1}</span><span class="sq-result-name" style="color:${p.color}">${escapeHtml(p.name)}</span><span class="sq-result-pts">${p.pts}pt${p.pts!==1?'s':''}</span>`;
             list.appendChild(row);
         });
     if (final) {
@@ -5549,7 +5554,7 @@ socket.on('bbVotePhase',({players,timeLeft})=>{
     if(list) list.innerHTML=players.map(p=>{
         const isSelf=p.id===bbMyId;
         return `<button class="bb-vote-btn" ${isSelf?'disabled style="opacity:.4"':''} onclick="bbCastVote('${p.id}',this)">
-            ${p.name}${isSelf?' (you)':''}</button>`;
+            ${escapeHtml(p.name)}${isSelf?' (you)':''}</button>`;
     }).join('');
 });
 
@@ -5566,7 +5571,7 @@ socket.on('bbRoundResult',({round,totalRounds,results})=>{
     if(list) list.innerHTML=results.map((r,i)=>`
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#111827;border-radius:12px;border:1.5px solid #1e2a3a;">
             <div style="font-size:1.3em">${medals[i]||''}</div>
-            <div style="flex:1"><div style="font-weight:800;font-size:.9em">${r.name}</div><div style="font-size:.65em;color:#7a9abf">${r.votes} vote${r.votes!==1?'s':''}</div></div>
+            <div style="flex:1"><div style="font-weight:800;font-size:.9em">${escapeHtml(r.name)}</div><div style="font-size:.65em;color:#7a9abf">${r.votes} vote${r.votes!==1?'s':''}</div></div>
             <div style="text-align:right"><div style="font-weight:900;color:#ff9800">+${r.roundPts}pt${r.roundPts!==1?'s':''}</div><div style="font-size:.65em;color:#4a6a8a">Total: ${r.total}</div></div>
         </div>`).join('');
     if(nxt){nxt.style.display=round<totalRounds?'':'none';if(round<totalRounds) nxt.textContent='Next round starting soon…';}
@@ -5581,7 +5586,7 @@ socket.on('bbGameOver',({scores})=>{
     if(list) list.innerHTML=scores.map((s,i)=>`
         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#111827;border-radius:12px;border:1.5px solid #1e2a3a;">
             <div style="font-size:1.3em">${medals[i]||''}</div>
-            <div style="flex:1;font-weight:800;font-size:.9em">${s.name}</div>
+            <div style="flex:1;font-weight:800;font-size:.9em">${escapeHtml(s.name)}</div>
             <div style="font-weight:900;font-size:1.1em;color:#ff9800">${s.score}pt${s.score!==1?'s':''}</div>
         </div>`).join('');
 });
