@@ -15,7 +15,7 @@
         #global-leave { display:none; position:fixed; top:calc(env(safe-area-inset-top) + 6px); left:6px; z-index:250; background:rgba(198,40,40,0.82); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.7em; font-weight:bold; letter-spacing:1px; cursor:pointer; -webkit-user-select:none; user-select:none; }
 
         /* ── Universal winner podium ── */
-        #podium-overlay { display:none; position:fixed; inset:0; z-index:400; background:radial-gradient(circle at 50% 18%, #221a3d, #05050a 75%); flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:calc(env(safe-area-inset-top)+24px) 16px calc(env(safe-area-inset-bottom)+20px); color:#fff; overflow-y:auto; }
+        #podium-overlay { display:none; position:fixed; inset:0; z-index:400; background:radial-gradient(circle at 50% 18%, #221a3d, #05050a 75%); flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 20px); color:#fff; overflow-y:auto; }
         #podium-overlay.open { display:flex; }
         #podium-title { font-family:'Press Start 2P',monospace; font-size:1.05em; color:#ffd700; text-shadow:0 0 16px rgba(255,215,0,0.55); text-align:center; line-height:1.4; }
         #podium-sub { font-size:0.92em; color:#cfd6e6; text-align:center; max-width:340px; line-height:1.5; margin-top:-4px; }
@@ -281,7 +281,7 @@
         /* ── PikPic ── */
         #pp-upload-screen,#pp-clue-screen,#pp-wait-screen,#pp-submit-screen,#pp-vote-screen,#pp-result-screen {
             display:none; position:absolute; inset:0; z-index:55; background:radial-gradient(circle at 50% 20%,#0d1525,#050508 70%);
-            flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+14px) 14px calc(env(safe-area-inset-bottom)+16px); gap:12px;
+            flex-direction:column; align-items:center; overflow-y:auto; overflow-x:hidden; color:#fff; padding:calc(env(safe-area-inset-top) + 14px) 14px calc(env(safe-area-inset-bottom) + 16px); gap:12px;
         }
         .pp-title { font-size:1.4em; font-weight:900; letter-spacing:3px; color:#ffeb3b; text-align:center; }
         .pp-sub { font-family:monospace; font-size:0.78em; color:#556; letter-spacing:2px; text-align:center; }
@@ -300,7 +300,7 @@
         #pp-lightbox img { max-width:92vw; max-height:72vh; border-radius:10px; object-fit:contain; }
         #pp-lightbox.open { display:flex; }
         #pp-lightbox-close { position:absolute; top:calc(env(safe-area-inset-top) + 10px); right:14px; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.12); border-radius:50%; color:#fff; font-size:1.4em; font-weight:bold; cursor:pointer; }
-        #pp-lightbox-action { background:#2e7d32; color:#fff; border:none; border-radius:12px; padding:10px 22px; font-size:0.9em; font-weight:bold; letter-spacing:1px; text-transform:uppercase; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
+        #pp-lightbox-action { flex:none; background:#2e7d32; color:#fff; border:none; border-radius:12px; padding:10px 22px; font-size:0.9em; font-weight:bold; letter-spacing:1px; text-transform:uppercase; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
         .pp-btn-blue { background:#1565c0; }
         .pp-btn-green { background:#2e7d32; }
         .pp-btn-yellow { background:#e65100; color:#fff; }
@@ -323,8 +323,8 @@
         .pp-vote-img.pp-voted { border-color:#2e7d32; box-shadow:0 0 14px rgba(46,125,50,0.6); }
         /* Result grid */
         #pp-result-grid { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:440px; }
-        .pp-result-card { width:100px; border-radius:8px; overflow:hidden; border:3px solid #2a3450; position:relative; }
-        .pp-result-card img { width:100%; height:100px; object-fit:cover; display:block; }
+        .pp-result-card { width:min(120px,26vw); border-radius:8px; overflow:hidden; border:3px solid #2a3450; position:relative; cursor:pointer; }
+        .pp-result-card img { width:100%; aspect-ratio:1; object-fit:cover; display:block; }
         .pp-result-card.pp-storyteller-card { border-color:#ffeb3b; box-shadow:0 0 18px rgba(255,235,59,0.5); }
         .pp-result-label { font-family:monospace; font-size:0.6em; color:#ccc; background:rgba(0,0,0,0.85); padding:3px 4px; text-align:center; }
         /* Score rows */
@@ -345,10 +345,6 @@
         .pp-pick-preview { width:52px; height:72px; background:rgba(255,255,255,0.04); border:1.5px dashed #2a3850; border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; }
         .pp-pick-actions { display:flex; flex-direction:column; gap:6px; flex:1; }
         .pp-pick-actions .pp-btn { padding:8px 10px; }
-        /* Hold-to-enlarge overlay */
-        #pp-hold-overlay { display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,8,0.90); pointer-events:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
-        #pp-hold-overlay img { max-width:90vw; max-height:80vh; border-radius:12px; object-fit:contain; box-shadow:0 12px 60px rgba(0,0,0,0.95); }
-        #pp-hold-overlay .pp-hold-hint { font-family:monospace; font-size:0.72em; color:rgba(255,255,255,0.28); letter-spacing:1px; }
         /* Vote gallery carousel */
         #pp-vote-carousel { flex:1; overflow:hidden; width:100%; position:relative; min-height:0; }
         #pp-vote-slides { display:flex; height:100%; will-change:transform; transition:transform .22s cubic-bezier(.4,0,.2,1); }
@@ -362,7 +358,7 @@
         .pp-nav-btn:hover { background:rgba(255,255,255,0.12); }
 
         /* ── Rizz or Roast ── */
-        .rr-screen { display:none; position:absolute; inset:0; z-index:55; background:radial-gradient(circle at 50% 10%,#1a0a2e,#050508 70%); flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+16px) 16px calc(env(safe-area-inset-bottom)+20px); gap:14px; }
+        .rr-screen { display:none; position:absolute; inset:0; z-index:55; background:radial-gradient(circle at 50% 10%,#1a0a2e,#050508 70%); flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 20px); gap:14px; }
         .rr-title { font-size:1.4em; font-weight:900; letter-spacing:3px; text-transform:uppercase; }
         .rr-sub { font-family:monospace; font-size:0.82em; color:#888; text-align:center; }
         .rr-timer { font-family:monospace; font-size:2em; font-weight:900; color:#ffeb3b; text-shadow:0 0 12px rgba(255,235,59,0.5); }
@@ -407,7 +403,7 @@
         .rr-score-row { display:flex; justify-content:space-between; padding:6px 4px; font-family:monospace; font-size:0.9em; border-bottom:1px solid #1a0a2e; width:min(300px,88%); }
 
         /* ── Split Crew ── */
-        .sc-screen { display:none; position:absolute; inset:0; z-index:60; flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top)+12px) 12px calc(env(safe-area-inset-bottom)+16px); gap:10px; }
+        .sc-screen { display:none; position:absolute; inset:0; z-index:60; flex-direction:column; align-items:center; overflow-y:auto; color:#fff; padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 16px); gap:10px; }
         #sc-role-screen  { background:linear-gradient(180deg,#1a0050 0%,#6a0080 40%,#d4006c 70%,#ff6600 90%,#ffcc00 100%); justify-content:center; }
         #sc-pit-screen   { background:#0a0a12; }
         #sc-race-screen  { background:#090014; justify-content:flex-start; }
@@ -988,12 +984,6 @@
     <div style="font-size:0.8em;opacity:0.7;">Syncing with the room</div>
 </div>
 
-<!-- Hold-to-enlarge overlay (global, covers everything) -->
-<div id="pp-hold-overlay">
-    <img id="pp-hold-img" src="">
-    <div class="pp-hold-hint">RELEASE TO DISMISS</div>
-</div>
-
 <!-- Selfie overlay -->
 <div id="pp-selfie-wrap">
     <div style="color:#fff;font-weight:bold;font-size:1.1em;letter-spacing:2px;">📸 SELFIE</div>
@@ -1171,7 +1161,7 @@
 
 <!-- Pit stop (instructor + executor — same screen, role shown via content) -->
 <div id="sc-pit-screen" class="sc-screen" style="padding-top:0;">
-    <div style="position:sticky;top:0;z-index:2;background:#0a0a12;width:100%;padding:calc(env(safe-area-inset-top)+8px) 12px 8px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid rgba(255,255,255,0.07);">
+    <div style="position:sticky;top:0;z-index:2;background:#0a0a12;width:100%;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid rgba(255,255,255,0.07);">
         <div style="display:flex;align-items:center;justify-content:space-between;">
             <div class="sc-lap-badge" id="sc-pit-lap"></div>
             <div class="sc-pit-timer" id="sc-pit-timer"></div>
@@ -1208,7 +1198,7 @@
 <div id="sc-race-screen" class="sc-screen" style="padding:0;overflow:hidden;">
     <canvas id="sc-race-canvas" style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
     <!-- Timer / lap HUD overlaid on canvas -->
-    <div style="position:absolute;top:0;left:0;right:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top)+8px) 14px 8px;background:linear-gradient(180deg,rgba(0,0,0,0.6) 0%,transparent 100%);">
+    <div style="position:absolute;top:0;left:0;right:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;background:linear-gradient(180deg,rgba(0,0,0,0.6) 0%,transparent 100%);">
         <div class="sc-race-lap" id="sc-race-lap-label"></div>
         <div class="sc-race-timer" id="sc-race-timer"></div>
     </div>
@@ -1638,7 +1628,7 @@ function handlePpSnapshot(pp) {
                 document.getElementById('pp-vote-timer').innerText = pp.timeLeft > 0 ? pp.timeLeft : '';
                 document.getElementById('pp-vote-hint').innerText = pp.isStoryteller
                     ? 'You told the clue — watch others vote!'
-                    : 'Tap a card to select · hold to preview · swipe to browse';
+                    : 'Tap a card to preview & vote · swipe to browse';
                 ppRenderGallery(pp.table, pp.isStoryteller);
             }
             break;
@@ -2944,7 +2934,7 @@ function ppCleanup() {
     ppMyPhotos = []; ppMyHand = []; ppSubUsed = false;
     ppStorytellerId = null; ppSelectedCardId = null; ppPhase = 'LOBBY';
     ppFtueDone = false; ppVoteFtueDone = false;
-    ppEndHold(); ppVoteCards = []; ppGalIdx = 0; ppVoteSelectedId = null;
+    ppCloseLightbox(); ppVoteCards = []; ppGalIdx = 0; ppVoteSelectedId = null;
 }
 
 function ppShow(id) { ppCloseLightbox(); PP_SCREENS.forEach(s => { const el = document.getElementById(s); if (el) el.style.display = 'none'; }); const t = document.getElementById(id); if (t) t.style.display = 'flex'; }
@@ -3003,6 +2993,15 @@ function ppCardTap(cardId, url, selectable) {
     if (selectable && dbl) { window._ppCardTap = null; ppSelectCard(cardId); return; }
     window._ppCardTap = { id: cardId, t: now };
     ppLightbox(url, selectable ? { label: '✅ Pick this card', fn: () => ppSelectCard(cardId) } : null);
+}
+// Vote gallery: single tap = enlarge with a direct vote button (2 taps total, same as before);
+// double tap = stage the pick in-place instead (shows the on-card confirm button, like ppSelectCard)
+function ppVoteCardTap(cardId, idx, url) {
+    const now = Date.now();
+    const dbl = window._ppCardTap && window._ppCardTap.id === cardId && now - window._ppCardTap.t < 400;
+    if (dbl) { window._ppCardTap = null; ppGalSelect(cardId, idx); return; }
+    window._ppCardTap = { id: cardId, t: now };
+    ppLightbox(url, { label: '✅ Vote this card', fn: () => ppVoteConfirm(cardId) });
 }
 
 function ppRenderUploadGrid() {
@@ -3082,37 +3081,48 @@ function ppRenderHand(containerId, cards, selectable) {
 }
 
 // ── Fan hand rendering ──
-let ppHoldTimer = null, ppHoldFired = false, ppFtueDone = false, ppVoteFtueDone = false, ppFanMode = 'select';
+let ppFtueDone = false, ppVoteFtueDone = false;
 
-function ppFanPositions(n) {
-    const spread = Math.min(42, Math.max(22, n * 8));
+// Card size + margin scale with the wrap's actual width so cards never overflow the screen,
+// and get bigger on wider screens instead of staying pinned at a small fixed size. Cards pivot
+// from their bottom edge (transform-origin: bottom center), so the outer edge of the outermost
+// cards swings out by more than half their width once rotated — the margin has to account for
+// that full lean (cardW/2 * cos + cardH * sin), not just half the card's unrotated width.
+function ppFanPositions(n, marginPct, spread) {
+    const rangePct = 100 - marginPct * 2;
     return Array.from({length: n}, (_, i) => {
         const t = n > 1 ? i / (n - 1) : 0.5;
         return {
             angle: ((-spread / 2) + t * spread).toFixed(1),
-            leftPct: (10 + t * 80).toFixed(1),
+            leftPct: (marginPct + t * rangePct).toFixed(1),
             yDrop: Math.round(Math.abs(t - 0.5) * 2 * 20)
         };
     });
 }
 
-// mode: 'select' = clue screen, 'drag' = submit screen (tap-based, no actual drag)
+// mode: 'select' = clue screen, 'drag' = submit screen (both tap-to-select via ppCardTap)
 function ppRenderFan(containerId, cards, mode) {
-    ppFanMode = mode;
     const el = document.getElementById(containerId); if (!el) return;
-    const pos = ppFanPositions(cards.length);
     const n = cards.length;
+    const containerWidth = el.clientWidth || (window.innerWidth - 28);
+    const cardW = Math.max(72, Math.min(92, Math.round(containerWidth / 4.2)));
+    const cardH = Math.round(cardW * 1.39);
+    const spread = Math.min(42, Math.max(22, n * 8));
+    const maxAngleRad = (spread / 2) * Math.PI / 180;
+    const reach = (cardW / 2) * Math.cos(maxAngleRad) + cardH * Math.sin(maxAngleRad);
+    const marginPct = Math.min(42, Math.max(8, (reach / containerWidth) * 100 + 2));
+    const pos = ppFanPositions(n, marginPct, spread);
     el.innerHTML = cards.map((c, i) => {
         const url = c.photoUrl.replace(/'/g, "\\'");
         const p = pos[i];
         const isSel = c.cardId === ppSelectedCardId;
         return `<div class="pp-fan-card${isSel ? ' selected' : ''}" data-cid="${c.cardId}" data-angle="${p.angle}"
-            style="left:calc(${p.leftPct}% - 36px);bottom:${p.yDrop}px;width:72px;height:100px;transform:rotate(${p.angle}deg);z-index:${n - i};"
+            style="left:calc(${p.leftPct}% - ${cardW / 2}px);bottom:${p.yDrop}px;width:${cardW}px;height:${cardH}px;transform:rotate(${p.angle}deg);z-index:${n - i};"
             draggable="false"
             onmouseenter="ppFanHov(this,true,${p.angle})"
             onmouseleave="ppFanHov(this,false,${p.angle})"
             oncontextmenu="return false"
-            onpointerdown="ppBegHold('${url}',event,this,'${mode}')">
+            onclick="ppCardTap('${c.cardId}','${url}',true)">
             <img src="${c.photoUrl}" draggable="false">
         </div>`;
     }).join('');
@@ -3135,52 +3145,6 @@ function ppApplySelectedStyle(el) {
     el.style.zIndex = '30';
 }
 
-function ppBegHold(src, e, el, mode) {
-    const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
-    if (isTouch) e.preventDefault();
-    ppEndHold();
-    ppHoldFired = false;
-    const cardId = el.dataset.cid;
-    const sx = e.clientX, sy = e.clientY;
-    let moved = false;
-
-    if (isTouch) { try { el.setPointerCapture(e.pointerId); } catch(_) {} }
-
-    function onMove(ev) {
-        if (!moved && (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8)) {
-            moved = true; ppEndHold();
-        }
-    }
-    function cleanup() {
-        el.removeEventListener('pointermove', onMove);
-        el.removeEventListener('pointerup', onUp);
-        el.removeEventListener('pointercancel', cleanup);
-    }
-    function onUp() {
-        cleanup();
-        if (!moved && !ppHoldFired && mode) ppSelectCard(cardId);
-        ppEndHold();
-    }
-
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', cleanup);
-
-    ppHoldTimer = setTimeout(() => {
-        if (!moved) {
-            ppHoldFired = true;
-            document.getElementById('pp-hold-img').src = src;
-            document.getElementById('pp-hold-overlay').style.display = 'flex';
-        }
-    }, 320);
-}
-
-function ppEndHold() {
-    clearTimeout(ppHoldTimer); ppHoldTimer = null;
-    document.getElementById('pp-hold-overlay').style.display = 'none';
-    ppHoldFired = false;
-}
-
 
 // ── Vote gallery carousel ──
 let ppGalIdx = 0, ppVoteCards = [], ppVoteSelectedId = null;
@@ -3191,14 +3155,12 @@ function ppRenderGallery(cards, amST) {
     slides.innerHTML = cards.map((c, i) => {
         const url = c.photoUrl.replace(/'/g, "\\'");
         const imgClass = amST ? 'pp-vote-slide-img st-card' : 'pp-vote-slide-img';
-        const clickAttr = amST ? '' : `onclick="ppGalSelect('${c.cardId}',${i})"`;
+        const clickAttr = amST ? `onclick="ppLightbox('${url}')"` : `onclick="ppVoteCardTap('${c.cardId}',${i},'${url}')"`;
         return `<div class="pp-vote-slide">
             <div style="position:relative;display:inline-flex;justify-content:center;width:100%;">
                 <img src="${c.photoUrl}" class="${imgClass}" id="pp-vsimg-${i}"
                     ${clickAttr}
-                    oncontextmenu="return false"
-                    onpointerdown="ppBegHold('${url}',event,this)"
-                    onpointerup="ppEndHold()" onpointercancel="ppEndHold()">
+                    oncontextmenu="return false">
                 <button id="pp-vsbtn-${i}" class="pp-btn pp-btn-green" onclick="ppVoteConfirm('${c.cardId}')"
                     style="display:none;position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
                     padding:8px 16px;font-size:0.82em;letter-spacing:1px;box-shadow:0 4px 18px rgba(0,0,0,0.7);white-space:nowrap;">
@@ -3407,7 +3369,7 @@ socket.on('ppRoundStart', ({ round, totalRounds, storytellerId, storytellerName,
         document.getElementById('pp-clue-input').value = ''; document.getElementById('pp-clue-input').disabled = false;
         document.getElementById('pp-submit-clue-btn').disabled = false;
         ppRenderFan('pp-clue-fan', hand, 'select');
-        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Hold any card to preview it big!'), 900); }
+        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Tap a card to preview it big!'), 900); }
     } else {
         ppShow('pp-wait-screen');
         document.getElementById('pp-wait-label').innerText = `Round ${round} of ${totalRounds} — ${storytellerName} is choosing a clue…`;
@@ -3445,7 +3407,7 @@ socket.on('ppClueSet', ({ clue, storytellerId, storytellerName }) => {
         ppSelectedCardId = null;
         ppResetSubmitUI();
         ppRenderFan('pp-submit-fan', ppMyHand, 'drag');
-        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Hold to preview large · tap to pick!'), 900); }
+        if (!ppFtueDone) { ppFtueDone = true; setTimeout(() => showToast('💡 Tap to preview large, then pick!'), 900); }
     }
 });
 
@@ -3471,11 +3433,11 @@ socket.on('ppVotePhase', ({ clue, cards, storytellerId, timeLeft }) => {
     document.getElementById('pp-vote-timer').innerText = timeLeft;
     document.getElementById('pp-vote-voters').innerHTML = '';
     const amST = socket.id === storytellerId;
-    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap a card to select · hold to preview large · swipe to browse';
+    document.getElementById('pp-vote-hint').innerText = amST ? 'You told the clue — watch others vote!' : 'Tap a card to preview & vote · swipe to browse';
     ppRenderGallery(cards, amST);
     if (!amST && !ppVoteFtueDone) {
         ppVoteFtueDone = true;
-        setTimeout(() => showToast('Tap card to select it, then vote!'), 900);
+        setTimeout(() => showToast('Tap a card to preview it, then vote!'), 900);
     }
 });
 
