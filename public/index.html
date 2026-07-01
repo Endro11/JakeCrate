@@ -2949,11 +2949,22 @@ function ppResizeToDataUrl(file) {
             const img = new Image();
             img.onerror = () => reject(new Error('image load error'));
             img.onload = () => {
-                const MAX = 600; let w = img.width, h = img.height;
-                if (w > MAX || h > MAX) { const s = Math.min(MAX/w, MAX/h); w = Math.round(w*s); h = Math.round(h*s); }
-                const c = document.createElement('canvas'); c.width = w; c.height = h;
-                c.getContext('2d').drawImage(img, 0, 0, w, h);
-                resolve(c.toDataURL('image/jpeg', 0.82));
+                // Large/odd-dimension photos (old panoramas, big scans) can make drawImage/toDataURL
+                // throw on some mobile browsers' canvas limits — without this try/catch that throw
+                // happens outside any handler that calls reject(), so the promise just hangs forever
+                // and silently kills the rest of the batch's upload loop.
+                try {
+                    const MAX = 600; let w = img.width, h = img.height;
+                    if (!w || !h) throw new Error('zero-size image');
+                    if (w > MAX || h > MAX) { const s = Math.min(MAX/w, MAX/h); w = Math.round(w*s); h = Math.round(h*s); }
+                    const c = document.createElement('canvas'); c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    const out = c.toDataURL('image/jpeg', 0.82);
+                    if (!out || out.length < 500) throw new Error('blank/corrupt decode');
+                    resolve(out);
+                } catch (e) {
+                    reject(e);
+                }
             };
             img.src = ev.target.result;
         };
@@ -2961,18 +2972,25 @@ function ppResizeToDataUrl(file) {
     });
 }
 
+let ppUploadBusy = false;
 async function ppHandleFiles(files) {
+    if (ppUploadBusy) { showToast('⏳ Still adding photos — wait a sec'); return; }
+    ppUploadBusy = true;
     const toProcess = Array.from(files).slice(0, 7 - ppMyPhotos.length);
+    let failed = 0;
     for (const file of toProcess) {
         if (ppMyPhotos.length >= 7) break;
+        if (file.size > 20 * 1024 * 1024) { failed++; continue; } // fail fast on pathologically huge originals
         try {
             const dataUrl = await ppResizeToDataUrl(file);
             ppMyPhotos.push(dataUrl);
             ppRenderUploadGrid();
         } catch (e) {
-            showToast('⚠️ Couldn\'t load a photo — skipped');
+            failed++;
         }
     }
+    ppUploadBusy = false;
+    if (failed > 0) showToast(`⚠️ ${failed} photo${failed > 1 ? 's' : ''} couldn't be used — skipped`);
 }
 
 let ppLbAction = null;
