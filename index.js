@@ -847,14 +847,110 @@ const SQ_PROMPTS = [
     "Something you'd find in a wizard's trash can",
     "The most dangerous fruit",
     "What ghosts do when nobody's watching",
+    "A gym built for ghosts",
+    "The world's most confused robot",
+    "A snack that betrayed your trust",
+    "What your car thinks about your driving",
+    "A dating profile picture gone wrong",
+    "The friend group's designated gremlin",
+    "A weather pattern that shouldn't exist",
+    "Something a toddler would trade you for candy",
+    "The final boss of laundry day",
+    "A houseplant with a chip on its shoulder",
+    "What lives in the office break room fridge",
+    "A superhero whose only power is mild inconvenience",
+    "The instruction manual's final warning, illustrated",
+    "Something that escaped from a middle school science fair",
+    "A rejected cartoon mascot",
+    "The thing that goes bump in the night (it's actually dumb)",
+    "A mascot for a company that is definitely a scam",
+    "What your search history looks like as a creature",
+    "A vacation destination nobody asked for",
+    "The last cookie in the jar, having feelings about it",
+    "A gadget that solves a problem nobody has",
+    "Something a raccoon would 100% steal from you",
+    "The world's least trustworthy lifeguard",
+    "A holiday that got cancelled for a very good reason",
+    "What your GPS is thinking right now",
+    "A knockoff version of a famous cartoon character",
+    "The group chat's most unhinged member, as an animal",
 ];
 
-function generateSquiggle() {
+// Canvas is a tall portrait rect (450x800) — the renderer (sqDrawSquiggle in public/index.html)
+// draws a smooth bezier through exactly 4 points, or a straight connect-the-dots polyline for any
+// other point count. Picking a random archetype (instead of always the same jittered wave) gives
+// genuinely different shapes to draw around round to round, not just different jitter on one shape.
+function sqWave() {
     const pts = [];
     for (let i = 0; i < 4; i++) {
-        pts.push({ x: i * 0.28 + 0.08 + Math.random() * 0.08, y: 0.28 + Math.random() * 0.44 });
+        pts.push({ x: i * 0.28 + 0.08 + Math.random() * 0.08, y: 0.22 + Math.random() * 0.56 });
     }
     return pts;
+}
+function sqZigzag() {
+    const n = 5 + Math.floor(Math.random() * 2); // 5 or 6 points -> straight segments, not bezier
+    const pts = [];
+    let high = Math.random() < 0.5;
+    for (let i = 0; i < n; i++) {
+        pts.push({
+            x: 0.1 + (i / (n - 1)) * 0.8,
+            y: high ? 0.16 + Math.random() * 0.14 : 0.7 + Math.random() * 0.14,
+        });
+        high = !high;
+    }
+    return pts;
+}
+function sqSpiral() {
+    const n = 7;
+    const pts = [];
+    const cx = 0.4 + Math.random() * 0.2, cy = 0.4 + Math.random() * 0.2;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    for (let i = 0; i < n; i++) {
+        const t = i / (n - 1);
+        const angle = dir * t * Math.PI * 2.3;
+        const r = 0.04 + t * 0.16;
+        // x is scaled up (not just r*1.6) to counter the tall/narrow 450x800 canvas so the spiral
+        // reads as round rather than a tall oval; clamped afterward as a hard safety net.
+        pts.push({
+            x: Math.max(0.06, Math.min(0.94, cx + Math.cos(angle) * r * 1.6)),
+            y: Math.max(0.14, Math.min(0.86, cy + Math.sin(angle) * r)),
+        });
+    }
+    return pts;
+}
+function sqSwoop() {
+    const flip = Math.random() < 0.5;
+    const y0 = flip ? 0.78 : 0.2, y3 = flip ? 0.2 : 0.78;
+    return [
+        { x: 0.1 + Math.random() * 0.06, y: y0 + (Math.random() - 0.5) * 0.1 },
+        { x: 0.34 + Math.random() * 0.1, y: 0.5 + (Math.random() - 0.5) * 0.35 },
+        { x: 0.6 + Math.random() * 0.1, y: 0.5 + (Math.random() - 0.5) * 0.35 },
+        { x: 0.86 + Math.random() * 0.06, y: y3 + (Math.random() - 0.5) * 0.1 },
+    ];
+}
+function sqScribble() {
+    const n = 6 + Math.floor(Math.random() * 3); // 6-8 points -> straight segments
+    const pts = [];
+    let x = 0.1, y = 0.25 + Math.random() * 0.5;
+    for (let i = 0; i < n; i++) {
+        pts.push({ x: Math.max(0.06, Math.min(0.94, x)), y: Math.max(0.14, Math.min(0.86, y)) });
+        x += 0.78 / n + (Math.random() - 0.3) * 0.08;
+        y += (Math.random() - 0.5) * 0.32;
+    }
+    return pts;
+}
+function sqHook() {
+    const corners = [{ x: 0.14, y: 0.18 }, { x: 0.86, y: 0.18 }, { x: 0.14, y: 0.82 }, { x: 0.86, y: 0.82 }];
+    const c = corners[Math.floor(Math.random() * corners.length)];
+    return [
+        { x: 0.5 + (Math.random() - 0.5) * 0.2, y: 0.5 + (Math.random() - 0.5) * 0.15 },
+        { x: 0.5 + (c.x - 0.5) * 0.55, y: 0.5 + (c.y - 0.5) * 0.55 },
+        { x: c.x + (Math.random() - 0.5) * 0.06, y: c.y + (Math.random() - 0.5) * 0.06 },
+    ];
+}
+const SQ_ARCHETYPES = [sqWave, sqZigzag, sqSpiral, sqSwoop, sqScribble, sqHook];
+function generateSquiggle() {
+    return SQ_ARCHETYPES[Math.floor(Math.random() * SQ_ARCHETYPES.length)]();
 }
 
 function sq_seedMatchups(room) {
