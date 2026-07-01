@@ -368,6 +368,9 @@
         .rr-blank-input::placeholder { color:#5a3a6a; font-weight:normal; font-size:0.85em; }
         .rr-blank-input:focus { border-bottom-color:#e040fb; }
         #rr-fill-progress { font-family:monospace; font-size:0.8em; color:#556; }
+        .bb-spit-blank { display:inline-block; min-width:80px; max-width:130px; background:transparent; border:none; border-bottom:2px solid #ff9800; color:#ffb74d; font-weight:bold; font-size:1em; text-align:center; outline:none; padding:0 4px; vertical-align:bottom; }
+        .bb-spit-blank::placeholder { color:#5a4a2a; font-weight:normal; font-size:0.85em; }
+        .bb-spit-blank:focus { border-bottom-color:#5ee6c5; }
         /* Record screen */
         #rr-assembled-text { font-size:1.1em; font-weight:bold; line-height:1.6; text-align:center; color:#fff; background:rgba(255,255,255,0.05); border:1px solid #2a1a4a; border-radius:12px; padding:16px 18px; width:min(420px,92%); }
         #rr-record-btn { width:80px; height:80px; border-radius:50%; border:4px solid #e91e63; background:#1a0010; color:#e91e63; font-size:2em; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0; }
@@ -672,7 +675,7 @@
             <div class="gc-icon">🥁</div>
             <div class="gc-info">
                 <div class="gc-name">Bad Pitches</div>
-                <div class="gc-desc">Spin a real vinyl record, steal a loop, record 3 sounds, build a beat — crowd votes the best</div>
+                <div class="gc-desc">Dig a loop, chop it to the beat, spit a diss verse — 1v1 rap battles, crowd votes the winner</div>
                 <div class="gc-voters" id="gv-bb"></div>
             </div>
         </div>
@@ -1357,20 +1360,28 @@ function showRoomLobby() {
     isJoined = true;
 }
 
-// Show a scannable QR of the join link (with the room code baked in) so friends can
-// point their camera and land straight on the join screen — works fully offline.
-async function renderJoinQr() {
-    const box = document.getElementById('rl-qr');
-    const cap = document.getElementById('rl-qr-cap');
-    if (!box || !currentRoomCode || typeof QRCode === 'undefined') return;
+// Resolve the origin to advertise for joining. If the page was opened via localhost,
+// try swapping in the LAN IP others can reach — but the server only hands one back
+// when it's explicitly running in local/offline mode (JC_LOCAL_MODE), so this is a
+// no-op on Render and during plain local dev testing.
+async function resolveShareOrigin() {
     let origin = window.location.origin;
-    // If the host opened the page via localhost, swap in the LAN IP others can reach.
     if (/\/\/(localhost|127\.|0\.0\.0\.0)/.test(origin)) {
         try {
             const { ip } = await (await fetch('/api/lan-ip')).json();
             if (ip && ip !== '127.0.0.1') origin = `http://${ip}:${location.port || '3000'}`;
         } catch (_) {}
     }
+    return origin;
+}
+
+// Show a scannable QR of the join link (with the room code baked in) so friends can
+// point their camera and land straight on the join screen — works fully offline.
+async function renderJoinQr() {
+    const box = document.getElementById('rl-qr');
+    const cap = document.getElementById('rl-qr-cap');
+    if (!box || !currentRoomCode || typeof QRCode === 'undefined') return;
+    const origin = await resolveShareOrigin();
     const url = `${origin}/?room=${currentRoomCode}`;
     box.style.display = 'flex';
     box.innerHTML = '';
@@ -1396,10 +1407,10 @@ function rlStartGame() {
     else if (selectedGame === 'beatbattle') socket.emit('bbStartGame');
 }
 
-function shareRoom() {
+async function shareRoom() {
     const code = currentRoomCode;
     if (!code) return;
-    const url = window.location.origin;
+    const url = await resolveShareOrigin();
     const text = `Join my JakeCrate room!\nRoom code: ${code}\n${url}`;
     if (navigator.share) {
         navigator.share({ title: 'JakeCrate', text }).catch(() => {});
@@ -1440,8 +1451,7 @@ function hideAllGameChrome() {
     ['monitor-hud','phase-hud','nav-desk','ui-bar','float-tools','ts-drawer','pokeBtn','hand-menu',
      'so-screen','so-memorize-screen','so-reveal-screen','so-vote-screen',
      'sq-battle-screen','sq-results-screen',
-     'bb-crate-screen','bb-scrub-screen','bb-record-screen','bb-deal-screen',
-     'bb-build-screen','bb-listen-screen','bb-vote-screen','bb-results-screen'].forEach(id => {
+     'bb-crate-screen','bb-scrub-screen','bb-spit-screen','bb-battle-screen','bb-results-screen'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
     try { PP_SCREENS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); } catch (e) {}
@@ -4705,14 +4715,6 @@ socket.on('sqRoundEnd', ({ round, scores, players, final }) => {
 // ════════════════════════════════════════════════════════════════════════
 // BAD PITCHES v2
 // ════════════════════════════════════════════════════════════════════════
-const BB_ROLES_V2       = ['thump','snap','sneak'];
-const BB_ROLE_COLORS_V2 = { thump:'#ff6b3d', snap:'#5ee6c5', sneak:'#c792ea' };
-const BB_ROLE_ICONS_V2  = { thump:'🥁', snap:'👏', sneak:'🤫' };
-const BB_ROLE_HINTS_V2  = {
-    thump: 'Big kick — mouth "BUH!" or stomp hands',
-    snap:  'Sharp crack — finger snap or tongue click',
-    sneak: 'Sneaky wild card — anything weird & funny',
-};
 
 // ── state ──
 let bbAudioCtx     = null;
@@ -4728,44 +4730,15 @@ let bbLoopStart    = 5;
 let bbLoopEnd      = 9;
 let bbLoopStepDur  = 0.5;
 let bbMyLoop       = null;
-let bbMyHand       = [];   // array of {id, ownerId, ownerName, slot, dataUrl}
-let bbMySounds     = [null, null, null]; // voice round: my 3 recorded dataUrls
-let bbCurrentSlot  = 0;    // which slot is selected in RECORD screen
-let bbMyBeat       = {};   // {soundId: Set<stepIndex>}
-let bbSoundBuffers = {};
-let bbSchedulerTm  = null;
-let bbNextStepTime = 0;
-let bbCurrentStep  = 0;
-let bbIsPlaying    = false;
 let bbMyId         = null;
 let bbSampleDuration = 180;
 let bbAudioProxyUrl  = null;
 let bbScrubDragging  = false;
-let bbScrubMode      = 'none';
-let bbScrubAnchorX   = 0;
-let bbScrubAnchorS   = 0;
-let bbScrubAnchorE   = 0;
-let bbListenQueue    = [];
-let bbListenProxyUrl = null;
-let bbMediaRec       = null;
-let bbMediaStream    = null;
 let bbAudioEl        = null;
-let bbLoopDuration   = 4;    // seconds, toggled by player
+let bbHitCount       = 8;    // loop length in detected onset hits (8 or 16), replaces bbLoopDuration
+let bbOnsetTicks     = [];   // detected onset times (sec) for the currently loaded sample, from bbDetectOnsets
 let bbPlaybackRate   = 1.0;  // pitch/speed control
-let bbSlots          = [];   // [{jazz:bool, drums:bool}, ...] — slot grid for BUILD
-let bbSlotLen        = 4;    // seconds per slot
 let bbScheduledSrcs  = [];   // AudioBufferSourceNodes scheduled for preview/listen
-let bbBreakAt        = null; // seconds into the R2 track where the break begins (auto-zoom)
-let bbR1LayerSrc    = null;
-let bbR1LayerGain   = null;
-let bbR1LayerBuffer = null;
-let bbR1LayerActive = false;
-let bbR1LayerUrl    = null;
-let bbR1LoopData    = null;
-let bbR2LoopSrc     = null;
-let bbR2LoopBuffer  = null;
-let bbR2AudioUrl    = null;
-let bbR2LoopData    = null;
 
 // ── audio core ──
 function bbEnsureAudio() {
@@ -4780,26 +4753,6 @@ function bbEnsureAudio() {
     bbMasterComp.release.value = 0.25;
     bbMasterGain.connect(bbMasterShelf); bbMasterShelf.connect(bbMasterComp); bbMasterComp.connect(bbAudioCtx.destination);
     return bbAudioCtx;
-}
-
-function bbMakeSynth(role) {
-    const ctx = bbEnsureAudio(), sr = ctx.sampleRate;
-    const len = Math.floor(sr * 0.22);
-    const buf = ctx.createBuffer(1, len, sr);
-    const ch  = buf.getChannelData(0);
-    if (role === 'thump' || role === 'kick') {
-        for (let i=0;i<len;i++) { const t=i/sr; ch[i]=Math.sin(2*Math.PI*(80-40*t)*t)*Math.exp(-t*28); }
-    } else if (role === 'snap' || role === 'snare') {
-        for (let i=0;i<len;i++) { const t=i/sr; ch[i]=(Math.random()*2-1)*Math.exp(-t*80); }
-    } else if (role === 'hat') {
-        const hl=Math.floor(sr*0.06);
-        for (let i=0;i<Math.min(hl,len);i++) { const t=i/sr; ch[i]=(Math.random()*2-1)*Math.exp(-t*250)*0.65; }
-    } else if (role === 'clap') {
-        for (let i=0;i<len;i++) { const t=i/sr; ch[i]=(Math.random()*2-1)*Math.exp(-t*55)*Math.sin(2*Math.PI*900*t)*0.75; }
-    } else {
-        for (let i=0;i<len;i++) { const t=i/sr; ch[i]=(Math.random()*2-1)*Math.exp(-t*50)*0.5; }
-    }
-    return buf;
 }
 
 function bbMakeCrackle() {
@@ -4823,48 +4776,99 @@ function bbStopCrackle() {
     if (bbCrackleNode) { try{bbCrackleNode.stop();}catch(e){} bbCrackleNode=null; }
 }
 
-async function bbDecodeSound(soundId, dataUrl, role) {
-    if (bbSoundBuffers[soundId]) return;
-    const ctx = bbEnsureAudio();
-    try {
-        if (dataUrl) {
-            const b64 = dataUrl.split(',')[1];
-            const bin = atob(b64); const ab = new ArrayBuffer(bin.length);
-            const u8  = new Uint8Array(ab);
-            for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
-            bbSoundBuffers[soundId] = await ctx.decodeAudioData(ab);
-        } else { bbSoundBuffers[soundId] = bbMakeSynth(role); }
-    } catch(e) { bbSoundBuffers[soundId] = bbMakeSynth(role); }
+// ── Spit: TTS flow presets ──
+// Chipmunk/Villain/Straight validated live via a throwaway demo before building. Auto-Tune is
+// honestly just a 4th rate/pitch flavor, not real pitch-correction — speechSynthesis gives no
+// manipulable audio buffer to actually pitch-correct.
+const BB_FLOW_PRESETS = {
+    chipmunk: { rate: 1.65, pitch: 2.0,  label: '🐿️ Chipmunk' },
+    villain:  { rate: 0.72, pitch: 0.25, label: '😈 Villain' },
+    straight: { rate: 1.0,  pitch: 1.0,  label: '🎤 Straight' },
+    autotune: { rate: 1.1,  pitch: 1.5,  label: '🎛️ Auto-Tune' },
+};
+// Must be called synchronously from inside a real tap/click handler — iOS Safari silently drops
+// speechSynthesis.speak() calls made from setTimeout/async continuations. Queuing every line's
+// utterance back-to-back inside the same gesture works because the browser's own speech queue
+// plays them in order afterward with no further gesture needed.
+function bbSpeakVerse(lines, presetKey, onDone) {
+    if (!('speechSynthesis' in window)) { showToast('Speech not supported on this device'); if (onDone) onDone(); return; }
+    const preset = BB_FLOW_PRESETS[presetKey] || BB_FLOW_PRESETS.straight;
+    window.speechSynthesis.cancel();
+    const validLines = (lines || []).filter(Boolean);
+    if (!validLines.length) { if (onDone) onDone(); return; }
+    validLines.forEach((line, i) => {
+        const u = new SpeechSynthesisUtterance(line);
+        u.rate = preset.rate; u.pitch = preset.pitch;
+        if (i === validLines.length - 1 && onDone) u.onend = onDone;
+        window.speechSynthesis.speak(u);
+    });
 }
 
-function bbPlayHit(soundId, role, when) {
+// ── Spit: canned ad-lib stingers ──
+// No real stinger clips exist yet, so these are synthesized placeholders (raw AudioBuffer
+// synthesis) — zero-friction fallback for players who skip recording their own.
+const BB_ADLIB_LABELS = { airhorn:'📯 Airhorn', laugh:'😂 Laugh', scratch:'💿 Scratch', boo:'👎 Boo' };
+let bbAdlibBuffers = {};
+function bbMakeAdlibSynth(id) {
+    const ctx = bbEnsureAudio(), sr = ctx.sampleRate;
+    if (id === 'airhorn') {
+        const len = Math.floor(sr * 0.9);
+        const buf = ctx.createBuffer(1, len, sr); const ch = buf.getChannelData(0);
+        for (let i=0;i<len;i++) {
+            const t=i/sr, freq = 520 + 60*Math.sin(2*Math.PI*3*t);
+            const env = t<0.05 ? t/0.05 : Math.exp(-(t-0.05)*1.2);
+            ch[i] = Math.sign(Math.sin(2*Math.PI*freq*t)) * 0.5 * env;
+        }
+        return buf;
+    }
+    if (id === 'laugh') {
+        const len = Math.floor(sr * 1.1);
+        const buf = ctx.createBuffer(1, len, sr); const ch = buf.getChannelData(0);
+        const hits = [0, 0.18, 0.36, 0.55, 0.76];
+        for (let i=0;i<len;i++) {
+            const t=i/sr; let v=0;
+            for (const h of hits) { const dt=t-h; if (dt>=0 && dt<0.14) v += Math.sin(2*Math.PI*(220+80*dt/0.14)*dt) * Math.exp(-dt*18) * 0.5; }
+            ch[i]=v;
+        }
+        return buf;
+    }
+    if (id === 'scratch') {
+        const len = Math.floor(sr * 0.5);
+        const buf = ctx.createBuffer(1, len, sr); const ch = buf.getChannelData(0);
+        for (let i=0;i<len;i++) { const t=i/sr, dir = Math.sin(2*Math.PI*4*t); ch[i] = (Math.random()*2-1) * Math.abs(dir) * Math.exp(-t*3); }
+        return buf;
+    }
+    const len = Math.floor(sr * 1.0); // 'boo'
+    const buf = ctx.createBuffer(1, len, sr); const ch = buf.getChannelData(0);
+    for (let i=0;i<len;i++) { const t=i/sr, freq = 160 - 40*t; ch[i] = Math.sin(2*Math.PI*freq*t) * 0.5 * Math.min(1,t*8) * Math.exp(-t*1.5); }
+    return buf;
+}
+function bbPlayCannedAdlib(id) {
     const ctx = bbEnsureAudio();
-    let buf = bbSoundBuffers[soundId];
-    if (!buf && role) { buf = bbMakeSynth(role); bbSoundBuffers[soundId] = buf; }
-    if (!buf) return;
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const g = ctx.createGain(); g.gain.value = 0.9;
+    if (!bbAdlibBuffers[id]) bbAdlibBuffers[id] = bbMakeAdlibSynth(id);
+    const src = ctx.createBufferSource(); src.buffer = bbAdlibBuffers[id];
+    const g = ctx.createGain(); g.gain.value = 0.8;
     src.connect(g); g.connect(bbMasterGain);
-    src.start(Math.max(when, ctx.currentTime+0.001));
+    src.start();
 }
 
 // ── loop ──
 function bbSetLoop(s, e) { bbLoopStart=s; bbLoopEnd=e; bbLoopStepDur=(e-s)/8/(bbPlaybackRate||1); }
 
-function bbSetLoopDuration(d) {
-    bbLoopDuration = d;
-    bbLoopEnd = Math.min(bbLoopStart + d, bbSampleDuration || 180);
-    bbLoopStart = Math.max(0, bbLoopEnd - d);
+function bbSetHitCount(n) {
+    bbHitCount = n;
+    const { start, end } = bbLoopFromStart(bbLoopStart, n);
+    bbLoopStart = start; bbLoopEnd = end;
     bbSetLoop(bbLoopStart, bbLoopEnd);
     bbAutoZoom();
     bbUpdateScrubOverlay();
     bbScrubRestart();
-    [4,6,8].forEach(n=>{
-        const b=document.getElementById('bb-dur-'+n);
+    [8,16].forEach(hits=>{
+        const b=document.getElementById('bb-hit-'+hits);
         if(!b) return;
-        b.style.background  = n===d ? 'rgba(255,152,0,.15)' : '#0d1525';
-        b.style.borderColor = n===d ? '#ff9800' : '#2a3450';
-        b.style.color       = n===d ? '#ff9800' : '#9fb0cc';
+        b.style.background  = hits===n ? 'rgba(255,152,0,.15)' : '#0d1525';
+        b.style.borderColor = hits===n ? '#ff9800' : '#2a3450';
+        b.style.color       = hits===n ? '#ff9800' : '#9fb0cc';
     });
 }
 
@@ -4965,34 +4969,101 @@ function bbScrubRestart() {
     if (bbAudioEl) { try { bbAudioEl.currentTime = bbLoopStart; } catch(e){} }
 }
 
-// ── beat scheduler ──
-function bbSchedTick() {
-    const ctx = bbEnsureAudio();
-    while (bbNextStepTime < ctx.currentTime + 0.1) {
-        const step = bbCurrentStep;
-        Object.keys(bbMyBeat).forEach(sid => {
-            const set = bbMyBeat[sid]; if (!set||!set.has(step)) return;
-            const sound = bbMyHand.find(s=>s.id===sid); if (sound) bbPlayHit(sound.id, sound.role||'voice', bbNextStepTime);
-        });
-        const s = step;
-        requestAnimationFrame(() => {
-            document.querySelectorAll('.bb-build-step').forEach(el=>el.classList.remove('playing'));
-            document.querySelectorAll(`.bb-build-step[data-step="${s}"]`).forEach(el=>el.classList.add('playing'));
-        });
-        bbCurrentStep = (bbCurrentStep+1)%8;
-        bbNextStepTime += bbLoopStepDur;
+// ── waveform ──
+// Onset (transient) detection — lets Chop snap loop points to actual beats instead of raw
+// pixel-scrubbing. Windowed RMS envelope -> half-wave-rectified positive flux (rising energy =
+// likely a hit) -> adaptive threshold (local mean + k*std, so it adapts to each track's own
+// loudness) -> peak-picking with a minimum-distance constraint. Pure function, no DOM/canvas
+// access, so it's testable standalone against a decoded AudioBuffer before any UI touches it.
+function bbDetectOnsets(audioBuffer) {
+    const ch = audioBuffer.getChannelData(0);
+    const sr = audioBuffer.sampleRate;
+
+    const winSize = Math.floor(sr * 0.02); // 20ms windows
+    const hop = winSize;                    // non-overlapping is fine for onset energy
+    const numWindows = Math.floor(ch.length / hop);
+    const rms = new Float32Array(numWindows);
+    for (let w = 0; w < numWindows; w++) {
+        let sum = 0;
+        const base = w * hop;
+        for (let i = 0; i < winSize; i++) { const v = ch[base + i] || 0; sum += v * v; }
+        rms[w] = Math.sqrt(sum / winSize);
     }
-    bbSchedulerTm = setTimeout(bbSchedTick, 25);
-}
-function bbStartBeat() {
-    bbStopBeat(); bbEnsureAudio();
-    bbCurrentStep=0; bbNextStepTime=bbAudioCtx.currentTime+0.05; bbIsPlaying=true; bbSchedTick();
-}
-function bbStopBeat() {
-    if (bbSchedulerTm){clearTimeout(bbSchedulerTm);bbSchedulerTm=null;} bbIsPlaying=false; bbCurrentStep=0;
+
+    const flux = new Float32Array(numWindows);
+    for (let w = 1; w < numWindows; w++) flux[w] = Math.max(0, rms[w] - rms[w - 1]);
+
+    const smoothWin = 43; // ~0.86s at 20ms hops
+    const threshold = new Float32Array(numWindows);
+    for (let w = 0; w < numWindows; w++) {
+        const lo = Math.max(0, w - smoothWin), hi = Math.min(numWindows, w + smoothWin);
+        let mean = 0;
+        for (let i = lo; i < hi; i++) mean += flux[i];
+        mean /= (hi - lo);
+        let variance = 0;
+        for (let i = lo; i < hi; i++) variance += (flux[i] - mean) ** 2;
+        const std = Math.sqrt(variance / (hi - lo));
+        // 2.0x std, tuned against 5 real cached 78rpm-era tracks: lower multipliers (1.3x) picked up
+        // surface noise/crackle as false "hits" (implied 190-251 BPM, implausible for this material);
+        // 2.0x settled all 5 tracks into a consistent 98-121 BPM band.
+        threshold[w] = mean + 2.0 * std;
+    }
+
+    // ~300ms minimum gap between hits — also tuned against the same 5 tracks; 120ms let sub-beat
+    // texture through, 300ms cleanly isolates real transients without merging distinct hits.
+    const minDistSec = 0.3;
+    const minDistWindows = Math.round(minDistSec * sr / hop);
+    const peaks = [];
+    let lastPeak = -minDistWindows;
+    const localWin = 2;
+    for (let w = localWin; w < numWindows - localWin; w++) {
+        if (flux[w] < threshold[w]) continue;
+        let isLocalMax = true;
+        for (let d = -localWin; d <= localWin; d++) {
+            if (d !== 0 && flux[w + d] > flux[w]) { isLocalMax = false; break; }
+        }
+        if (!isLocalMax) continue;
+        if (w - lastPeak < minDistWindows) continue;
+        peaks.push(w);
+        lastPeak = w;
+    }
+
+    return peaks.map(w => (w * hop) / sr);
 }
 
-// ── waveform ──
+// Index of the onset tick nearest to time t (binary search — bbOnsetTicks is sorted ascending).
+function bbOnsetIndexAt(t) {
+    if (!bbOnsetTicks.length) return -1;
+    let lo = 0, hi = bbOnsetTicks.length - 1;
+    if (t <= bbOnsetTicks[0]) return 0;
+    if (t >= bbOnsetTicks[hi]) return hi;
+    while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (bbOnsetTicks[mid] < t) lo = mid; else hi = mid;
+    }
+    return (t - bbOnsetTicks[lo] <= bbOnsetTicks[hi] - t) ? lo : hi;
+}
+function bbSnapToOnset(t) {
+    const i = bbOnsetIndexAt(t);
+    return i < 0 ? t : bbOnsetTicks[i];
+}
+// A loop is "N hits long" rather than "N seconds long" — walk forward N onset ticks from
+// startTime (pulling the window back if it would run off the end of the detected ticks).
+// Falls back to a fixed ~0.4s/hit estimate when a track has too few detected onsets (e.g. still
+// decoding, or a track with no usable transients) so the UI never has to special-case "no ticks yet".
+function bbLoopFromStart(startTime, hitCount) {
+    if (bbOnsetTicks.length >= 2) {
+        const maxIdx = bbOnsetTicks.length - 1;
+        const startIdx = bbOnsetIndexAt(startTime);
+        const endIdx = Math.min(startIdx + hitCount, maxIdx);
+        const adjStartIdx = Math.max(0, endIdx - hitCount);
+        return { start: bbOnsetTicks[adjStartIdx], end: bbOnsetTicks[endIdx] };
+    }
+    const dur = bbSampleDuration || 180;
+    const end = Math.min(startTime + hitCount * 0.4, dur);
+    return { start: Math.max(0, end - hitCount * 0.4), end };
+}
+
 function bbDrawWaveform() {
     const canvas = document.getElementById('bb-waveform-canvas'); if (!canvas||!bbSampleBuffer) return;
     const ldr = document.getElementById('bb-waveform-loading'); if(ldr) ldr.style.display='none';
@@ -5010,7 +5081,17 @@ function bbDrawWaveform() {
         for (let j=0;j<step;j++){const v=ch[base+j]||0;if(v<mn)mn=v;if(v>mx)mx=v;}
         ctx2.moveTo(x,H/2+mn*(H/2-4)); ctx2.lineTo(x,H/2+mx*(H/2-4));
     }
-    ctx2.stroke(); bbUpdateScrubOverlay();
+    ctx2.stroke();
+    if (bbOnsetTicks.length && ze>zs) {
+        ctx2.strokeStyle='rgba(94,230,197,.55)'; ctx2.lineWidth=1; ctx2.beginPath();
+        for (const t of bbOnsetTicks) {
+            if (t<zs || t>ze) continue;
+            const x=((t-zs)/(ze-zs))*W;
+            ctx2.moveTo(x,H*0.12); ctx2.lineTo(x,H*0.88);
+        }
+        ctx2.stroke();
+    }
+    bbUpdateScrubOverlay();
 }
 function bbUpdateScrubOverlay() {
     const wrap=document.getElementById('bb-waveform-wrap'); if(!wrap||!bbSampleDuration) return;
@@ -5024,8 +5105,9 @@ function bbUpdateScrubOverlay() {
     region.style.left=lx+'px'; region.style.width=Math.max(2,rx-lx)+'px';
     head.style.left=lx+'px';
     const info=document.getElementById('bb-loop-info');
-    const realDur = bbPlaybackRate && bbPlaybackRate !== 1 ? ` (${(bbLoopDuration/bbPlaybackRate).toFixed(1)}s real)` : '';
-    if(info) info.textContent=`${bbLoopDuration}s loop${realDur} · ${bbLoopStart.toFixed(1)}s–${bbLoopEnd.toFixed(1)}s · viewing ${zs.toFixed(0)}s–${ze.toFixed(0)}s`;
+    const hitLen = bbLoopEnd - bbLoopStart;
+    const realDur = bbPlaybackRate && bbPlaybackRate !== 1 ? ` (${(hitLen/bbPlaybackRate).toFixed(1)}s real)` : '';
+    if(info) info.textContent=`${bbHitCount} hits · ${hitLen.toFixed(1)}s${realDur} · ${bbLoopStart.toFixed(1)}s–${bbLoopEnd.toFixed(1)}s · viewing ${zs.toFixed(0)}s–${ze.toFixed(0)}s`;
     const btn=document.getElementById('bb-lock-btn');
     if(btn) btn.disabled=false;
 }
@@ -5038,53 +5120,14 @@ async function bbLoadSample(proxyUrl) {
         const ab=await res.arrayBuffer();
         bbSampleBuffer=await ctx.decodeAudioData(ab);
         bbSampleDuration=bbSampleBuffer.duration;
+        bbOnsetTicks=bbDetectOnsets(bbSampleBuffer);
         bbDrawWaveform();
-        if (bbBreakAt !== null) { bbAutoZoomToBreakAt(bbBreakAt); bbBreakAt=null; }
     } catch(e){console.warn('bbLoadSample:',e.message);}
-}
-
-function bbAutoZoomToBreakAt(t) {
-    const dur = bbSampleDuration || 300;
-    const win = 45;
-    let zs = Math.max(0, t - 5);
-    let ze = Math.min(dur, zs + win);
-    if (ze >= dur) { ze = dur; zs = Math.max(0, ze - win); }
-    bbZoomStart = zs; bbZoomEnd = ze;
-    bbLoopStart = Math.max(0, t);
-    bbLoopEnd   = Math.min(dur, bbLoopStart + bbLoopDuration);
-    if (bbLoopEnd - bbLoopStart < bbLoopDuration) bbLoopStart = Math.max(0, bbLoopEnd - bbLoopDuration);
-    bbSetLoop(bbLoopStart, bbLoopEnd);
-    bbDrawWaveform(); bbUpdateScrubOverlay(); bbScrubRestart();
 }
 
 function bbStopScheduled() {
     bbScheduledSrcs.forEach(s=>{try{s.stop();}catch(e){}});
     bbScheduledSrcs=[];
-}
-
-// 4 built-in synth pads for Round 3
-const BB_R3_PADS = [
-    {id:'r3-kick',  ownerName:'KICK',  role:'kick',  color:'#ff6b3d'},
-    {id:'r3-snare', ownerName:'SNARE', role:'snare', color:'#5ee6c5'},
-    {id:'r3-hat',   ownerName:'HAT',   role:'hat',   color:'#c792ea'},
-    {id:'r3-clap',  ownerName:'CLAP',  role:'clap',  color:'#ff9800'},
-];
-
-function bbStartR2Loop() {
-    bbStopR2Loop();
-    if (!bbR2LoopBuffer || !bbAudioCtx) return;
-    const loop = bbR2LoopData || {start:0,end:4,rate:1};
-    const src = bbAudioCtx.createBufferSource();
-    src.buffer = bbR2LoopBuffer; src.loop = true;
-    src.loopStart = loop.start;
-    src.loopEnd = Math.min(loop.end, bbR2LoopBuffer.duration);
-    src.playbackRate.value = loop.rate || 1;
-    src.connect(bbMasterGain);
-    src.start(0, loop.start);
-    bbR2LoopSrc = src;
-}
-function bbStopR2Loop() {
-    try{bbR2LoopSrc?.stop();}catch(e){} bbR2LoopSrc=null;
 }
 
 // ── scrub ──
@@ -5107,8 +5150,9 @@ function bbWireScrub() {
         return clientX>=lx-36 && clientX<=rx+36;
     }
     function setStartVisual(t) {
-        bbLoopStart=Math.max(0,Math.min(t,(bbSampleDuration||180)-bbLoopDuration));
-        bbLoopEnd=bbLoopStart+bbLoopDuration;
+        const snapped = bbSnapToOnset(t);
+        const { start, end } = bbLoopFromStart(snapped, bbHitCount);
+        bbLoopStart=start; bbLoopEnd=end;
         bbSetLoop(bbLoopStart,bbLoopEnd);
         bbUpdateScrubOverlay();
     }
@@ -5152,296 +5196,171 @@ function bbWireScrub() {
     document.addEventListener('mouseup',onUp); document.addEventListener('touchend',onUp);
     const lockBtn=document.getElementById('bb-lock-btn');
     if(lockBtn&&!lockBtn._wired){lockBtn._wired=true;lockBtn.addEventListener('click',()=>{
-        socket.emit('bbLockScrub',{start:bbLoopStart,end:bbLoopEnd,rate:bbPlaybackRate});
+        socket.emit('bbLockChop',{start:bbLoopStart,end:bbLoopEnd,hitCount:bbHitCount,rate:bbPlaybackRate});
         lockBtn.disabled=true; lockBtn.textContent='LOCKED ✓';
     });}
 }
 
-function bbToggleR1Layer() {
-    const btn=document.getElementById('bb-r1-layer-btn');
-    if(bbR1LayerActive){
-        try{bbR1LayerSrc?.stop();}catch(e){}
-        bbR1LayerSrc=null; bbR1LayerActive=false;
-        if(btn){btn.textContent='▶ HEAR R1 LOOP'; btn.style.borderColor='#5ee6c5'; btn.style.color='#5ee6c5';}
-        return;
-    }
-    bbEnsureAudio();
-    // Ensure gain node exists
-    if(!bbR1LayerGain){
-        bbR1LayerGain=bbAudioCtx.createGain(); bbR1LayerGain.gain.value=1.0;
-        bbR1LayerGain.connect(bbMasterGain);
-    }
-    const doStart=()=>{
-        if(!bbR1LayerBuffer) return;
-        const loop=bbR1LoopData||{start:0,end:4,rate:1};
-        const src=bbAudioCtx.createBufferSource();
-        src.buffer=bbR1LayerBuffer; src.loop=true;
-        src.loopStart=loop.start;
-        src.loopEnd=Math.min(loop.end, bbR1LayerBuffer.duration);
-        src.playbackRate.value=loop.rate||1;
-        src.connect(bbR1LayerGain);
-        src.start(0,loop.start);
-        bbR1LayerSrc=src; bbR1LayerActive=true;
-        if(btn){btn.textContent='⏹ MUTE R1'; btn.style.borderColor='#ff6b3d'; btn.style.color='#ff6b3d';}
-    };
-    if(bbR1LayerBuffer){ doStart(); return; }
-    if(!bbR1LayerUrl) return;
-    if(btn) btn.textContent='Loading…';
-    fetch(bbR1LayerUrl).then(r=>r.arrayBuffer()).then(ab=>bbAudioCtx.decodeAudioData(ab)).then(buf=>{
-        bbR1LayerBuffer=buf; doStart();
-    }).catch(()=>{ if(btn) btn.textContent='▶ HEAR R1 LOOP'; });
+// ── spit screen — mad-lib diss verse, adapted from Rizz or Roast's rrRenderTemplate/rrSubmitFills ──
+let bbSpitTemplateRaw   = '';
+let bbSpitFlowPreset    = 'straight';
+let bbSpitAdlibChoice   = null; // {type:'canned',id} | {type:'recorded',dataUrl} | null
+let bbSpitMediaRecorder = null;
+let bbSpitAudioChunks   = [];
+let bbSpitAudioDataUrl  = null;
+let bbSpitCurrentAudioEl= null;
+
+function bbRenderSpitTemplate(template) {
+    bbSpitTemplateRaw = template;
+    const wrap = document.getElementById('bb-spit-template-wrap'); if (!wrap) return;
+    let idx = 0;
+    wrap.innerHTML = template.replace(/\[([^\]]+)\]/g, () => {
+        const i = idx++;
+        return `<input class="bb-spit-blank" data-idx="${i}" placeholder="___" maxlength="25" autocomplete="off" autocorrect="off" spellcheck="false">`;
+    }).replace(/\n/g, '<br>');
+    wrap.querySelectorAll('.bb-spit-blank')[0]?.focus();
 }
 
-// ── record screen ──
-function bbRenderRecordScreen() {
-    for(let i=0;i<3;i++){
-        const pad=document.getElementById(`bb-rec-pad-${i}`); if(!pad) continue;
-        const dur=document.getElementById(`bb-rec-dur-${i}`);
-        const hasSound=!!bbMySounds[i];
-        pad.style.borderColor=i===bbCurrentSlot?'#ff9800':(hasSound?'#26c47c':'rgba(255,152,0,.25)');
-        pad.style.boxShadow=i===bbCurrentSlot?'0 0 0 3px rgba(255,152,0,.5)':'';
-        pad.style.background=hasSound?'rgba(38,196,124,.1)':'rgba(255,152,0,.06)';
-        if(dur) dur.textContent=hasSound?`✓ recorded`:'empty';
-        if(dur) dur.style.color=hasSound?'#26c47c':'#7a9abf';
-    }
-    const sub=document.getElementById('bb-rec-submit');
-    if(sub) sub.disabled=bbMySounds.filter(Boolean).length===0;
+function bbCurrentSpitFills() {
+    return Array.from(document.querySelectorAll('#bb-spit-template-wrap .bb-spit-blank')).map(el => el.value.trim());
 }
 
-function bbStartRecording() {
-    if(bbMediaRec&&bbMediaRec.state==='recording') return;
-    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
-        bbMediaStream=stream;
-        const mime=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'audio/webm';
-        bbMediaRec=new MediaRecorder(stream,{mimeType:mime});
-        const chunks=[];
-        bbMediaRec.ondataavailable=e=>{if(e.data.size) chunks.push(e.data);};
-        bbMediaRec.onstop=()=>{
-            const slot=bbCurrentSlot;
-            const blob=new Blob(chunks,{type:bbMediaRec.mimeType}), reader=new FileReader();
-            reader.onload=()=>{
-                bbMySounds[slot]=reader.result;
-                bbEnsureAudio();
-                bbDecodeSound(`${bbMyId}_snd${slot}`,bbMySounds[slot],'voice').catch(()=>{});
-                bbRenderRecordScreen();
-                // auto-advance to next empty slot
-                const next=bbMySounds.findIndex((s,i)=>i>slot&&!s);
-                if(next!==-1) setTimeout(()=>{bbCurrentSlot=next;bbRenderRecordScreen();},400);
-            };
-            reader.readAsDataURL(blob);
-            stream.getTracks().forEach(t=>t.stop());
-        };
-        bbMediaRec.start();
-        const btn=document.getElementById('bb-rec-btn');
-        if(btn) btn.classList.add('recording');
-    }).catch(()=>showToast('Mic access needed'));
-}
-function bbStopRecording() {
-    if(bbMediaRec&&bbMediaRec.state==='recording') bbMediaRec.stop();
-    const btn=document.getElementById('bb-rec-btn'); if(btn) btn.classList.remove('recording');
-}
-function bbWireRecordScreen() {
-    for(let i=0;i<3;i++){
-        const pad=document.getElementById(`bb-rec-pad-${i}`);
-        if(!pad||pad._wired) continue; pad._wired=true;
-        const idx=i;
-        pad.addEventListener('click',()=>{
-            bbCurrentSlot=idx; bbRenderRecordScreen();
-            if(bbMySounds[idx]){ bbEnsureAudio(); bbPlayHit(`${bbMyId}_snd${idx}`,'voice',bbAudioCtx.currentTime+0.01); }
-        });
-    }
-    const btn=document.getElementById('bb-rec-btn');
-    if(btn&&!btn._wired){btn._wired=true;
-        btn.addEventListener('pointerdown',e=>{e.preventDefault();bbEnsureAudio();bbStartRecording();});
-        ['pointerup','pointerleave','pointercancel'].forEach(ev=>btn.addEventListener(ev,()=>bbStopRecording()));
-    }
-    const sub=document.getElementById('bb-rec-submit');
-    if(sub&&!sub._wired){sub._wired=true;sub.addEventListener('click',()=>{
-        socket.emit('bbSubmitRecordings',{sounds:bbMySounds});
-        sub.disabled=true;sub.textContent='SUBMITTED ✓';
-    });}
+function bbAssembleSpitPreview() {
+    const fills = bbCurrentSpitFills();
+    let i = 0;
+    return bbSpitTemplateRaw.replace(/\[[^\]]+\]/g, () => fills[i++] || '____');
 }
 
-// ── build screen ──
-function bbShowBuildScreen(data) {
-    bbMyLoop   = data.r1Loop || {start:5,end:9,duration:4,rate:1};
-    bbR2LoopData = data.r2Loop || {start:5,end:9,duration:4,rate:1};
-    bbPlaybackRate = bbMyLoop.rate || 1;
-    bbSetLoop(bbMyLoop.start, bbMyLoop.end);
-    bbSlotLen = bbMyLoop.duration || bbLoopDuration || 4;
-    bbSlots = Array(4).fill(null).map(()=>({jazz:true,drums:true}));
-
-    // Drums buffer: reuse whatever was in bbSampleBuffer from R2 scrub
-    if (bbSampleBuffer && !bbR2LoopBuffer) { bbR2LoopBuffer = bbSampleBuffer; bbSampleBuffer = null; }
-
-    // Load R1 jazz into bbSampleBuffer (was cleared when R2 crate started)
-    if (data.r1AudioUrl && !bbSampleBuffer) {
-        bbEnsureAudio();
-        fetch(data.r1AudioUrl).then(r=>r.arrayBuffer())
-            .then(ab=>bbAudioCtx.decodeAudioData(ab))
-            .then(buf=>{
-                bbSampleBuffer=buf; bbSampleDuration=buf.duration;
-                if(document.getElementById('bb-build-screen')?.style.display==='flex') {
-                    bbStopLoop(); bbStartLoop();
-                }
-            }).catch(()=>{});
-    }
-
-    bbStreamStop(); bbStopLoop(); bbStopR2Loop(); bbStopScheduled();
-    bbShowScreen('bb-build-screen');
-    const timer=document.getElementById('bb-build-timer'); if(timer) timer.textContent=data.timeLeft;
-    bbRenderBeatGrid();
-    if(bbSampleBuffer)  bbStartLoop();
-    if(bbR2LoopBuffer)  bbStartR2Loop();
-}
-
-function bbRenderBeatGrid() {
-    const grid=document.getElementById('bb-beat-grid'); if(!grid) return;
-    const n=bbSlots.length;
-    const layers=[
-        {key:'jazz',  label:'🎷 JAZZ',  color:'#ff9800', bg:'rgba(255,152,0,.15)'},
-        {key:'drums', label:'🥁 DRUMS', color:'#5ee6c5', bg:'rgba(94,230,197,.12)'},
-    ];
-    grid.innerHTML=layers.map(layer=>`
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <div style="width:62px;font-size:0.62em;font-weight:800;color:${layer.color};text-align:right;">${layer.label}</div>
-            <div style="display:flex;gap:5px;flex:1;">
-                ${bbSlots.map((slot,i)=>`
-                    <div onclick="bbToggleSlot(${i},'${layer.key}')" style="flex:1;min-width:0;height:52px;border-radius:10px;
-                         border:2px solid ${slot[layer.key]?layer.color:'#2a3450'};
-                         background:${slot[layer.key]?layer.bg:'#0d1525'};
-                         display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.1em;">
-                        ${slot[layer.key]?layer.label.split(' ')[0]:''}
-                    </div>`).join('')}
-            </div>
-        </div>`).join('');
-    const info=document.getElementById('bb-slot-info');
-    if(info) info.textContent=`${n} SLOTS · ${(n*bbSlotLen).toFixed(0)}s TOTAL`;
-}
-
-function bbToggleSlot(i,key) {
-    if(!bbSlots[i]) return;
-    bbSlots[i][key]=!bbSlots[i][key];
-    bbRenderBeatGrid();
-}
-function bbAddSlot() {
-    if(bbSlots.length>=6) return;
-    bbSlots.push({jazz:true,drums:true}); bbRenderBeatGrid();
-}
-function bbRemoveSlot() {
-    if(bbSlots.length<=1) return;
-    bbSlots.pop(); bbRenderBeatGrid();
-}
-
-function bbPreviewBeat() {
-    bbStopLoop(); bbStopR2Loop(); bbStopScheduled();
-    const ctx=bbEnsureAudio();
-    const now=ctx.currentTime+0.06;
-    const n=bbSlots.length;
-    for(let c=0;c<2;c++){
-        bbSlots.forEach((slot,i)=>{
-            const t=now+(c*n+i)*bbSlotLen;
-            if(slot.jazz && bbSampleBuffer){
-                const src=ctx.createBufferSource(); src.buffer=bbSampleBuffer;
-                src.loop=true; src.loopStart=bbLoopStart; src.loopEnd=bbLoopEnd;
-                src.playbackRate.value=bbPlaybackRate;
-                const g=ctx.createGain(); g.gain.value=0.65; g.connect(bbMasterGain);
-                src.connect(g); src.start(t,bbLoopStart); src.stop(t+bbSlotLen);
-                bbScheduledSrcs.push(src);
-            }
-            if(slot.drums && bbR2LoopBuffer && bbR2LoopData){
-                const src=ctx.createBufferSource(); src.buffer=bbR2LoopBuffer;
-                src.loop=true; src.loopStart=bbR2LoopData.start;
-                src.loopEnd=Math.min(bbR2LoopData.end,bbR2LoopBuffer.duration);
-                src.playbackRate.value=bbR2LoopData.rate||1;
-                src.connect(bbMasterGain); src.start(t,bbR2LoopData.start); src.stop(t+bbSlotLen);
-                bbScheduledSrcs.push(src);
-            }
-        });
-    }
-    setTimeout(()=>{ bbStopScheduled(); if(bbSampleBuffer)bbStartLoop(); if(bbR2LoopBuffer)bbStartR2Loop(); },
-        (2*n*bbSlotLen+0.5)*1000);
-}
-
-function bbBuildSubmit() {
-    socket.emit('bbSubmitBeat',{slots:bbSlots, slotLen:bbSlotLen});
-    const btn=document.getElementById('bb-build-submit'); if(btn){btn.disabled=true;btn.textContent='LOCKED IN ✓';}
-}
-
-// ── listen screen ──
-function bbShowListenScreen(data) {
-    bbListenQueue=data.queue||[];
-    bbListenProxyUrl=data.r1AudioUrl||null;
-    bbR2AudioUrl=data.r2AudioUrl||null;
-    bbStopBeat(); bbStopLoop(); bbStopR2Loop(); bbStopScheduled();
-    bbShowScreen('bb-listen-screen');
-    const el=document.getElementById('bb-listen-list');
-    if(el) el.innerHTML=bbListenQueue.map(q=>`
-        <div class="bb-deal-card"><div style="font-size:1.3em">⏳</div>
-        <div><div class="bb-deal-name">${q.playerName}</div></div></div>`).join('');
-}
-function bbPlayListenBeat(playerId) {
-    const entry=bbListenQueue.find(q=>q.playerId===playerId); if(!entry) return;
-    const idx=bbListenQueue.indexOf(entry);
-    const el=document.getElementById('bb-listen-list');
-    if(el) el.innerHTML=bbListenQueue.map((q,i)=>{
-        const active=i===idx;
-        return `<div class="bb-deal-card" style="${active?'border-color:#ff9800;background:rgba(255,152,0,.08)':''}">
-            <div style="font-size:1.3em">${active?'▶️':(i<idx?'✅':'⏳')}</div>
-            <div><div class="bb-deal-name">${q.playerName}</div></div></div>`;
-    }).join('');
-    bbStopLoop(); bbStopR2Loop(); bbStopScheduled(); bbStreamStop();
-
-    const r1Loop  = entry.r1Loop || {start:5,end:9,rate:1};
-    const r2Loop  = entry.r2Loop || null;
-    const slots   = entry.slots  || [{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true},{jazz:true,drums:true}];
-    const slotLen = entry.slotLen || 4;
-
-    const ctx = bbEnsureAudio();
-    const now = ctx.currentTime + 0.1;
-    slots.forEach((slot,i)=>{
-        const t = now + i * slotLen;
-        if(slot.jazz && bbSampleBuffer){
-            const src=ctx.createBufferSource(); src.buffer=bbSampleBuffer;
-            src.loop=true; src.loopStart=r1Loop.start; src.loopEnd=r1Loop.end;
-            src.playbackRate.value=r1Loop.rate||1;
-            const g=ctx.createGain(); g.gain.value=0.65; g.connect(bbMasterGain);
-            src.connect(g); src.start(t,r1Loop.start); src.stop(t+slotLen);
-            bbScheduledSrcs.push(src);
-        }
-        if(slot.drums && bbR2LoopBuffer && r2Loop){
-            const src=ctx.createBufferSource(); src.buffer=bbR2LoopBuffer;
-            src.loop=true; src.loopStart=r2Loop.start;
-            src.loopEnd=Math.min(r2Loop.end, bbR2LoopBuffer.duration);
-            src.playbackRate.value=r2Loop.rate||1;
-            src.connect(bbMasterGain); src.start(t,r2Loop.start); src.stop(t+slotLen);
-            bbScheduledSrcs.push(src);
-        }
+function bbSetFlowPreset(key) {
+    bbSpitFlowPreset = key;
+    Object.keys(BB_FLOW_PRESETS).forEach(k=>{
+        const b=document.getElementById('bb-flow-'+k); if(!b) return;
+        const active = k===key;
+        b.style.background  = active ? 'rgba(255,152,0,.15)' : '#0d1525';
+        b.style.borderColor = active ? '#ff9800' : '#2a3450';
+        b.style.color       = active ? '#ff9800' : '#9fb0cc';
     });
 }
 
-// ── vote screen ──
-function bbCastVote(targetId,btn) {
-    socket.emit('bbVote',{targetId});
-    document.querySelectorAll('.bb-vote-btn').forEach(b=>b.disabled=true);
-    btn.classList.add('voted');
+// Tap handler — must call bbSpeakVerse synchronously (no await before it) to satisfy iOS's
+// gesture requirement for speechSynthesis.speak().
+function bbPreviewSpit() {
+    const lines = bbAssembleSpitPreview().split('\n');
+    bbSpeakVerse(lines, bbSpitFlowPreset);
 }
 
+function bbPickCannedAdlib(id) {
+    bbSpitAdlibChoice = { type: 'canned', id };
+    bbSpitAudioDataUrl = null;
+    bbPlayCannedAdlib(id);
+    document.querySelectorAll('.bb-adlib-canned-btn').forEach(b=>{
+        const active = b.dataset.id===id;
+        b.style.borderColor = active ? '#5ee6c5' : '#2a3450';
+        b.style.color       = active ? '#5ee6c5' : '#9fb0cc';
+    });
+    const recBtn = document.getElementById('bb-spit-record-btn');
+    if (recBtn) { recBtn.style.borderColor='#e91e63'; recBtn.style.color='#e91e63'; recBtn.textContent='🎙️'; }
+    const play = document.getElementById('bb-spit-adlib-play'); if (play) play.style.display='none';
+    const hint = document.getElementById('bb-spit-record-hint'); if(hint) hint.textContent='Tap to record your own instead';
+}
+
+async function bbToggleSpitRecord() {
+    if (bbSpitMediaRecorder && bbSpitMediaRecorder.state === 'recording') { bbSpitMediaRecorder.stop(); return; }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        bbSpitAudioChunks = [];
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+        bbSpitMediaRecorder = new MediaRecorder(stream, { mimeType });
+        bbSpitMediaRecorder.ondataavailable = e => { if (e.data.size>0) bbSpitAudioChunks.push(e.data); };
+        bbSpitMediaRecorder.onstop = () => {
+            stream.getTracks().forEach(t=>t.stop());
+            const blob = new Blob(bbSpitAudioChunks, {type:mimeType});
+            const reader = new FileReader();
+            reader.onload = () => {
+                bbSpitAudioDataUrl = reader.result;
+                bbSpitAdlibChoice = { type: 'recorded', dataUrl: bbSpitAudioDataUrl };
+                const btn=document.getElementById('bb-spit-record-btn');
+                if(btn){btn.style.borderColor='#26c47c';btn.style.color='#26c47c';btn.textContent='✅';}
+                const hint=document.getElementById('bb-spit-record-hint'); if(hint) hint.textContent='Recorded!';
+                const play=document.getElementById('bb-spit-adlib-play'); if(play) play.style.display='inline-block';
+                document.querySelectorAll('.bb-adlib-canned-btn').forEach(b=>{b.style.borderColor='#2a3450';b.style.color='#9fb0cc';});
+            };
+            reader.readAsDataURL(blob);
+        };
+        bbSpitMediaRecorder.start();
+        const btn=document.getElementById('bb-spit-record-btn');
+        if(btn){btn.style.borderColor='#ff3b3b';btn.style.color='#ff3b3b';btn.textContent='⏹';}
+        const hint=document.getElementById('bb-spit-record-hint'); if(hint) hint.textContent='Recording… tap to stop';
+        setTimeout(()=>{ if(bbSpitMediaRecorder?.state==='recording') bbSpitMediaRecorder.stop(); }, 6000);
+    } catch(e) {
+        showToast('Mic not available — pick a canned ad-lib instead');
+    }
+}
+
+function bbPlaySpitAdlibRecording() {
+    if (!bbSpitAudioDataUrl) return;
+    if (bbSpitCurrentAudioEl) { bbSpitCurrentAudioEl.pause(); bbSpitCurrentAudioEl=null; }
+    bbSpitCurrentAudioEl = new Audio(bbSpitAudioDataUrl);
+    bbSpitCurrentAudioEl.play();
+}
+
+function bbSubmitSpit() {
+    const fills = bbCurrentSpitFills();
+    if (fills.some(f=>!f)) { showToast('Fill in all the blanks first!'); return; }
+    socket.emit('bbSubmitSpit', { fills, flowPreset: bbSpitFlowPreset, adlib: bbSpitAdlibChoice });
+    document.querySelectorAll('#bb-spit-template-wrap .bb-spit-blank').forEach(el=>el.disabled=true);
+    const btn = document.getElementById('bb-spit-submit-btn'); if(btn) btn.disabled=true;
+    showToast('Locked in! Waiting for others…');
+}
+
+// ── battle screen — sequential 1v1 judging, adapted from Stroke Off's sq-battle-screen ──
+let bbBattleData = null; // {matchupIdx, p1, p2, voted}
+
+function bbHearVerse(player) {
+    if (!bbBattleData) return;
+    const p = player === 1 ? bbBattleData.p1 : bbBattleData.p2;
+    if (!p) return;
+    const btn = document.getElementById('bb-battle-p'+player+'-play');
+    if (btn) { btn.textContent = '🔊 Playing…'; btn.disabled = true; }
+    // Ad-lib plays alongside the verse — safe to trigger here even though it's not the TTS call:
+    // WebAudio/Audio playback has no gesture restriction once the AudioContext is already
+    // running (satisfied earlier in Dig/Chop), unlike speechSynthesis.speak() below.
+    if (p.adlib) {
+        if (p.adlib.type === 'canned') bbPlayCannedAdlib(p.adlib.id);
+        else if (p.adlib.type === 'recorded' && p.adlib.dataUrl) { const a = new Audio(p.adlib.dataUrl); a.volume = 0.8; a.play().catch(()=>{}); }
+    }
+    // Must be called synchronously from this tap handler — see bbSpeakVerse's comment.
+    bbSpeakVerse(p.lines, p.flowPreset, () => {
+        if (btn) { btn.textContent = '▶ HEAR VERSE'; btn.disabled = false; }
+    });
+}
+
+function bbVote(side) {
+    if (!bbBattleData || bbBattleData.voted) return;
+    bbBattleData.voted = true;
+    socket.emit('bbVote', { matchupIdx: bbBattleData.matchupIdx, choice: side });
+    const vp1=document.getElementById('bb-battle-vote-p1'), vp2=document.getElementById('bb-battle-vote-p2');
+    if (vp1) vp1.disabled=true; if (vp2) vp2.disabled=true;
+    const chosen = side==='p1' ? vp1 : vp2;
+    if (chosen) { chosen.style.background='#5ee6c5'; chosen.style.color='#090b12'; }
+    showToast('Voted!');
+}
+
+// ── record screen ──
+// ── build screen ──
 // ── screen switcher ──
-const BB_SCREENS=['bb-crate-screen','bb-scrub-screen','bb-record-screen','bb-deal-screen','bb-build-screen','bb-listen-screen','bb-vote-screen','bb-results-screen'];
+const BB_SCREENS=['bb-crate-screen','bb-scrub-screen','bb-spit-screen','bb-battle-screen','bb-results-screen'];
 function bbShowScreen(id) {
     BB_SCREENS.forEach(s=>{const el=document.getElementById(s);if(el) el.style.display='none';});
     const el=document.getElementById(id); if(el) el.style.display='flex';
 }
 
 // ── socket events ──
-socket.on('bbCratePhase',({round,totalRounds,loading,roundType})=>{
-    bbMyId=socket.id; bbSampleBuffer=null; bbSoundBuffers={};
-    bbMyHand=[]; bbMyBeat={}; bbSlots=[]; bbScheduledSrcs=[];
-    bbStreamStop(); bbStopLoop(); bbStopBeat(); bbStopScheduled();
-    try{bbR1LayerSrc?.stop();}catch(e){} bbR1LayerSrc=null; bbR1LayerActive=false; bbR1LayerBuffer=null; bbR1LayerUrl=null;
-    bbStopR2Loop(); bbR2LoopBuffer=null; bbR2AudioUrl=null; bbR2LoopData=null;
-    bbLoopStart=0; bbLoopEnd=4; bbLoopDuration=4; bbPlaybackRate=1.0; bbBreakAt=null;
+socket.on('bbRoundStart',({round,totalRounds,matchups,byeId})=>{
+    bbMyId=socket.id; bbSampleBuffer=null; bbOnsetTicks=[]; bbHitCount=8;
+    bbScheduledSrcs=[];
+    bbStreamStop(); bbStopLoop(); bbStopScheduled();
+    bbLoopStart=0; bbLoopEnd=4; bbPlaybackRate=1.0;
     bbZoomStart=0; bbZoomEnd=0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
     const wfl=document.getElementById('bb-waveform-loading');
@@ -5450,71 +5369,68 @@ socket.on('bbCratePhase',({round,totalRounds,loading,roundType})=>{
     const pll=document.getElementById('bb-pitch-label'); if(pll) pll.textContent='1.00×';
     bbShowScreen('bb-crate-screen');
     const rnd=document.getElementById('bb-crate-round');
-    const labels={sample:'ROUND 1 — THE RECORD',break:'ROUND 2 — THE BREAK'};
-    if(rnd) rnd.textContent=labels[roundType]||`ROUND ${round} / ${totalRounds}`;
+    if(rnd){
+        if(byeId===bbMyId){
+            rnd.textContent=`ROUND ${round} / ${totalRounds} — BYE (free ${round} pt${round!==1?'s':''})`;
+        } else {
+            const mine=(matchups||[]).find(m=>m.p1Id===bbMyId||m.p2Id===bbMyId);
+            const oppName=mine ? (mine.p1Id===bbMyId?mine.p2Name:mine.p1Name) : '?';
+            rnd.textContent=`ROUND ${round} / ${totalRounds} — VS ${oppName.toUpperCase()}`;
+        }
+    }
     const tit=document.getElementById('bb-crate-title');
     const art=document.getElementById('bb-crate-artist');
     const yr=document.getElementById('bb-crate-year');
     const ldr=document.getElementById('bb-crate-loading');
     if(tit) tit.textContent=''; if(art) art.textContent=''; if(yr) yr.textContent='';
-    const msgs={sample:'Pulling from the crates…',break:'Loading the break…'};
-    if(ldr) ldr.textContent=loading?(msgs[roundType]||'Loading…'):'';
+    if(ldr) ldr.textContent='Pulling from the crates…';
     document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.remove('spinning'));
     bbEnsureAudio();
 });
 
-socket.on('bbSampleReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})=>{
-    bbAudioProxyUrl=audioProxyUrl; bbSampleDuration=duration;
-    bbLoopStart=Math.min(5,duration*0.1); bbLoopEnd=bbLoopStart+bbLoopDuration;
-    bbSetLoop(bbLoopStart,bbLoopEnd);
+socket.on('bbDigReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})=>{
+    bbAudioProxyUrl=audioProxyUrl; bbSampleDuration=duration||180;
     const tit=document.getElementById('bb-crate-title'),art=document.getElementById('bb-crate-artist');
     const yr=document.getElementById('bb-crate-year'),img=document.getElementById('bb-vinyl-img');
     const ldr=document.getElementById('bb-crate-loading');
-    if(tit) tit.textContent=title; if(art) art.textContent=creator;
-    if(yr)  yr.textContent=date;  if(img){img.src=thumbUrl;img.style.display='';}
+    if(tit) tit.textContent=title; if(art) art.textContent=creator||'';
+    if(yr)  yr.textContent=date||'';
+    if(img){ if(thumbUrl){img.src=thumbUrl;img.style.display='';} else img.style.display='none'; }
     document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.add('spinning'));
+    if(!audioProxyUrl){ if(ldr) ldr.textContent='No track found — sitting this one out'; return; }
     // Play 10s non-looping preview so players can hear the track during the reveal
     bbEnsureAudio();
     bbStreamPreview(audioProxyUrl);
     if(ldr) ldr.textContent='🎵 Previewing — waveform decoding…';
-    // Decode full buffer in background for the scrub waveform
+    // Decode full buffer + detect onsets in background for the chop waveform
     bbLoadSample(audioProxyUrl).then(()=>{
-        if(ldr) ldr.textContent='✓ Ready to scrub';
-        const scrubScreen=document.getElementById('bb-scrub-screen');
-        if(scrubScreen?.style.display==='flex'){
-            // SCRUB already showing — start precise loop and draw waveform
-            bbStreamStop(); bbStartLoop(); bbDrawWaveform(); bbAutoZoom();
+        if(ldr) ldr.textContent='✓ Ready to chop — waiting for everyone else…';
+        const chopScreen=document.getElementById('bb-scrub-screen');
+        if(chopScreen?.style.display==='flex'){
+            // CHOP already showing — recompute the loop now that onset ticks exist, start precise loop
+            bbStreamStop();
+            bbSetHitCount(bbHitCount);
             const wldr=document.getElementById('bb-waveform-loading');
             if(wldr) wldr.style.display='none';
         }
     });
 });
 
-socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration,roundType,r1AudioUrl,r1Loop,breakAt})=>{
+socket.on('bbChopPhase',({timeLeft,audioProxyUrl,duration})=>{
     bbSampleDuration=duration||bbSampleDuration;
-    if(breakAt!=null) bbBreakAt=breakAt; // will auto-zoom after waveform decodes
-    if(!bbLoopStart&&bbBreakAt==null){ bbLoopStart=Math.min(5,bbSampleDuration*0.1); bbLoopEnd=bbLoopStart+bbLoopDuration; bbSetLoop(bbLoopStart,bbLoopEnd); }
-    bbR1LayerUrl=r1AudioUrl||null; bbR1LoopData=r1Loop||null;
-    const r1Btn=document.getElementById('bb-r1-layer-btn');
-    const r1Vol=document.getElementById('bb-r1-vol-row');
-    if(r1Btn){ r1Btn.style.display=r1AudioUrl?'block':'none'; r1Btn.textContent='▶ HEAR R1 LOOP'; r1Btn.style.borderColor='#5ee6c5'; r1Btn.style.color='#5ee6c5'; }
-    if(r1Vol){ r1Vol.style.display=r1AudioUrl?'block':'none'; const sl=document.getElementById('bb-r1-vol'); if(sl) sl.value=100; if(bbR1LayerGain) bbR1LayerGain.gain.value=1.0; }
-    // Update header + hint for R2 drum break
+    if(!bbLoopStart){
+        const {start,end}=bbLoopFromStart(0,bbHitCount);
+        bbLoopStart=start; bbLoopEnd=end; bbSetLoop(bbLoopStart,bbLoopEnd);
+    }
     const hdr=document.getElementById('bb-scrub-header');
     const hnt=document.getElementById('bb-scrub-hint');
-    if(roundType==='break'){
-        if(hdr) hdr.textContent='FIND THE BREAK';
-        if(hnt) hnt.textContent='Listen for where the drums go solo — lock that section';
-    } else {
-        if(hdr) hdr.textContent='FIND YOUR LOOP';
-        if(hnt) hnt.textContent='Everyone picks their own loop from the same record';
-    }
+    if(hdr) hdr.textContent='CHOP YOUR LOOP';
+    if(hnt) hnt.textContent='Drag to snap your loop to real beats — tap 8/16 hits to change length';
     bbShowScreen('bb-scrub-screen');
     const timer=document.getElementById('bb-scrub-timer'); if(timer) timer.textContent=timeLeft;
     const wldr=document.getElementById('bb-waveform-loading');
     if(bbSampleBuffer){
-        bbStreamStop(); bbStartLoop(); bbDrawWaveform();
-        if(bbBreakAt!=null){ bbAutoZoomToBreakAt(bbBreakAt); bbBreakAt=null; } else { bbAutoZoom(); }
+        bbStreamStop(); bbStartLoop(); bbDrawWaveform(); bbAutoZoom();
         if(wldr) wldr.style.display='none';
     } else {
         if(wldr){ wldr.style.display='flex'; wldr.textContent='Decoding waveform — drag will work in a moment…'; }
@@ -5522,67 +5438,79 @@ socket.on('bbScrubPhase',({timeLeft,audioProxyUrl,duration,roundType,r1AudioUrl,
     }
     bbUpdateScrubOverlay();
     bbWireScrub();
-    bbSetLoopDuration(bbLoopDuration);
+    bbSetHitCount(bbHitCount);
 });
 
-socket.on('bbScrubLocked',({start,end,duration})=>{
-    bbMyLoop={start,end,duration}; bbSetLoop(start,end);
-    showToast(`Loop locked: ${duration.toFixed(1)}s ✓`);
+socket.on('bbChopLocked',({start,end,hitCount})=>{
+    bbMyLoop={start,end,hitCount}; bbSetLoop(start,end);
+    showToast(`Loop locked: ${hitCount} hits ✓`);
 });
 
-socket.on('bbRecordPhase',({timeLeft})=>{
-    bbMySounds=[null,null,null]; bbCurrentSlot=0;
-    bbShowScreen('bb-record-screen');
-    const timer=document.getElementById('bb-rec-timer'); if(timer) timer.textContent=timeLeft;
-    bbStreamStop(); bbStopLoop(); bbStopBeat();
-    // reset pad wiring so bbWireRecordScreen re-attaches
-    for(let i=0;i<3;i++){const p=document.getElementById(`bb-rec-pad-${i}`);if(p) p._wired=false;}
-    const btn=document.getElementById('bb-rec-btn'); if(btn) btn._wired=false;
-    const sub=document.getElementById('bb-rec-submit'); if(sub){sub._wired=false;sub.disabled=false;sub.textContent='SUBMIT ALL 3 SOUNDS →';}
-    bbRenderRecordScreen(); bbWireRecordScreen();
+socket.on('bbSpitPhase',({template,timeLeft})=>{
+    bbStopLoop(); bbStreamStop();
+    bbSpitAdlibChoice=null; bbSpitAudioDataUrl=null; bbSpitAudioChunks=[];
+    if (bbSpitCurrentAudioEl) { try{bbSpitCurrentAudioEl.pause();}catch(e){} bbSpitCurrentAudioEl=null; }
+    if (bbSpitMediaRecorder && bbSpitMediaRecorder.state==='recording') { try{bbSpitMediaRecorder.stop();}catch(e){} }
+    bbSpitMediaRecorder=null;
+    bbSpitFlowPreset='straight';
+    bbShowScreen('bb-spit-screen');
+    bbRenderSpitTemplate(template);
+    bbSetFlowPreset('straight');
+    const recBtn=document.getElementById('bb-spit-record-btn');
+    if(recBtn){recBtn.style.borderColor='#e91e63';recBtn.style.color='#e91e63';recBtn.textContent='🎙️';}
+    const recHint=document.getElementById('bb-spit-record-hint'); if(recHint) recHint.textContent='Tap to record your own';
+    const play=document.getElementById('bb-spit-adlib-play'); if(play) play.style.display='none';
+    document.querySelectorAll('.bb-adlib-canned-btn').forEach(b=>{b.style.borderColor='#2a3450';b.style.color='#9fb0cc';});
+    const submitBtn=document.getElementById('bb-spit-submit-btn'); if(submitBtn) submitBtn.disabled=false;
+    const timer=document.getElementById('bb-spit-timer'); if(timer) timer.textContent=timeLeft;
 });
 
-socket.on('bbRecordingIn',()=>{
-    const sub=document.getElementById('bb-rec-submit');
-    if(sub&&!sub.disabled) sub.textContent='Others submitting…';
+socket.on('bbSpitLocked',()=>{ showToast('Verse locked in ✓'); });
+
+socket.on('bbBattleBegin',({matchupIdx,total,round,pointValue,p1,p2})=>{
+    bbBattleData = { matchupIdx, p1, p2, voted:false };
+    window.speechSynthesis?.cancel();
+    bbShowScreen('bb-battle-screen');
+    const label=document.getElementById('bb-battle-label');
+    if(label) label.textContent = `ROUND ${round} · BATTLE ${matchupIdx+1} OF ${total} · ${pointValue} PT${pointValue>1?'S':''}`;
+    const n1=document.getElementById('bb-battle-p1-name'), n2=document.getElementById('bb-battle-p2-name');
+    if(n1) n1.textContent=p1.name; if(n2) n2.textContent=p2.name;
+    const a1=document.getElementById('bb-battle-p1-adlib'), a2=document.getElementById('bb-battle-p2-adlib');
+    if(a1) a1.style.display = p1.adlib ? '' : 'none';
+    if(a2) a2.style.display = p2.adlib ? '' : 'none';
+    const b1=document.getElementById('bb-battle-p1-play'), b2=document.getElementById('bb-battle-p2-play');
+    if(b1){b1.textContent='▶ HEAR VERSE';b1.disabled=false;}
+    if(b2){b2.textContent='▶ HEAR VERSE';b2.disabled=false;}
+    const vp1=document.getElementById('bb-battle-vote-p1'), vp2=document.getElementById('bb-battle-vote-p2');
+    if(vp1){vp1.disabled=false;vp1.style.background='#9c27b0';vp1.style.color='#fff';vp1.textContent=`Vote ${p1.name}`;}
+    if(vp2){vp2.disabled=false;vp2.style.background='#9c27b0';vp2.style.color='#fff';vp2.textContent=`Vote ${p2.name}`;}
+    const voteRow=document.getElementById('bb-battle-vote-row'); if(voteRow) voteRow.style.display='none';
+    const result=document.getElementById('bb-battle-result'); if(result) result.style.display='none';
+    const timer=document.getElementById('bb-battle-timer'); if(timer) timer.textContent='';
 });
 
-socket.on('bbDealPhase',({hand})=>{
-    bbMyHand = hand || [];
-    bbShowScreen('bb-deal-screen');
-    const list=document.getElementById('bb-deal-list');
-    if(list) list.innerHTML=bbMyHand.map((s,i)=>`
-        <div class="bb-deal-card">
-            <div class="bb-deal-icon" style="font-size:1.4em">${i+1}</div>
-            <div><div class="bb-deal-name">Sound from ${s.ownerName}</div></div>
-        </div>`).join('');
-    Promise.all(bbMyHand.map(s=>bbDecodeSound(s.id,s.dataUrl,'voice'))).catch(()=>{});
+socket.on('bbVoteOpen',({timeLeft})=>{
+    const voteRow=document.getElementById('bb-battle-vote-row'); if(voteRow) voteRow.style.display='flex';
+    const timer=document.getElementById('bb-battle-timer'); if(timer) timer.textContent=timeLeft;
+    const vp1=document.getElementById('bb-battle-vote-p1'), vp2=document.getElementById('bb-battle-vote-p2');
+    const voted = bbBattleData?.voted || false;
+    if(vp1) vp1.disabled=voted; if(vp2) vp2.disabled=voted;
 });
 
-socket.on('bbBuildPhase',data=>{bbShowBuildScreen(data);});
-
-socket.on('bbListenPhase',data=>{ bbStreamStop(); bbShowListenScreen(data); });
-
-socket.on('bbListenBeat',({playerId})=>{bbPlayListenBeat(playerId);});
-
-socket.on('bbVotePhase',({players,timeLeft})=>{
-    bbStopBeat(); bbStopLoop(); bbStopR2Loop(); bbStopScheduled(); bbStreamStop();
-    bbShowScreen('bb-vote-screen');
-    const timer=document.getElementById('bb-vote-timer'); if(timer) timer.textContent=timeLeft;
-    const list=document.getElementById('bb-vote-list');
-    if(list) list.innerHTML=players.map(p=>{
-        const isSelf=p.id===bbMyId;
-        return `<button class="bb-vote-btn" ${isSelf?'disabled style="opacity:.4"':''} onclick="bbCastVote('${p.id}',this)">
-            ${escapeHtml(p.name)}${isSelf?' (you)':''}</button>`;
-    }).join('');
+socket.on('bbMatchupResult',({winnerId,p1Votes,p2Votes,pointValue})=>{
+    const bd=bbBattleData; if(!bd) return;
+    const res=document.getElementById('bb-battle-result'); if(!res) return;
+    res.style.display='block';
+    if (winnerId===bd.p1.id) res.textContent = `🏆 ${bd.p1.name} wins! (${p1Votes}-${p2Votes}) +${pointValue}pt${pointValue>1?'s':''}`;
+    else if (winnerId===bd.p2.id) res.textContent = `🏆 ${bd.p2.name} wins! (${p2Votes}-${p1Votes}) +${pointValue}pt${pointValue>1?'s':''}`;
+    else res.textContent = `🤝 TIE (${p1Votes}-${p2Votes}) — no points`;
+    const voteRow=document.getElementById('bb-battle-vote-row'); if(voteRow) voteRow.style.display='none';
+    const timer=document.getElementById('bb-battle-timer'); if(timer) timer.textContent='';
 });
 
-socket.on('bbVoteCast',({voteCount,total})=>{
-    const el=document.getElementById('bb-vote-status'); if(el) el.textContent=`${voteCount} / ${total} voted`;
-});
 
 socket.on('bbRoundResult',({round,totalRounds,results})=>{
-    bbStopBeat(); bbStopLoop(); bbStreamStop();
+    bbStopLoop(); bbStreamStop();
     bbShowScreen('bb-results-screen');
     const ttl=document.getElementById('bb-res-title'),list=document.getElementById('bb-res-list'),nxt=document.getElementById('bb-res-next');
     if(ttl) ttl.textContent=round<totalRounds?`ROUND ${round} RESULTS`:'FINAL RESULTS';
@@ -5597,7 +5525,7 @@ socket.on('bbRoundResult',({round,totalRounds,results})=>{
 });
 
 socket.on('bbGameOver',({scores})=>{
-    bbStopBeat(); bbStopLoop(); bbStreamStop();
+    bbStopLoop(); bbStreamStop();
     bbShowScreen('bb-results-screen');
     const ttl=document.getElementById('bb-res-title'),list=document.getElementById('bb-res-list'),nxt=document.getElementById('bb-res-next');
     if(ttl) ttl.textContent='🏆 GAME OVER'; if(nxt) nxt.style.display='none';
@@ -5611,22 +5539,13 @@ socket.on('bbGameOver',({scores})=>{
 });
 
 socket.on('bbTimeTick',({timeLeft})=>{
-    ['bb-rec-timer','bb-scrub-timer','bb-build-timer','bb-vote-timer'].forEach(id=>{
+    ['bb-scrub-timer','bb-spit-timer','bb-battle-timer'].forEach(id=>{
         const el=document.getElementById(id); if(el&&el.closest('[style*="flex"]')) el.textContent=timeLeft;
     });
-    if(timeLeft<=5){
-        const recSub=document.getElementById('bb-rec-submit');
-        if(recSub&&!recSub.disabled&&document.getElementById('bb-record-screen')?.style.display==='flex'){
-            socket.emit('bbSubmitRecordings',{sounds:bbMySounds});
-            recSub.disabled=true;recSub.textContent='AUTO-SUBMITTED';
-        }
-        const buildSub=document.getElementById('bb-build-submit');
-        if(buildSub&&!buildSub.disabled&&document.getElementById('bb-build-screen')?.style.display==='flex') bbBuildSubmit();
-    }
 });
 
 socket.on('bbLobby',()=>{
-    bbStopBeat(); bbStopLoop(); bbStreamStop();
+    bbStopLoop(); bbStreamStop();
     BB_SCREENS.forEach(id=>{const el=document.getElementById(id);if(el) el.style.display='none';});
 });
 </script>
@@ -5664,11 +5583,10 @@ socket.on('bbLobby',()=>{
     </div>
   </div>
 
-  <!-- Loop length picker: 4 / 6 / 8 sec -->
+  <!-- Loop length picker: 8 / 16 detected hits -->
   <div style="width:100%;max-width:440px;display:flex;gap:8px;">
-    <button id="bb-dur-4" onclick="bbSetLoopDuration(4)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">4 SEC</button>
-    <button id="bb-dur-6" onclick="bbSetLoopDuration(6)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">6 SEC</button>
-    <button id="bb-dur-8" onclick="bbSetLoopDuration(8)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">8 SEC</button>
+    <button id="bb-hit-8" onclick="bbSetHitCount(8)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">8 HITS</button>
+    <button id="bb-hit-16" onclick="bbSetHitCount(16)" style="flex:1;padding:10px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.78em;font-weight:800;letter-spacing:.04em;cursor:pointer;">16 HITS</button>
   </div>
 
   <!-- Waveform — tall, always visible -->
@@ -5701,103 +5619,84 @@ socket.on('bbLobby',()=>{
   </div>
 
   <button id="bb-lock-btn" class="bb-lock-btn" style="padding:14px 0;width:100%;max-width:440px;font-size:0.85em;">LOCK LOOP</button>
-  <button id="bb-r1-layer-btn" onclick="bbToggleR1Layer()" style="display:none;padding:10px 0;width:100%;max-width:440px;border:2px solid #5ee6c5;border-radius:12px;background:rgba(94,230,197,.08);color:#5ee6c5;font-size:0.75em;font-weight:900;cursor:pointer;letter-spacing:.04em;">▶ HEAR R1 LOOP</button>
-  <div id="bb-r1-vol-row" style="display:none;width:100%;max-width:440px;">
-    <div style="display:flex;justify-content:space-between;font-size:0.58em;color:#4a6a8a;margin-bottom:3px;">
-      <span>🔇 quiet</span><span style="color:#7a9abf;font-weight:700;">R1 LOOP VOLUME</span><span>loud 🔊</span>
-    </div>
-    <input type="range" id="bb-r1-vol" min="0" max="200" value="100" step="1"
-      oninput="if(bbR1LayerGain) bbR1LayerGain.gain.value=this.value/100"
-      style="width:100%;height:6px;accent-color:#5ee6c5;cursor:pointer;">
-  </div>
-  <div id="bb-scrub-hint" style="font-size:0.6em;color:#4a6a8a;text-align:center;">Everyone picks their own loop from the same record</div>
+  <div id="bb-scrub-hint" style="font-size:0.6em;color:#4a6a8a;text-align:center;">Drag to snap your loop to real beats — tap 8/16 hits to change length</div>
 </div>
 
-<!-- Record screen -->
-<div id="bb-record-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:14px;padding:20px 14px;overflow-y:auto;">
-  <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:420px;">
-    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">RECORD YOUR 3 SOUNDS</div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <div id="bb-rec-timer" style="font-size:1.6em;font-weight:900;"></div>
-      <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
-    </div>
-  </div>
-  <div style="font-size:0.68em;color:#7a9abf;text-align:center;max-width:360px;">Tap a slot to select it · Hold the button to record · Tap a filled slot to replay</div>
-  <div class="bb-pads" style="gap:10px;">
-    <div id="bb-rec-pad-0" class="bb-pad2" style="background:rgba(255,152,0,.06);border-color:rgba(255,152,0,.25);flex-direction:column;gap:4px;">
-      <div style="font-size:1.6em;">1</div>
-      <div id="bb-rec-dur-0" style="font-size:0.55em;color:#7a9abf;">empty</div>
-    </div>
-    <div id="bb-rec-pad-1" class="bb-pad2" style="background:rgba(255,152,0,.06);border-color:rgba(255,152,0,.25);flex-direction:column;gap:4px;">
-      <div style="font-size:1.6em;">2</div>
-      <div id="bb-rec-dur-1" style="font-size:0.55em;color:#7a9abf;">empty</div>
-    </div>
-    <div id="bb-rec-pad-2" class="bb-pad2" style="background:rgba(255,152,0,.06);border-color:rgba(255,152,0,.25);flex-direction:column;gap:4px;">
-      <div style="font-size:1.6em;">3</div>
-      <div id="bb-rec-dur-2" style="font-size:0.55em;color:#7a9abf;">empty</div>
-    </div>
-  </div>
-  <button id="bb-rec-btn" class="bb-pad2" style="width:100%;max-width:420px;aspect-ratio:3;border-radius:14px;background:#1a0a0a;border:2px solid #ff3b3b;font-size:0.9em;font-weight:900;letter-spacing:.06em;color:#ff3b3b;justify-content:center;">
-    HOLD TO RECORD
-  </button>
-  <button id="bb-rec-submit" style="padding:12px 28px;border:2px solid #26c47c;border-radius:12px;background:rgba(38,196,124,.1);color:#26c47c;font-size:0.8em;font-weight:900;cursor:pointer;width:100%;max-width:420px;">
-    SUBMIT ALL 3 SOUNDS →
-  </button>
-</div>
-
-<!-- Deal screen -->
-<div id="bb-deal-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;">
-  <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">YOUR HAND</div>
-  <div style="font-size:0.82em;color:#7a9abf;text-align:center;">Sounds dealt from other players</div>
-  <div id="bb-deal-list" style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:10px;"></div>
-  <div style="font-size:0.68em;color:#4a6a8a;text-align:center;">Building starts in a moment…</div>
-</div>
-
-<!-- Build screen -->
-<div id="bb-build-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:14px;padding:18px 14px;overflow-y:auto;">
+<!-- Spit screen -->
+<div id="bb-spit-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:12px;padding:18px 14px;overflow-y:auto;">
   <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:440px;">
-    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">BUILD YOUR BEAT</div>
+    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">SPIT YOUR VERSE</div>
     <div style="display:flex;align-items:center;gap:6px;">
-      <div id="bb-build-timer" style="font-size:1.6em;font-weight:900;"></div>
+      <div id="bb-spit-timer" style="font-size:1.6em;font-weight:900;"></div>
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
 
-  <!-- Slot count controls -->
-  <div style="width:100%;max-width:440px;display:flex;align-items:center;justify-content:center;gap:20px;">
-    <button onclick="bbRemoveSlot()" style="width:38px;height:38px;border-radius:50%;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:1.3em;cursor:pointer;line-height:1;">−</button>
-    <div id="bb-slot-info" style="font-size:0.68em;color:#9fb0cc;font-weight:800;min-width:130px;text-align:center;">4 SLOTS · 16s TOTAL</div>
-    <button onclick="bbAddSlot()"    style="width:38px;height:38px;border-radius:50%;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:1.3em;cursor:pointer;line-height:1;">+</button>
-  </div>
+  <div id="bb-spit-template-wrap" style="width:100%;max-width:440px;background:#0d1525;border:1.5px solid #2a3450;border-radius:12px;padding:16px;font-size:0.95em;line-height:2.1;"></div>
 
-  <!-- Toggle grid: rows = JAZZ / DRUMS, cols = slots -->
-  <div id="bb-beat-grid" style="width:100%;max-width:440px;"></div>
-
-  <div style="font-size:0.6em;color:#4a6a8a;text-align:center;">Tap a cell to toggle that layer on/off for that slot</div>
-
-  <button onclick="bbPreviewBeat()" style="padding:10px 0;width:100%;max-width:440px;border:2px solid #5ee6c5;border-radius:12px;background:rgba(94,230,197,.08);color:#5ee6c5;font-size:0.78em;font-weight:900;cursor:pointer;letter-spacing:.04em;">▶ PREVIEW BEAT</button>
-  <button id="bb-build-submit" onclick="bbBuildSubmit()" style="padding:14px 0;width:100%;max-width:440px;border:2px solid #ff9800;border-radius:12px;background:rgba(255,152,0,.1);color:#ff9800;font-size:0.85em;font-weight:900;cursor:pointer;letter-spacing:.04em;">LOCK IN BEAT →</button>
-</div>
-
-<!-- Listen screen -->
-<div id="bb-listen-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:14px;padding:22px 14px;overflow-y:auto;">
-  <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">LISTEN UP</div>
-  <div style="font-size:0.8em;color:#7a9abf;">Hear everyone's beats back to back</div>
-  <div id="bb-listen-list" style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:10px;"></div>
-</div>
-
-<!-- Vote screen -->
-<div id="bb-vote-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:14px;padding:22px 14px;overflow-y:auto;">
-  <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:420px;">
-    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">🏆 VOTE FOR THE BEST BEAT</div>
-    <div style="display:flex;align-items:center;gap:6px;">
-      <div id="bb-vote-timer" style="font-size:1.6em;font-weight:900;"></div>
-      <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
+  <!-- Flow preset picker -->
+  <div style="width:100%;max-width:440px;">
+    <div style="font-size:0.6em;color:#4a6a8a;margin-bottom:6px;letter-spacing:.04em;">PICK YOUR FLOW</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button id="bb-flow-chipmunk" onclick="bbSetFlowPreset('chipmunk')" style="padding:9px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.72em;font-weight:800;cursor:pointer;">🐿️ Chipmunk</button>
+      <button id="bb-flow-villain" onclick="bbSetFlowPreset('villain')" style="padding:9px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.72em;font-weight:800;cursor:pointer;">😈 Villain</button>
+      <button id="bb-flow-straight" onclick="bbSetFlowPreset('straight')" style="padding:9px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.72em;font-weight:800;cursor:pointer;">🎤 Straight</button>
+      <button id="bb-flow-autotune" onclick="bbSetFlowPreset('autotune')" style="padding:9px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.72em;font-weight:800;cursor:pointer;">🎛️ Auto-Tune</button>
     </div>
   </div>
-  <div style="font-size:0.7em;color:#7a9abf;text-align:center;">Can't vote for yourself</div>
-  <div id="bb-vote-list" style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:8px;"></div>
-  <div id="bb-vote-status" style="font-size:0.7em;color:#4a6a8a;"></div>
+
+  <button onclick="bbPreviewSpit()" style="padding:11px 0;width:100%;max-width:440px;border:2px solid #5ee6c5;border-radius:12px;background:rgba(94,230,197,.08);color:#5ee6c5;font-size:0.75em;font-weight:900;cursor:pointer;letter-spacing:.04em;">▶ PREVIEW VERSE</button>
+
+  <!-- Ad-lib picker -->
+  <div style="width:100%;max-width:440px;">
+    <div style="font-size:0.6em;color:#4a6a8a;margin-bottom:6px;letter-spacing:.04em;">AD-LIB STINGER (OPTIONAL)</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <button id="bb-spit-record-btn" onclick="bbToggleSpitRecord()" style="width:52px;height:52px;border-radius:50%;border:3px solid #e91e63;background:#1a0010;color:#e91e63;font-size:1.4em;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🎙️</button>
+      <div style="flex:1;">
+        <div id="bb-spit-record-hint" style="font-size:0.65em;color:#9fb0cc;">Tap to record your own</div>
+        <button id="bb-spit-adlib-play" onclick="bbPlaySpitAdlibRecording()" style="display:none;margin-top:4px;padding:4px 10px;border-radius:8px;border:1.5px solid #5ee6c5;background:none;color:#5ee6c5;font-size:0.65em;cursor:pointer;">▶ Play back</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <button class="bb-adlib-canned-btn" data-id="airhorn" onclick="bbPickCannedAdlib('airhorn')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">📯 Airhorn</button>
+      <button class="bb-adlib-canned-btn" data-id="laugh" onclick="bbPickCannedAdlib('laugh')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">😂 Laugh</button>
+      <button class="bb-adlib-canned-btn" data-id="scratch" onclick="bbPickCannedAdlib('scratch')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">💿 Scratch</button>
+      <button class="bb-adlib-canned-btn" data-id="boo" onclick="bbPickCannedAdlib('boo')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">👎 Boo</button>
+    </div>
+  </div>
+
+  <button id="bb-spit-submit-btn" onclick="bbSubmitSpit()" style="padding:14px 0;width:100%;max-width:440px;font-size:0.85em;border:none;border-radius:12px;background:#ff9800;color:#090b12;font-weight:900;letter-spacing:.04em;cursor:pointer;">LOCK IT IN</button>
+</div>
+
+<!-- Battle screen -->
+<div id="bb-battle-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:14px;padding:18px 14px;overflow-y:auto;">
+  <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:440px;">
+    <div id="bb-battle-label" style="font-size:0.68em;font-weight:800;color:#ff9800;letter-spacing:.05em;"></div>
+    <div id="bb-battle-timer" style="font-size:1.4em;font-weight:900;"></div>
+  </div>
+
+  <div style="width:100%;max-width:440px;display:flex;flex-direction:column;gap:10px;">
+    <div style="background:#0d1525;border:1.5px solid #2a3450;border-radius:14px;padding:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div id="bb-battle-p1-name" style="font-weight:900;font-size:1em;"></div>
+        <div id="bb-battle-p1-adlib" style="font-size:0.65em;color:#5ee6c5;">🎤 has an ad-lib</div>
+      </div>
+      <button id="bb-battle-p1-play" onclick="bbHearVerse(1)" style="width:100%;padding:12px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.1);color:#ff9800;font-weight:900;font-size:0.85em;cursor:pointer;">▶ HEAR VERSE</button>
+    </div>
+    <div style="background:#0d1525;border:1.5px solid #2a3450;border-radius:14px;padding:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div id="bb-battle-p2-name" style="font-weight:900;font-size:1em;"></div>
+        <div id="bb-battle-p2-adlib" style="font-size:0.65em;color:#5ee6c5;">🎤 has an ad-lib</div>
+      </div>
+      <button id="bb-battle-p2-play" onclick="bbHearVerse(2)" style="width:100%;padding:12px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.1);color:#ff9800;font-weight:900;font-size:0.85em;cursor:pointer;">▶ HEAR VERSE</button>
+    </div>
+  </div>
+
+  <div id="bb-battle-vote-row" style="display:none;width:100%;max-width:440px;gap:10px;">
+    <button id="bb-battle-vote-p1" onclick="bbVote('p1')" style="flex:1;padding:12px 0;border-radius:10px;border:none;background:#9c27b0;color:#fff;font-weight:900;font-size:0.8em;cursor:pointer;">Vote</button>
+    <button id="bb-battle-vote-p2" onclick="bbVote('p2')" style="flex:1;padding:12px 0;border-radius:10px;border:none;background:#9c27b0;color:#fff;font-weight:900;font-size:0.8em;cursor:pointer;">Vote</button>
+  </div>
+  <div id="bb-battle-result" style="display:none;font-size:0.9em;font-weight:800;text-align:center;color:#ffd54f;"></div>
 </div>
 
 <!-- Results screen -->
