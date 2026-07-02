@@ -5236,6 +5236,27 @@ function bbSubmitSpit() {
 
 // ── battle screen — sequential 1v1 judging, adapted from Stroke Off's sq-battle-screen ──
 let bbBattleData = null; // {matchupIdx, p1, p2, voted}
+let bbBattleBeatBufs = {}; // 'p1'|'p2' -> {buffer, beat:{start,end,rate}} — prefetched on bbBattleBegin
+let bbBattleLoopSrc = null;
+
+function bbStopBattleLoop() {
+    if (bbBattleLoopSrc) { try{bbBattleLoopSrc.stop();}catch(e){} bbBattleLoopSrc=null; }
+}
+
+// Fetch + decode both spitters' chopped loops in the background as soon as the matchup is
+// announced, so they're ready by the time anyone taps HEAR VERSE (the tap itself must stay
+// synchronous for iOS TTS, so no awaiting inside it).
+function bbPrefetchBattleBeats(p1, p2) {
+    bbBattleBeatBufs = {};
+    [['p1',p1],['p2',p2]].forEach(([k,p])=>{
+        if (!p?.beat?.audioProxyUrl) return;
+        fetch(p.beat.audioProxyUrl)
+            .then(r=>r.ok?r.arrayBuffer():null)
+            .then(ab=>ab?bbEnsureAudio().decodeAudioData(ab):null)
+            .then(buf=>{ if(buf) bbBattleBeatBufs[k]={buffer:buf,beat:p.beat}; })
+            .catch(()=>{});
+    });
+}
 
 function bbHearVerse(player) {
     if (!bbBattleData) return;
@@ -5243,9 +5264,20 @@ function bbHearVerse(player) {
     if (!p) return;
     const btn = document.getElementById('bb-battle-p'+player+'-play');
     if (btn) { btn.textContent = '🔊 Playing…'; btn.disabled = true; }
-    // Ad-lib plays alongside the verse — safe to trigger here even though it's not the TTS call:
-    // WebAudio/Audio playback has no gesture restriction once the AudioContext is already
-    // running (satisfied earlier in Dig/Chop), unlike speechSynthesis.speak() below.
+    // Their chopped loop plays UNDER the verse — this is the payoff for Dig/Chop. WebAudio has
+    // no gesture restriction once the AudioContext is running, so starting it here is safe.
+    bbStopBattleLoop();
+    const bb = bbBattleBeatBufs[player===1?'p1':'p2'];
+    if (bb) {
+        const ctx = bbEnsureAudio();
+        const gain = ctx.createGain(); gain.gain.value = 0.5; gain.connect(bbMasterGain);
+        const src = ctx.createBufferSource();
+        src.buffer = bb.buffer; src.loop = true;
+        src.loopStart = bb.beat.start; src.loopEnd = bb.beat.end;
+        src.playbackRate.value = bb.beat.rate || 1;
+        src.connect(gain); src.start(0, bb.beat.start);
+        bbBattleLoopSrc = src;
+    }
     if (p.adlib) {
         if (p.adlib.type === 'canned') bbPlayCannedAdlib(p.adlib.id);
         else if (p.adlib.type === 'recorded' && p.adlib.dataUrl) { const a = new Audio(p.adlib.dataUrl); a.volume = 0.8; a.play().catch(()=>{}); }
@@ -5253,6 +5285,7 @@ function bbHearVerse(player) {
     // Must be called synchronously from this tap handler — see bbSpeakVerse's comment.
     bbSpeakVerse(p.lines, p.flowPreset, () => {
         if (btn) { btn.textContent = '▶ HEAR VERSE'; btn.disabled = false; }
+        setTimeout(bbStopBattleLoop, 800); // let the beat ring out for a beat after the last bar
     });
 }
 
@@ -5279,8 +5312,8 @@ function bbShowScreen(id) {
 // ── socket events ──
 socket.on('bbRoundStart',({round,totalRounds,matchups,byeId})=>{
     bbMyId=socket.id; bbSampleBuffer=null; bbOnsetTicks=[]; bbHitCount=8;
-    bbScheduledSrcs=[];
-    bbStreamStop(); bbStopLoop(); bbStopScheduled();
+    bbScheduledSrcs=[]; bbBattleBeatBufs={};
+    bbStreamStop(); bbStopLoop(); bbStopScheduled(); bbStopBattleLoop();
     bbLoopStart=0; bbLoopEnd=4; bbPlaybackRate=1.0;
     bbZoomStart=0; bbZoomEnd=0;
     const ww=document.getElementById('bb-waveform-wrap'); if(ww) ww._bbWired=false;
@@ -5299,33 +5332,62 @@ socket.on('bbRoundStart',({round,totalRounds,matchups,byeId})=>{
             rnd.textContent=`ROUND ${round} / ${totalRounds} — VS ${oppName.toUpperCase()}`;
         }
     }
-    const tit=document.getElementById('bb-crate-title');
-    const art=document.getElementById('bb-crate-artist');
-    const yr=document.getElementById('bb-crate-year');
-    const ldr=document.getElementById('bb-crate-loading');
-    if(tit) tit.textContent=''; if(art) art.textContent=''; if(yr) yr.textContent='';
-    if(ldr) ldr.textContent='Pulling from the crates…';
-    document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.remove('spinning'));
+    const crate=document.getElementById('bb-dig-crate');
+    if(crate) crate.innerHTML='<div style="font-size:0.7em;color:#4a6a8a;text-align:center;padding:20px 0;">Dealing your crate…</div>';
     bbEnsureAudio();
 });
 
-socket.on('bbDigReady',({title,creator,date,thumbUrl,audioProxyUrl,duration})=>{
-    bbAudioProxyUrl=audioProxyUrl; bbSampleDuration=duration||180;
-    const tit=document.getElementById('bb-crate-title'),art=document.getElementById('bb-crate-artist');
-    const yr=document.getElementById('bb-crate-year'),img=document.getElementById('bb-vinyl-img');
-    const ldr=document.getElementById('bb-crate-loading');
-    if(tit) tit.textContent=title; if(art) art.textContent=creator||'';
-    if(yr)  yr.textContent=date||'';
-    if(img){ if(thumbUrl){img.src=thumbUrl;img.style.display='';} else img.style.display='none'; }
-    document.querySelectorAll('.bb-vinyl').forEach(v=>v.classList.add('spinning'));
-    if(!audioProxyUrl){ if(ldr) ldr.textContent='No track found — sitting this one out'; return; }
-    // Play 10s non-looping preview so players can hear the track during the reveal
+// ── dig — dealt a crate of 4 breaks, tap to preview, pick one ──
+let bbDigOptionList=[], bbDigSelected=null, bbDigPickedIdx=null;
+
+socket.on('bbDigPhase',({options,timeLeft})=>{
+    bbDigOptionList=options||[]; bbDigSelected=null; bbDigPickedIdx=null;
+    bbShowScreen('bb-crate-screen');
+    const timer=document.getElementById('bb-dig-timer'); if(timer) timer.textContent=timeLeft;
+    const crate=document.getElementById('bb-dig-crate');
+    if(crate) crate.innerHTML=bbDigOptionList.map((o,i)=>`
+        <button class="bb-dig-card" onclick="bbDigPreview(${i})" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:2px solid #2a3450;background:#0d1525;color:#fff;cursor:pointer;text-align:left;">
+            <div style="font-size:1.3em;">💿</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:800;font-size:.8em;">${escapeHtml(o.title)}</div>
+                <div style="font-size:.62em;color:#7a9abf;">${escapeHtml(o.artist||'')}</div>
+            </div>
+            <div class="bb-dig-state" style="font-size:.6em;color:#4a6a8a;flex-shrink:0;">▶ TAP</div>
+        </button>`).join('');
+    const btn=document.getElementById('bb-dig-confirm');
+    if(btn){ btn.disabled=true; btn.textContent='⛏️ DIG THIS ONE'; }
+});
+
+function bbDigPreview(i){
+    if(bbDigPickedIdx!=null) return;
+    const o=bbDigOptionList[i]; if(!o) return;
+    bbDigSelected=i;
     bbEnsureAudio();
-    bbStreamPreview(audioProxyUrl);
-    if(ldr) ldr.textContent='🎵 Previewing — waveform decoding…';
-    // Decode full buffer + detect onsets in background for the chop waveform
-    bbLoadSample(audioProxyUrl).then(()=>{
-        if(ldr) ldr.textContent='✓ Ready to chop — waiting for everyone else…';
+    bbStreamPreview(o.audioProxyUrl);
+    document.querySelectorAll('.bb-dig-card').forEach((c,ci)=>{
+        const on=ci===i;
+        c.style.borderColor=on?'#ff9800':'#2a3450';
+        c.style.background=on?'rgba(255,152,0,.12)':'#0d1525';
+        const st=c.querySelector('.bb-dig-state'); if(st) st.textContent=on?'🔊 PLAYING':'▶ TAP';
+    });
+    const btn=document.getElementById('bb-dig-confirm'); if(btn) btn.disabled=false;
+}
+
+function bbDigConfirm(){
+    if(bbDigSelected==null||bbDigPickedIdx!=null) return;
+    const o=bbDigOptionList[bbDigSelected]; if(!o) return;
+    socket.emit('bbPickBreak',{ idx:o.idx });
+}
+
+socket.on('bbBreakPicked',({idx})=>{
+    bbDigPickedIdx=idx;
+    const o=bbDigOptionList.find(x=>x.idx===idx) || { audioProxyUrl:`/api/bb-break/${idx}`, duration:180 };
+    bbAudioProxyUrl=o.audioProxyUrl; bbSampleDuration=o.duration||180;
+    const btn=document.getElementById('bb-dig-confirm');
+    if(btn){ btn.disabled=true; btn.textContent='✓ DUG — waiting for the others…'; }
+    document.querySelectorAll('.bb-dig-card').forEach(c=>{ c.disabled=true; });
+    // Decode full buffer + detect onsets in background so the Chop waveform is ready
+    bbLoadSample(o.audioProxyUrl).then(()=>{
         const chopScreen=document.getElementById('bb-scrub-screen');
         if(chopScreen?.style.display==='flex'){
             // CHOP already showing — recompute the loop now that onset ticks exist, start precise loop
@@ -5345,8 +5407,16 @@ socket.on('bbChopPhase',({timeLeft,audioProxyUrl,duration})=>{
     }
     const hdr=document.getElementById('bb-scrub-header');
     const hnt=document.getElementById('bb-scrub-hint');
-    if(hdr) hdr.textContent='STEP 1 · CHOP YOUR BEAT';
+    if(hdr) hdr.textContent='STEP 2 · CHOP YOUR BEAT';
     if(hnt) hnt.textContent='Drag the orange box to the best part, then lock it';
+    if(audioProxyUrl){
+        bbAudioProxyUrl=audioProxyUrl;
+        // Defensive: if the dig-time decode never happened (e.g. auto-picked at timeout), kick it now
+        if(!bbSampleBuffer) bbLoadSample(audioProxyUrl).then(()=>{
+            bbStreamStop(); bbSetHitCount(bbHitCount);
+            const l=document.getElementById('bb-waveform-loading'); if(l) l.style.display='none';
+        });
+    }
     bbShowScreen('bb-scrub-screen');
     const timer=document.getElementById('bb-scrub-timer'); if(timer) timer.textContent=timeLeft;
     const wldr=document.getElementById('bb-waveform-loading');
@@ -5382,6 +5452,8 @@ socket.on('bbSpitLocked',()=>{ showToast('Verse locked in ✓'); });
 socket.on('bbBattleBegin',({matchupIdx,total,round,pointValue,p1,p2})=>{
     bbBattleData = { matchupIdx, p1, p2, voted:false };
     window.speechSynthesis?.cancel();
+    bbStopBattleLoop(); bbStopLoop(); bbStreamStop();
+    bbPrefetchBattleBeats(p1, p2);
     bbShowScreen('bb-battle-screen');
     const label=document.getElementById('bb-battle-label');
     if(label) label.textContent = `ROUND ${round} · BATTLE ${matchupIdx+1} OF ${total} · ${pointValue} PT${pointValue>1?'S':''}`;
@@ -5422,7 +5494,7 @@ socket.on('bbMatchupResult',({winnerId,p1Votes,p2Votes,pointValue})=>{
 
 
 socket.on('bbRoundResult',({round,totalRounds,results})=>{
-    bbStopLoop(); bbStreamStop();
+    bbStopLoop(); bbStreamStop(); bbStopBattleLoop(); window.speechSynthesis?.cancel();
     bbShowScreen('bb-results-screen');
     const ttl=document.getElementById('bb-res-title'),list=document.getElementById('bb-res-list'),nxt=document.getElementById('bb-res-next');
     if(ttl) ttl.textContent=round<totalRounds?`ROUND ${round} RESULTS`:'FINAL RESULTS';
@@ -5437,7 +5509,7 @@ socket.on('bbRoundResult',({round,totalRounds,results})=>{
 });
 
 socket.on('bbGameOver',({scores})=>{
-    bbStopLoop(); bbStreamStop();
+    bbStopLoop(); bbStreamStop(); bbStopBattleLoop(); window.speechSynthesis?.cancel();
     bbShowScreen('bb-results-screen');
     const ttl=document.getElementById('bb-res-title'),list=document.getElementById('bb-res-list'),nxt=document.getElementById('bb-res-next');
     if(ttl) ttl.textContent='🏆 GAME OVER'; if(nxt) nxt.style.display='none';
@@ -5451,13 +5523,13 @@ socket.on('bbGameOver',({scores})=>{
 });
 
 socket.on('bbTimeTick',({timeLeft})=>{
-    ['bb-scrub-timer','bb-spit-timer','bb-battle-timer'].forEach(id=>{
+    ['bb-dig-timer','bb-scrub-timer','bb-spit-timer','bb-battle-timer'].forEach(id=>{
         const el=document.getElementById(id); if(el&&el.closest('[style*="flex"]')) el.textContent=timeLeft;
     });
 });
 
 socket.on('bbLobby',()=>{
-    bbStopLoop(); bbStreamStop();
+    bbStopLoop(); bbStreamStop(); bbStopBattleLoop(); window.speechSynthesis?.cancel();
     BB_SCREENS.forEach(id=>{const el=document.getElementById(id);if(el) el.style.display='none';});
 });
 </script>
@@ -5468,21 +5540,19 @@ socket.on('bbLobby',()=>{
 <!-- Bad Pitches v2 screens -->
 
 <!-- Crate screen -->
-<div id="bb-crate-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:20px;">
+<div id="bb-crate-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:12px;padding:18px 14px;overflow-y:auto;">
   <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.08em;">BAD PITCHES</div>
   <div id="bb-crate-round" style="font-size:0.75em;font-weight:700;color:#7a9abf;"></div>
-  <div class="bb-vinyl-wrap">
-    <div class="bb-vinyl spinning">
-      <div class="bb-vinyl-label"><img id="bb-vinyl-img" src="" style="display:none" onerror="this.style.display='none'"></div>
+  <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:440px;">
+    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">STEP 1 · DIG YOUR BREAK</div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div id="bb-dig-timer" style="font-size:1.6em;font-weight:900;"></div>
+      <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
-  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;">
-    <div id="bb-crate-title" class="bb-track-title"></div>
-    <div id="bb-crate-artist" class="bb-track-artist"></div>
-    <div id="bb-crate-year"  class="bb-track-year"></div>
-  </div>
-  <div id="bb-crate-loading" style="font-size:0.7em;color:#4a6a8a;">Pulling from the crates…</div>
-  <div style="font-size:0.62em;color:#7a9abf;text-align:center;line-height:1.6;max-width:300px;">🎧 This is your record for the round.<br>Chop a beat from it, write a diss, battle 1v1.</div>
+  <div style="width:100%;max-width:440px;font-size:0.68em;color:#9fb0cc;line-height:1.5;">Tap a record to hear it — then dig the one you'll chop.</div>
+  <div id="bb-dig-crate" style="width:100%;max-width:440px;display:flex;flex-direction:column;gap:8px;"></div>
+  <button id="bb-dig-confirm" onclick="bbDigConfirm()" disabled style="padding:14px 0;width:100%;max-width:440px;font-size:0.85em;border:none;border-radius:12px;background:#ff9800;color:#090b12;font-weight:900;letter-spacing:.04em;cursor:pointer;">⛏️ DIG THIS ONE</button>
 </div>
 
 <!-- Scrub screen -->
@@ -5537,7 +5607,7 @@ socket.on('bbLobby',()=>{
 <!-- Spit screen -->
 <div id="bb-spit-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:12px;padding:18px 14px;overflow-y:auto;">
   <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:440px;">
-    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">STEP 2 · WRITE YOUR DISS</div>
+    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">STEP 3 · WRITE YOUR DISS</div>
     <div style="display:flex;align-items:center;gap:6px;">
       <div id="bb-spit-timer" style="font-size:1.6em;font-weight:900;"></div>
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>

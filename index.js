@@ -20,11 +20,10 @@ app.use(express.static('public'));
 const BB_CACHE_DIR = path.join(__dirname, 'public', 'bb-cache');
 function bbHash(str) { return crypto.createHash('md5').update(String(str)).digest('hex'); }
 function bbAudioCacheFile(audioUrl) { return path.join(BB_CACHE_DIR, 'audio', bbHash(audioUrl) + '.mp3'); }
-function bbThumbCacheFile(id)       { return path.join(BB_CACHE_DIR, 'thumb', bbHash(id) + '.jpg'); }
 let bbManifest = null;
 try { bbManifest = JSON.parse(fs.readFileSync(path.join(BB_CACHE_DIR, 'manifest.json'), 'utf8')); } catch (_) {}
 const BB_OFFLINE = process.env.BB_OFFLINE === '0' ? false : !!bbManifest;
-if (BB_OFFLINE) console.log(`[BB] OFFLINE cache active — ${bbManifest.jazz?.length || 0} jazz samples pre-cached`);
+if (BB_OFFLINE) console.log('[BB] OFFLINE cache active — serving pre-downloaded breaks from disk');
 
 // ─── LAN address (for the scan-to-join QR when hosting over a hotspot) ─────────
 // Picks the best local IPv4 to advertise. Only used as a fallback when the host
@@ -125,33 +124,20 @@ async function bbProxyAudio(audioUrl, getCache, setCache, res) {
         if (!res.headersSent) res.status(502).end(); else res.end();
     }
 }
-// Per-player dig sample (v3: every player has their own track, not one shared per room)
-app.get('/api/bb-audio/:code/:playerId', async (req, res) => {
-    const room = rooms[req.params.code];
-    const sample = room?.bbSamples?.[req.params.playerId];
-    if (!sample?.audioUrl) return res.status(404).end();
+// Break audio by catalog index (v4: the dig crate is a fixed catalog of legendary breaks,
+// not per-room Archive.org search results — so audio is served by catalog position and the
+// in-RAM byte cache is global, shared by every room and every player previewing the same break).
+const bbBreakBytes = {}; // catalog idx -> Buffer
+app.get('/api/bb-break/:idx', async (req, res) => {
+    const idx = Number(req.params.idx);
+    const brk = BB_BREAK_CATALOG[idx];
+    if (!brk) return res.status(404).end();
     await bbProxyAudio(
-        sample.audioUrl,
-        () => room.bbSampleBytesByPlayer[req.params.playerId],
-        (buf) => { room.bbSampleBytesByPlayer[req.params.playerId] = buf; },
+        brk.audioUrl,
+        () => bbBreakBytes[idx],
+        (buf) => { bbBreakBytes[idx] = buf; },
         res
     );
-});
-// Cover art — serves cached art offline, proxies Archive.org otherwise. Routing
-// thumbnails through the server (in offline mode) keeps them working with no net.
-app.get('/api/bb-thumb/:id', async (req, res) => {
-    const id = req.params.id;
-    const f = bbThumbCacheFile(id);
-    if (fs.existsSync(f)) {
-        res.setHeader('Content-Type', 'image/jpeg');
-        return res.send(fs.readFileSync(f));
-    }
-    try {
-        const up = await fetch(`https://archive.org/services/img/${id}`);
-        if (!up.ok) return res.status(404).end();
-        res.setHeader('Content-Type', up.headers.get('content-type') || 'image/jpeg');
-        res.send(Buffer.from(await up.arrayBuffer()));
-    } catch (_) { res.status(404).end(); }
 });
 
 // ─── Room registry ────────────────────────────────────────────────────────────
@@ -267,8 +253,8 @@ function makeRoom(code) {
         bbMatchups: [],
         bbCurrentMatchup: 0,
         bbByeId: null,
-        bbSamples: {},              // playerId -> sample object (each player digs their own loop)
-        bbSampleBytesByPlayer: {},  // playerId -> Buffer (per-player audio cache)
+        bbSamples: {},              // playerId -> picked break (catalog entry)
+        bbDigOptions: {},           // playerId -> [catalog idx] dealt this round
         bbChops: {},                // playerId -> {start, end, hitCount, rate}
         bbSpitFills: {},            // playerId -> [fill strings]
         bbFlowPreset: {},           // playerId -> 'chipmunk'|'villain'|'straight'|'autotune'
@@ -374,7 +360,7 @@ function rekeySocketState(room, oldId, newId) {
         'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
         'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
         'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
-        'bbSamples', 'bbSampleBytesByPlayer', 'bbChops', 'bbSpitFills', 'bbFlowPreset',
+        'bbSamples', 'bbDigOptions', 'bbChops', 'bbSpitFills', 'bbFlowPreset',
         'bbAdlibs', 'bbVotes', 'bbRoundScores', 'bbCumScores',
     ];
     maps.forEach(key => {
@@ -1542,120 +1528,82 @@ function rr_returnToLobby(room) {
     broadcastGameState(room);
 }
 
-// ─── Bad Pitches v2 — vinyl sample + three sounds ─────────────────────────────
+// ─── Bad Pitches v4 — legendary break-beat crate ───────────────────────────────
+// The dig source is a fixed catalog of the most-sampled drum breaks in hip-hop history
+// (Ultimate Breaks & Beats on Archive.org) instead of random 1940s-50s jazz/blues 78s —
+// real playtest feedback was that the old jazz "didn't resonate", and breaks have far
+// stronger transients so the snap-to-onset Chop mechanic works better on them too.
+// No startup Archive.org search needed anymore: the catalog is static, so boot is
+// instant and the online/offline paths only differ in where the bytes come from.
 
-const BB_PREVIEW_SECS = 10;  // non-looping audio preview during CRATE reveal
-const BB_CRATE_TIMEOUT= 90;  // give up waiting for a track after this many seconds
-const BB_SCRUB_SECS   = 90;
-const BB_SPIT_SECS    = 90;  // mad-lib fill + flow/ad-lib pick, before Battle
-function bb_parseDuration(len) {
-    if (!len) return 0;
-    const s = String(len);
-    if (s.includes(':')) {
-        const parts = s.split(':').map(Number);
-        return parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : parts[0]*60 + (parts[1]||0);
-    }
-    return parseFloat(s) || 0;
+const BB_DIG_SECS  = 30;  // pick a break from your dealt crate
+const BB_SCRUB_SECS = 90;
+const BB_SPIT_SECS  = 90;  // mad-lib fill + flow pick, before Battle
+
+// Break-beat mp3s live inside this subfolder of the Archive.org item.
+const BB_BREAKS_DIR = 'BreakBeat Lou Flores - Ultimate Breaks and Beats - The Complete Collection';
+function bb_breakUrl(file) {
+    return `https://archive.org/download/ultimate-break-beats-complete/${`${BB_BREAKS_DIR}/${file}`.split('/').map(encodeURIComponent).join('/')}`;
 }
 
-// Fetch up to `n` valid samples from Archive.org — sequential metadata checks, no parallel hammering
-async function bb_fetchBatch(n, drumOnly = false) {
-    const api = 'https://archive.org/advancedsearch.php';
-    const drumFilter = drumOnly ? ' AND (title:drum OR title:rhythm OR subject:percussion)' : '';
-    const genreFilter = drumOnly ? '' : ' AND (subject:blues OR subject:"rhythm and blues" OR subject:gospel OR subject:boogie OR subject:jazz) AND NOT subject:(waltz OR "military band" OR "dance orchestra" OR christmas OR children OR symphony)';
-    const q = `collection:georgeblood AND mediatype:audio${drumFilter}${genreFilter}`;
-    const enc = encodeURIComponent(q);
-    const results = [];
+// Curated from the real file listing of archive.org/metadata/ultimate-break-beats-complete
+// (fetched + verified 2026-07-01 — don't invent filenames, they must match exactly).
+// Keep in sync with the copy in bb-cache-build.js. duration = seconds, from archive metadata.
+const BB_BREAK_CATALOG = [
+    { title: 'Amen Brother',                 artist: 'The Winstons',            file: '501.3 Amen Brother.mp3',                 duration: 155 },
+    { title: 'Apache',                       artist: 'Incredible Bongo Band',   file: '503.2 Apache.mp3',                       duration: 291 },
+    { title: 'Funky Drummer',                artist: 'James Brown',             file: '512.2 Funky Drummer.mp3',                duration: 175 },
+    { title: 'Impeach The President',        artist: 'The Honey Drippers',      file: '511.1 Impeach The President.mp3',        duration: 205 },
+    { title: 'Synthetic Substitution',       artist: 'Melvin Bliss',            file: '505.4 Synthetic Substitution.mp3',       duration: 218 },
+    { title: 'Think (About It)',             artist: 'Lyn Collins',             file: '516.5 Think (About It).mp3',             duration: 212 },
+    { title: "It's Just Begun",              artist: 'The Jimmy Castor Bunch',  file: "518.4 It's Just Begun.mp3",              duration: 227 },
+    { title: "Ashley's Roachclip",           artist: 'The Soul Searchers',      file: "512.6 Ashley's Roachclip.mp3",           duration: 331 },
+    { title: 'The Champ',                    artist: 'The Mohawks',             file: '512.3 The Champ.mp3',                    duration: 154 },
+    { title: 'Cold Sweat',                   artist: 'James Brown',             file: '506.2 Cold Sweat.mp3',                   duration: 445 },
+    { title: 'Funky President',              artist: 'James Brown',             file: '510.1 Funky President.mp3',              duration: 239 },
+    { title: 'Blind Alley',                  artist: 'The Emotions',            file: '524.4 Blind Alley.mp3',                  duration: 177 },
+    { title: 'Long Red',                     artist: 'Mountain',                file: '509.5 Long Red.mp3',                     duration: 352 },
+    { title: 'Big Beat',                     artist: 'Billy Squier',            file: '509.3 Big Beat.mp3',                     duration: 213 },
+    { title: 'Seven Minutes Of Funk',        artist: 'The Whole Darn Family',   file: '509.6 Seven Minutes Of Funk.mp3',        duration: 418 },
+    { title: 'Hand Clapping Song',           artist: 'The Meters',              file: '508.5 Hand Clapping Song.mp3',           duration: 172 },
+    { title: "Dance To The Drummer's Beat",  artist: 'Herman Kelly & Life',     file: "503.3 Dance To The Drummer's Beat.mp3",  duration: 249 },
+    { title: 'Bongo Rock',                   artist: 'Incredible Bongo Band',   file: '503.4 Bongo Rock.mp3',                   duration: 155 },
+    { title: 'Different Strokes',            artist: 'Syl Johnson',             file: '504.1 Different Strokes.mp3',            duration: 154 },
+    { title: 'Give It Up Or Turn It Loose',  artist: 'James Brown',             file: '507.1 Give It Up Or Turn It Loose.mp3',  duration: 397 },
+    { title: 'N.T.',                         artist: 'Kool & The Gang',         file: '517.5 N.T..mp3',                         duration: 189 },
+    { title: 'The Grunt Pt. 1',              artist: "The J.B.'s",              file: '522.4 The Grunt Pt. 1.mp3',              duration: 178 },
+    { title: 'Blow Your Head',               artist: "Fred Wesley & The J.B.'s", file: '514.6 Blow Your Head.mp3',              duration: 230 },
+    { title: 'Get Out My Life Woman',        artist: 'Lee Dorsey',              file: '523.4 Get Out My Life Woman.mp3',        duration: 198 },
+    { title: 'Hook And Sling Pt. 1',         artist: 'Eddie Bo',                file: '520.6 Hook And Sling Pt. 1.mp3',         duration: 156 },
+    { title: 'Kissing My Love',              artist: 'Bill Withers',            file: '520.7 Kissing My Love.mp3',              duration: 226 },
+    { title: 'Soul Pride',                   artist: 'James Brown',             file: '521.5 Soul Pride.mp3',                   duration: 127 },
+    { title: "Scratchin'",                   artist: 'Magic Disco Machine',     file: "506.5 Scratchin'.mp3",                   duration: 164 },
+    { title: 'Shack Up',                     artist: 'Banbarra',                file: '505.7 Shack Up.mp3',                     duration: 211 },
+    { title: 'I Know You Got Soul',          artist: 'Bobby Byrd',              file: '504.2 I Know You Got Soul.mp3',          duration: 184 },
+    { title: 'Misdemeanor',                  artist: 'Foster Sylvers',          file: '519.4 Misdemeanor.mp3',                  duration: 138 },
+    { title: 'The Payback',                  artist: 'James Brown',             file: '525.7 The Payback.mp3',                  duration: 475 },
+    { title: 'The Mexican',                  artist: 'Babe Ruth',               file: '508.1 The Mexican.mp3',                  duration: 334 },
+    { title: 'T Plays It Cool',              artist: 'Marvin Gaye',             file: '516.4 T Plays It Cool.mp3',              duration: 253 },
+    { title: 'Rock Creek Park',              artist: 'The Blackbyrds',          file: '519.1 Rock Creek Park.mp3',              duration: 268 },
+    { title: 'Catch A Groove',               artist: 'Juice',                   file: '502.2 Catch A Groove.mp3',               duration: 216 },
+].map((b, i) => ({ ...b, idx: i, audioUrl: bb_breakUrl(b.file) }));
 
-    for (let attempt = 0; attempt < 6 && results.length < n; attempt++) {
-        try {
-            console.log(`[BB] search attempt ${attempt + 1} (drumOnly=${drumOnly})…`);
-            const srchRes = await fetch(
-                `${api}?q=${enc}&fl[]=identifier,title,creator,date,subject&rows=10&sort[]=random&output=json`,
-                { signal: AbortSignal.timeout(25000) }
-            );
-            const { response: { docs } } = await srchRes.json();
-            if (!docs?.length) { console.log('[BB] search returned 0 docs'); continue; }
-            console.log(`[BB] search returned ${docs.length} docs`);
+// Offline: only deal breaks whose audio actually exists in the disk cache (whatever
+// bb-cache-build.js managed to download — could be all 36 or just the old 8). A stale
+// jazz-era cache (manifest but zero break files) falls back to the full catalog rather
+// than dealing empty crates — re-run bb-cache-build.js to make it truly offline-ready.
+const bbCachedBreaks = BB_BREAK_CATALOG.filter(b => fs.existsSync(bbAudioCacheFile(b.audioUrl)));
+const BB_DEALABLE = (BB_OFFLINE && bbCachedBreaks.length) ? bbCachedBreaks : BB_BREAK_CATALOG;
+if (BB_OFFLINE && !bbCachedBreaks.length) console.log('[BB] WARNING: offline cache has no break audio — re-run bb-cache-build.js');
+console.log(`[BB] break catalog: ${BB_DEALABLE.length}/${BB_BREAK_CATALOG.length} dealable${BB_OFFLINE && bbCachedBreaks.length ? ' (offline cache)' : ''}`);
 
-            // Sequential: check one doc at a time, stop as soon as we have enough
-            for (const doc of docs) {
-                if (results.length >= n) break;
-                if (results.find(r => r.identifier === doc.identifier)) continue;
-                try {
-                    const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
-                    if (!drumOnly && /speech|spoken|comedy|lecture|interview/.test(subj)) continue;
-                    const meta = await fetch(
-                        `https://archive.org/metadata/${doc.identifier}`,
-                        { signal: AbortSignal.timeout(20000) }
-                    );
-                    const data = await meta.json();
-                    const mp3 = (data.files || []).find(f =>
-                        /mp3/i.test(f.format || '') &&
-                        (f.name || '').toLowerCase().endsWith('.mp3') &&
-                        bb_parseDuration(f.length) > 60
-                    );
-                    if (!mp3) continue;
-                    const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
-                    results.push({
-                        identifier: doc.identifier,
-                        title: doc.title || 'Unknown Track',
-                        creator, date: (doc.date || '').slice(0, 4),
-                        audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
-                        thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
-                        duration: bb_parseDuration(mp3.length),
-                    });
-                    console.log(`[BB] found: ${doc.title}`);
-                } catch(e) { console.log(`[BB] skip ${doc.identifier}: ${e.message}`); }
-            }
-        } catch(e) { console.error(`[BB] search attempt ${attempt + 1} failed:`, e.message); }
-    }
-    return results;
+// Deal a crate of n distinct breaks, preferring ones this room hasn't been dealt yet.
+function bb_dealCrate(room, n) {
+    const pool = BB_DEALABLE.filter(b => !room.bbUsedIds.has(b.idx));
+    const source = pool.length >= n ? pool : BB_DEALABLE;
+    const shuffled = [...source].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(n, shuffled.length)).map(b => b.idx);
 }
-
-// ── Pre-fetched sample pool — filled on startup and refreshed every 2 hours ──
-const bbSamplePool = []; // blues / gospel / boogie / bebop-jazz 78s
-
-async function bb_refreshPool() {
-    console.log('[BB] refreshing sample pool…');
-    const samples = await bb_fetchBatch(5, false);
-    samples.forEach(s => { if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s); });
-    console.log(`[BB] pool ready: ${bbSamplePool.length} jazz samples`);
-}
-if (BB_OFFLINE) {
-    // Fill the pool from the pre-built cache; rewrite art to the local proxy route.
-    (bbManifest.jazz || []).forEach(s => {
-        s.thumbUrl = '/api/bb-thumb/' + encodeURIComponent(s.identifier);
-        if (!bbSamplePool.find(x => x.identifier === s.identifier)) bbSamplePool.push(s);
-    });
-    console.log(`[BB] pool loaded from cache: ${bbSamplePool.length} jazz samples`);
-} else {
-    bb_refreshPool().catch(console.error);
-    setInterval(() => bb_refreshPool().catch(console.error), 2 * 60 * 60 * 1000);
-}
-
-// Pick one jazz sample from the pool that this room hasn't used yet; fall back to live fetch
-async function bb_pickSample(room) {
-    const used = room.bbUsedIds;
-    const available = bbSamplePool.filter(s => !used.has(s.identifier));
-    if (available.length) {
-        const pick = available[Math.floor(Math.random() * available.length)];
-        used.add(pick.identifier);
-        console.log(`[BB] pool pick: ${pick.identifier}`);
-        return pick;
-    }
-    if (BB_OFFLINE) {
-        // No network to fall back to — reuse a cached sample rather than fail.
-        if (!bbSamplePool.length) return null;
-        return bbSamplePool[Math.floor(Math.random() * bbSamplePool.length)];
-    }
-    console.log('[BB] pool exhausted, live fetch…');
-    const fresh = await bb_fetchBatch(1, false);
-    if (fresh[0]) used.add(fresh[0].identifier);
-    return fresh[0] || null;
-}
-
-// Pick a drum break — instant, no API call needed
 // 1v1 round-based pairing — direct port of Squiggle's sq_seedMatchups (index.js:967).
 // Runs BEFORE Dig starts (not after), since Spit needs to know the opponent's name while writing.
 function bb_seedMatchups(room) {
@@ -1680,7 +1628,7 @@ function bb_startRound(room) {
     room.bbRound++;
     room.bbPhase       = 'DIG';
     room.bbSamples     = {};
-    room.bbSampleBytesByPlayer = {};
+    room.bbDigOptions  = {};
     room.bbChops       = {};
     room.bbSpitFills   = {};
     room.bbFlowPreset  = {};
@@ -1708,66 +1656,45 @@ function bb_startRound(room) {
     bb_beginDig(room);
 }
 
-// DIG — each player digs their own loop independently (not two shared room-wide samples).
-// Per-player timeout mirrors the old room-wide BB_CRATE_TIMEOUT so one slow fetch can't stall
-// the whole room forever; whichever finishes first still has to wait for the slowest player
-// (or its own timeout) before the room moves on to Chop together.
+// DIG — every player gets dealt a crate of 4 breaks, taps to preview, picks one to chop.
+// Interactive (real digging agency) instead of the old auto-assigned random sample.
 function bb_beginDig(room) {
     room.bbPhase = 'DIG';
-    const ids = Object.keys(room.players);
-    const digStartedAt = Date.now();
-    let settled = 0;
-    // Hold the crate/vinyl reveal for at least BB_PREVIEW_SECS even if every player's sample
-    // resolves fast (a quick Archive.org lookup shouldn't cut the reveal moment short).
-    const trySettle = () => {
-        settled++;
-        if (settled < ids.length) return;
-        if (!rooms[room.code]) return;
-        const waitMs = Math.max(0, BB_PREVIEW_SECS * 1000 - (Date.now() - digStartedAt));
-        setTimeout(() => { if (rooms[room.code]) bb_beginChop(room); }, waitMs);
-    };
-
-    ids.forEach(pid => {
-        let done = false;
-        const safety = setTimeout(() => {
-            if (done) return;
-            done = true;
-            console.log(`[BB] dig timeout for ${pid} — no track, silence fallback`);
-            room.bbSamples[pid] = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
-            io.to(pid).emit('bbDigReady', {
-                title: room.bbSamples[pid].title, creator: '', date: '',
-                thumbUrl: null, audioProxyUrl: null, duration: 0,
-            });
-            trySettle();
-        }, BB_CRATE_TIMEOUT * 1000);
-
-        bb_pickSample(room).then(sample => {
-            if (done || !rooms[room.code]) return;
-            done = true; clearTimeout(safety);
-            if (!sample) sample = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
-            room.bbSamples[pid] = sample;
-            io.to(pid).emit('bbDigReady', {
-                title: sample.title, creator: sample.creator, date: sample.date,
-                thumbUrl: sample.thumbUrl,
-                audioProxyUrl: sample.audioUrl ? `/api/bb-audio/${room.code}/${pid}` : null,
-                duration: sample.duration,
-            });
-            trySettle();
-        }).catch(e => {
-            if (done || !rooms[room.code]) return;
-            done = true; clearTimeout(safety);
-            console.error('[BB] bb_pickSample error:', e.message);
-            room.bbSamples[pid] = { title: 'No Track Found', creator: '', date: '', audioUrl: null, thumbUrl: null, duration: 0 };
-            io.to(pid).emit('bbDigReady', {
-                title: room.bbSamples[pid].title, creator: '', date: '',
-                thumbUrl: null, audioProxyUrl: null, duration: 0,
-            });
-            trySettle();
+    room.bbDigOptions = {};
+    room.bbTimeLeft = BB_DIG_SECS;
+    Object.keys(room.players).forEach(pid => {
+        const dealt = bb_dealCrate(room, 4);
+        room.bbDigOptions[pid] = dealt;
+        io.to(pid).emit('bbDigPhase', {
+            timeLeft: BB_DIG_SECS,
+            options: dealt.map(i => {
+                const b = BB_BREAK_CATALOG[i];
+                return { idx: b.idx, title: b.title, artist: b.artist, duration: b.duration, audioProxyUrl: `/api/bb-break/${b.idx}` };
+            }),
         });
     });
+    room.bbTimer = setInterval(() => {
+        room.bbTimeLeft--;
+        broadcastRoom(room, 'bbTimeTick', { timeLeft: room.bbTimeLeft });
+        if (room.bbTimeLeft <= 0) { clearInterval(room.bbTimer); room.bbTimer = null; bb_endDig(room); }
+    }, 1000);
 }
 
-// CHOP — waveform scrub, now per-player (each player scrubs their own dug track).
+function bb_endDig(room) {
+    clearInterval(room.bbTimer); room.bbTimer = null;
+    // Anyone who didn't pick gets their crate's first break — nobody stalls the room.
+    Object.keys(room.players).forEach(pid => {
+        if (!room.bbSamples[pid]) {
+            const idx = room.bbDigOptions[pid]?.[0] ?? BB_DEALABLE[0]?.idx ?? 0;
+            room.bbSamples[pid] = BB_BREAK_CATALOG[idx];
+            room.bbUsedIds.add(idx);
+            io.to(pid).emit('bbBreakPicked', { idx });
+        }
+    });
+    bb_beginChop(room);
+}
+
+// CHOP — waveform scrub, per-player (each player chops the break they dug).
 function bb_beginChop(room) {
     room.bbPhase = 'CHOP';
     room.bbTimeLeft = BB_SCRUB_SECS;
@@ -1775,7 +1702,7 @@ function bb_beginChop(room) {
         const sample = room.bbSamples[pid];
         io.to(pid).emit('bbChopPhase', {
             timeLeft: BB_SCRUB_SECS,
-            audioProxyUrl: sample?.audioUrl ? `/api/bb-audio/${room.code}/${pid}` : null,
+            audioProxyUrl: sample ? `/api/bb-break/${sample.idx}` : null,
             duration: sample?.duration || 300,
         });
     });
@@ -1877,6 +1804,14 @@ function bb_beginBattle(room) {
     bb_nextMatchup(room);
 }
 
+// The chopped loop is the whole point of Dig/Chop — it plays UNDER the spitter's verse
+// during Battle (this was missing pre-v4: beats were made but never heard by anyone).
+function bb_beatFor(room, pid) {
+    const chop = room.bbChops[pid], sample = room.bbSamples[pid];
+    if (!chop || !sample || sample.idx == null) return null;
+    return { audioProxyUrl: `/api/bb-break/${sample.idx}`, start: chop.start, end: chop.end, rate: chop.rate };
+}
+
 function bb_nextMatchup(room) {
     clearInterval(room.bbTimer); clearTimeout(room.bbTimer);
     if (room.bbCurrentMatchup >= room.bbMatchups.length) { bb_endRound(room); return; }
@@ -1885,8 +1820,8 @@ function bb_nextMatchup(room) {
     broadcastRoom(room, 'bbBattleBegin', {
         matchupIdx: room.bbCurrentMatchup, total: room.bbMatchups.length,
         round: room.bbRound, pointValue: m.pointValue,
-        p1: { id: m.p1Id, name: p1 ? p1.name : '?', lines: room.bbSpitFills[m.p1Id]?.lines || [], flowPreset: room.bbFlowPreset[m.p1Id] || 'straight', adlib: room.bbAdlibs[m.p1Id] || null },
-        p2: { id: m.p2Id, name: p2 ? p2.name : '?', lines: room.bbSpitFills[m.p2Id]?.lines || [], flowPreset: room.bbFlowPreset[m.p2Id] || 'straight', adlib: room.bbAdlibs[m.p2Id] || null },
+        p1: { id: m.p1Id, name: p1 ? p1.name : '?', lines: room.bbSpitFills[m.p1Id]?.lines || [], flowPreset: room.bbFlowPreset[m.p1Id] || 'straight', adlib: room.bbAdlibs[m.p1Id] || null, beat: bb_beatFor(room, m.p1Id) },
+        p2: { id: m.p2Id, name: p2 ? p2.name : '?', lines: room.bbSpitFills[m.p2Id]?.lines || [], flowPreset: room.bbFlowPreset[m.p2Id] || 'straight', adlib: room.bbAdlibs[m.p2Id] || null, beat: bb_beatFor(room, m.p2Id) },
     });
     room.bbTimer = setTimeout(() => bb_openVoting(room), BB_BATTLE_VIEW_SECS * 1000);
 }
@@ -2880,6 +2815,18 @@ io.on('connection', (socket) => {
         bb_startGame(room);
     });
 
+    socket.on('bbPickBreak', ({ idx }) => {
+        const room = socketRoom(socket);
+        if (!room || room.bbPhase !== 'DIG') return;
+        if (room.bbSamples[socket.id]) return; // already picked
+        if (!room.bbDigOptions[socket.id]?.includes(idx)) return; // not in your dealt crate
+        room.bbSamples[socket.id] = BB_BREAK_CATALOG[idx];
+        room.bbUsedIds.add(idx);
+        socket.emit('bbBreakPicked', { idx });
+        const ids = Object.keys(room.players);
+        if (ids.every(id => room.bbSamples[id])) bb_endDig(room);
+    });
+
     // Loop bounds come from the client snapping to its own onset-detected hits, so duration is
     // musical (varies by track tempo/section) rather than a fixed second count — sanity-clamp
     // instead of a tight range. hitCount itself is just metadata (8 or 16) for display/relock.
@@ -2949,7 +2896,7 @@ io.on('connection', (socket) => {
         clearInterval(room.bbTimer); clearTimeout(room.bbTimer); room.bbTimer = null;
         room.bbPhase = 'LOBBY'; room.gamePhase = 'LOBBY'; room.bbRound = 0;
         room.bbMatchups = []; room.bbCurrentMatchup = 0; room.bbByeId = null;
-        room.bbSamples = {}; room.bbSampleBytesByPlayer = {}; room.bbChops = {};
+        room.bbSamples = {}; room.bbDigOptions = {}; room.bbChops = {};
         room.bbSpitFills = {}; room.bbFlowPreset = {}; room.bbAdlibs = {};
         room.bbVotes = {}; room.bbRoundScores = {}; room.bbCumScores = {};
         room.bbUsedIds = new Set();

@@ -1,13 +1,14 @@
 // Bad Pitches — offline cache builder.
 //
 // Run this ONCE while you still have internet (at home before a camping trip):
-//     node bb-cache-build.js            # ~20 jazz samples + 8 drum breaks
-//     JAZZ_COUNT=30 node bb-cache-build.js
+//     node bb-cache-build.js
 //
-// It downloads the audio + cover art Bad Pitches needs into public/bb-cache/ with
-// filenames the server looks up by hash. After this runs, `npm start` auto-detects
-// public/bb-cache/manifest.json and plays Bad Pitches fully offline. Re-run to add
-// more (already-downloaded files are skipped).
+// It downloads every break in the catalog below (audio + the shared cover art) into
+// public/bb-cache/ with filenames the server looks up by hash. After this runs,
+// `npm start` auto-detects public/bb-cache/manifest.json and Bad Pitches deals crates
+// fully offline. Re-runnable — already-downloaded files are skipped.
+//
+// ~36 tracks × ~3-4MB ≈ 130MB total.
 
 const fs = require('fs');
 const path = require('path');
@@ -19,21 +20,6 @@ const THUMB = path.join(OUT, 'thumb');
 fs.mkdirSync(AUDIO, { recursive: true });
 fs.mkdirSync(THUMB, { recursive: true });
 
-const JAZZ_COUNT   = Number(process.env.JAZZ_COUNT) || 20;
-const MAX_ATTEMPTS = Number(process.env.JAZZ_ATTEMPTS) || 25;
-
-// Keep this in sync with BB_DRUM_BREAKS in index.js.
-const BB_DRUM_BREAKS = [
-    { title: 'Apache',                      artist: 'Incredible Bongo Band', file: '503.2 Apache.mp3',                     breakAt: 0  },
-    { title: "Dance To The Drummer's Beat", artist: 'Herman Kelly & Life',   file: "503.3 Dance To The Drummer's Beat.mp3", breakAt: 0  },
-    { title: 'Synthetic Substitution',      artist: 'Melvin Bliss',          file: '505.4 Synthetic Substitution.mp3',     breakAt: 0  },
-    { title: 'Amen Brother',                artist: 'The Winstons',          file: '501.3 Amen Brother.mp3',               breakAt: 83 },
-    { title: 'Different Strokes',           artist: 'Syl Johnson',           file: '504.1 Different Strokes.mp3',          breakAt: 0  },
-    { title: 'Bongo Rock',                  artist: 'Incredible Bongo Band', file: '503.4 Bongo Rock.mp3',                 breakAt: 0  },
-    { title: 'Cold Sweat',                  artist: 'James Brown',           file: '506.2 Cold Sweat.mp3',                 breakAt: 0  },
-    { title: 'Give It Up Or Turn It Loose', artist: 'James Brown',           file: '507.1 Give It Up Or Turn It Loose.mp3', breakAt: 24 },
-];
-
 const bbHash = (s) => crypto.createHash('md5').update(String(s)).digest('hex');
 
 // Break-beat mp3s live inside this subfolder of the Archive.org item (matches index.js).
@@ -41,56 +27,48 @@ const BB_BREAKS_DIR = 'BreakBeat Lou Flores - Ultimate Breaks and Beats - The Co
 const bbBreakUrl = (file) =>
     `https://archive.org/download/ultimate-break-beats-complete/${`${BB_BREAKS_DIR}/${file}`.split('/').map(encodeURIComponent).join('/')}`;
 
-function parseDuration(len) {
-    if (!len) return 0;
-    const s = String(len);
-    if (s.includes(':')) {
-        const p = s.split(':').map(Number);
-        return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p[0]*60 + (p[1]||0);
-    }
-    return parseFloat(s) || 0;
-}
+// Keep this in sync with BB_BREAK_CATALOG in index.js.
+const BB_BREAK_CATALOG = [
+    { title: 'Amen Brother',                 artist: 'The Winstons',            file: '501.3 Amen Brother.mp3' },
+    { title: 'Apache',                       artist: 'Incredible Bongo Band',   file: '503.2 Apache.mp3' },
+    { title: 'Funky Drummer',                artist: 'James Brown',             file: '512.2 Funky Drummer.mp3' },
+    { title: 'Impeach The President',        artist: 'The Honey Drippers',      file: '511.1 Impeach The President.mp3' },
+    { title: 'Synthetic Substitution',       artist: 'Melvin Bliss',            file: '505.4 Synthetic Substitution.mp3' },
+    { title: 'Think (About It)',             artist: 'Lyn Collins',             file: '516.5 Think (About It).mp3' },
+    { title: "It's Just Begun",              artist: 'The Jimmy Castor Bunch',  file: "518.4 It's Just Begun.mp3" },
+    { title: "Ashley's Roachclip",           artist: 'The Soul Searchers',      file: "512.6 Ashley's Roachclip.mp3" },
+    { title: 'The Champ',                    artist: 'The Mohawks',             file: '512.3 The Champ.mp3' },
+    { title: 'Cold Sweat',                   artist: 'James Brown',             file: '506.2 Cold Sweat.mp3' },
+    { title: 'Funky President',              artist: 'James Brown',             file: '510.1 Funky President.mp3' },
+    { title: 'Blind Alley',                  artist: 'The Emotions',            file: '524.4 Blind Alley.mp3' },
+    { title: 'Long Red',                     artist: 'Mountain',                file: '509.5 Long Red.mp3' },
+    { title: 'Big Beat',                     artist: 'Billy Squier',            file: '509.3 Big Beat.mp3' },
+    { title: 'Seven Minutes Of Funk',        artist: 'The Whole Darn Family',   file: '509.6 Seven Minutes Of Funk.mp3' },
+    { title: 'Hand Clapping Song',           artist: 'The Meters',              file: '508.5 Hand Clapping Song.mp3' },
+    { title: "Dance To The Drummer's Beat",  artist: 'Herman Kelly & Life',     file: "503.3 Dance To The Drummer's Beat.mp3" },
+    { title: 'Bongo Rock',                   artist: 'Incredible Bongo Band',   file: '503.4 Bongo Rock.mp3' },
+    { title: 'Different Strokes',            artist: 'Syl Johnson',             file: '504.1 Different Strokes.mp3' },
+    { title: 'Give It Up Or Turn It Loose',  artist: 'James Brown',             file: '507.1 Give It Up Or Turn It Loose.mp3' },
+    { title: 'N.T.',                         artist: 'Kool & The Gang',         file: '517.5 N.T..mp3' },
+    { title: 'The Grunt Pt. 1',              artist: "The J.B.'s",              file: '522.4 The Grunt Pt. 1.mp3' },
+    { title: 'Blow Your Head',               artist: "Fred Wesley & The J.B.'s", file: '514.6 Blow Your Head.mp3' },
+    { title: 'Get Out My Life Woman',        artist: 'Lee Dorsey',              file: '523.4 Get Out My Life Woman.mp3' },
+    { title: 'Hook And Sling Pt. 1',         artist: 'Eddie Bo',                file: '520.6 Hook And Sling Pt. 1.mp3' },
+    { title: 'Kissing My Love',              artist: 'Bill Withers',            file: '520.7 Kissing My Love.mp3' },
+    { title: 'Soul Pride',                   artist: 'James Brown',             file: '521.5 Soul Pride.mp3' },
+    { title: "Scratchin'",                   artist: 'Magic Disco Machine',     file: "506.5 Scratchin'.mp3" },
+    { title: 'Shack Up',                     artist: 'Banbarra',                file: '505.7 Shack Up.mp3' },
+    { title: 'I Know You Got Soul',          artist: 'Bobby Byrd',              file: '504.2 I Know You Got Soul.mp3' },
+    { title: 'Misdemeanor',                  artist: 'Foster Sylvers',          file: '519.4 Misdemeanor.mp3' },
+    { title: 'The Payback',                  artist: 'James Brown',             file: '525.7 The Payback.mp3' },
+    { title: 'The Mexican',                  artist: 'Babe Ruth',               file: '508.1 The Mexican.mp3' },
+    { title: 'T Plays It Cool',              artist: 'Marvin Gaye',             file: '516.4 T Plays It Cool.mp3' },
+    { title: 'Rock Creek Park',              artist: 'The Blackbyrds',          file: '519.1 Rock Creek Park.mp3' },
+    { title: 'Catch A Groove',               artist: 'Juice',                   file: '502.2 Catch A Groove.mp3' },
+];
 
-async function fetchJazz(target, exclude = new Set()) {
-    const api = 'https://archive.org/advancedsearch.php';
-    const q = encodeURIComponent('collection:georgeblood AND mediatype:audio');
-    const out = [];
-    const seen = new Set(exclude);
-    for (let attempt = 0; attempt < MAX_ATTEMPTS && out.length < target; attempt++) {
-        try {
-            const r = await fetch(`${api}?q=${q}&fl[]=identifier,title,creator,date,subject&rows=10&sort[]=random&output=json`,
-                { signal: AbortSignal.timeout(25000) });
-            const { response: { docs } } = await r.json();
-            for (const doc of docs || []) {
-                if (out.length >= target) break;
-                if (seen.has(doc.identifier)) continue;
-                seen.add(doc.identifier);
-                const subj = [].concat(doc.subject || []).join(' ').toLowerCase();
-                if (/speech|spoken|comedy|lecture|interview/.test(subj)) continue;
-                try {
-                    const meta = await (await fetch(`https://archive.org/metadata/${doc.identifier}`,
-                        { signal: AbortSignal.timeout(20000) })).json();
-                    const mp3 = (meta.files || []).find(f =>
-                        /mp3/i.test(f.format || '') &&
-                        (f.name || '').toLowerCase().endsWith('.mp3') &&
-                        parseDuration(f.length) > 60);
-                    if (!mp3) continue;
-                    const creator = Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown Artist');
-                    out.push({
-                        identifier: doc.identifier,
-                        title: doc.title || 'Unknown Track',
-                        creator, date: (doc.date || '').slice(0, 4),
-                        audioUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
-                        thumbUrl: `https://archive.org/services/img/${doc.identifier}`,
-                        duration: parseDuration(mp3.length),
-                    });
-                    console.log(`  ♪ found (${out.length}/${target}): ${doc.title}`);
-                } catch (e) { /* skip bad item */ }
-            }
-        } catch (e) { console.log(`  search attempt ${attempt + 1} failed: ${e.message}`); }
-    }
-    return out;
-}
+const bbAudioFile = (audioUrl) => path.join(AUDIO, bbHash(audioUrl) + '.mp3');
+const bbThumbFile = (id)       => path.join(THUMB, bbHash(id) + '.jpg');
 
 async function download(url, dest, label) {
     if (fs.existsSync(dest) && fs.statSync(dest).size > 0) { console.log(`  = cached ${label}`); return fs.statSync(dest).size; }
@@ -104,42 +82,21 @@ async function download(url, dest, label) {
 
 (async () => {
     let bytes = 0, ok = 0, fail = 0;
-
-    // Resume: keep jazz already listed in a previous manifest, only fetch the shortfall.
-    let existing = [];
-    try { existing = (JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.json'), 'utf8')).jazz) || []; } catch (_) {}
-    const have = new Set(existing.map(s => s.identifier));
-    const need = Math.max(0, JAZZ_COUNT - existing.length);
-    console.log(`\n[BB cache] ${existing.length} jazz already cached; fetching ${need} more (target ${JAZZ_COUNT})…`);
-    const fresh = need ? await fetchJazz(need, have) : [];
-    const jazz = existing.concat(fresh);
-    console.log(`[BB cache] downloading audio + art for ${jazz.length} jazz samples…`);
-    for (const s of jazz) {
-        try {
-            bytes += await download(s.audioUrl, bbAudioFile(s.audioUrl), `audio ${s.title}`);
-            try { bytes += await download(`https://archive.org/services/img/${s.identifier}`, bbThumbFile(s.identifier), `art ${s.identifier}`); }
-            catch (e) { console.log(`  (no art for ${s.identifier})`); }
-            ok++;
-        } catch (e) { console.log(`  ✗ ${s.title}: ${e.message}`); fail++; }
-    }
-
-    console.log(`\n[BB cache] downloading ${BB_DRUM_BREAKS.length} drum breaks…`);
-    for (const d of BB_DRUM_BREAKS) {
-        const audioUrl = bbBreakUrl(d.file);
-        try { bytes += await download(audioUrl, bbAudioFile(audioUrl), `drum ${d.title}`); ok++; }
-        catch (e) { console.log(`  ✗ ${d.title}: ${e.message}`); fail++; }
+    console.log(`\n[BB cache] downloading ${BB_BREAK_CATALOG.length} breaks…`);
+    for (const b of BB_BREAK_CATALOG) {
+        const audioUrl = bbBreakUrl(b.file);
+        try { bytes += await download(audioUrl, bbAudioFile(audioUrl), b.title); ok++; }
+        catch (e) { console.log(`  ✗ ${b.title}: ${e.message}`); fail++; }
     }
     // one shared cover for the whole break-beats collection
-    try { bytes += await download('https://archive.org/services/img/ultimate-break-beats-complete', bbThumbFile('ultimate-break-beats-complete'), 'art drum-breaks'); }
-    catch (e) { console.log('  (no drum-break art)'); }
+    try { bytes += await download('https://archive.org/services/img/ultimate-break-beats-complete', bbThumbFile('ultimate-break-beats-complete'), 'art'); }
+    catch (e) { console.log('  (no art)'); }
 
-    const manifest = { builtAt: new Date().toISOString(), jazz, drums: BB_DRUM_BREAKS };
+    // manifest.json is what flips the server into BB_OFFLINE mode; the server decides what's
+    // dealable by checking which audio files actually exist on disk, not by reading this list.
+    const manifest = { builtAt: new Date().toISOString(), drums: BB_BREAK_CATALOG };
     fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
     console.log(`\n[BB cache] DONE — ${ok} ok, ${fail} failed, ${(bytes/1e6).toFixed(0)} MB total.`);
-    console.log('[BB cache] manifest -> public/bb-cache/manifest.json');
-    console.log('[BB cache] Now run `npm start` (or BB_OFFLINE=1 npm start) to play offline.\n');
+    console.log('[BB cache] Now run `npm start` to deal crates fully offline.\n');
 })();
-
-function bbAudioFile(audioUrl) { return path.join(AUDIO, bbHash(audioUrl) + '.mp3'); }
-function bbThumbFile(id)        { return path.join(THUMB, bbHash(id) + '.jpg'); }

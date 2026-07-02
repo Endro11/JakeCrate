@@ -294,9 +294,19 @@ const playerSize = 75;
 
 ---
 
-## Game 7: Bad Pitches (`beatbattle`) — ✅ FULL REWORK COMPLETE, code-verified (started + finished 2026-07-01) — needs a real-device playtest before considered fully done, see below
+## Game 7: Bad Pitches (`beatbattle`) — ✅ v4 BREAKBEAT CRATE (2026-07-01, post-playtest iteration on top of the v3 rework)
 
-**Why:** the old design (dig a jazz loop in R1, dig a *separate* drum break in R2, BUILD stacks both in a slot-toggle grid) was structurally broken — the two loops had no shared tempo/downbeat, so BUILD just layered unrelated audio at arbitrary boundaries. No amount of mixing fixed it. Full pivot, inspired by Jackbox's Rap Battle: **Dig** one strong loop per player → **Chop** it with transient-snapping → **Spit** a mad-lib diss verse read aloud via TTS → **Battle**, round-based 1v1 (not all-play), directly reusing Stroke Off's bracket/pairing/voting system. See [[jakecrate-state]] memory for the full design conversation and rationale if this doc is ever out of sync with actual code — that memory file is the more detailed source during the rework.
+**v4 changes (supersede parts of the v3 write-up below — driven by a real phone playtest):**
+- **Source is now a fixed catalog of 36 legendary UBB drum breaks** (`BB_BREAK_CATALOG` in `index.js`; Archive.org item `ultimate-break-beats-complete` — Amen Brother, Apache, Funky Drummer, Impeach The President, Think (About It), The Payback…). The georgeblood jazz-78 search/pool (`bb_fetchBatch`/`bbSamplePool`/`bb_pickSample`) is **deleted**; boot no longer touches Archive.org at all. Rationale: playtest said the old jazz "didn't resonate", and breaks have far stronger transients for the snap-to-onset Chop.
+- **DIG is interactive now**: each player is dealt a crate of 4 breaks (`bbDigPhase {options, timeLeft}`, 30s `BB_DIG_SECS`), taps a card to preview (`bbStreamPreview`), picks one (`bbPickBreak {idx}` → `bbBreakPicked {idx}` ack, validated against the dealt crate). Timer expiry auto-picks each non-picker's first option (`bb_endDig`). Replaces the old auto-assigned vinyl reveal — the `bbDigReady` event is gone.
+- **The chopped beat finally PLAYS in Battle** — `bbBattleBegin`'s p1/p2 now carry `beat: {audioProxyUrl, start, end, rate}`; the client prefetch-decodes both on matchup start (`bbPrefetchBattleBeats`) and `bbHearVerse` loops the spitter's chop UNDER their TTS verse. This was the big v3 design hole: players made beats nobody ever heard, which made the game feel like Rizz or Roast with homework.
+- Audio route: `/api/bb-break/:idx` (catalog-indexed, global byte cache) replaces `/api/bb-audio/:code/:playerId` and `/api/bb-thumb/:id`. Offline: dealable = catalog entries whose audio exists in `public/bb-cache/`; a stale jazz-era cache (manifest but no break files) falls back to the full catalog with a boot warning — re-run `bb-cache-build.js`, which now downloads all 36 breaks and no jazz (~130MB).
+- Phase steps labeled in the UI: STEP 1 DIG / STEP 2 CHOP / STEP 3 DISS.
+- Verified via raw-ws 2-player full-flow test (crate dealing, out-of-crate pick rejection, chop→battle beat payload fidelity, verse fills) + a separate 30s-timeout auto-pick test; the 6 trickiest catalog filenames HEAD-checked 200 against Archive.org.
+
+**v3 write-up below (historical) — the Dig→Chop→Spit→Battle structure, onset tuning, TTS notes, and milestone history are still accurate; sample-source and dig-flow details are superseded above.**
+
+**Why (v3):** the old design (dig a jazz loop in R1, dig a *separate* drum break in R2, BUILD stacks both in a slot-toggle grid) was structurally broken — the two loops had no shared tempo/downbeat, so BUILD just layered unrelated audio at arbitrary boundaries. No amount of mixing fixed it. Full pivot, inspired by Jackbox's Rap Battle: **Dig** one strong loop per player → **Chop** it with transient-snapping → **Spit** a mad-lib diss verse read aloud via TTS → **Battle**, round-based 1v1 (not all-play), directly reusing Stroke Off's bracket/pairing/voting system. See [[jakecrate-state]] memory for the full design conversation and rationale if this doc is ever out of sync with actual code — that memory file is the more detailed source during the rework.
 
 **Status (update this table as milestones land):**
 | Milestone | Status |
