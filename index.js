@@ -1797,21 +1797,21 @@ function bb_endChop(room) {
 // SPIT — mad-lib diss verse. One shared template per round (same skeleton for everyone, like
 // Rizz or Roast); [OPP] is substituted server-side per-player BEFORE the template is sent, so
 // the client's blank-rendering regex only ever sees real [BLANK] tokens.
+// Kept deliberately SHORT — 2 lines, 2-3 blanks — after a real playtest found the original
+// 3-line/4-blank versions too long and convoluted to fill in under pressure at a party.
 const BB_SPIT_TEMPLATES = [
-    { id:'bp01', template:"Yo [OPP], you brought a [NOUN] to a beat this [ADJECTIVE].\nI'm out here [VERB]ing while you're stuck on repeat.\nBad Pitches belt's mine — go find a new [NOUN].", blanks:['NOUN','ADJECTIVE','VERB','NOUN'] },
-    { id:'bp02', template:"[OPP], step back — your flow's got the energy of a [NOUN] at [PLACE].\nI'm too [ADJECTIVE] for whatever you just tried.\nGo [VERB] and come back when you're ready.", blanks:['NOUN','PLACE','ADJECTIVE','VERB'] },
-    { id:'bp03', template:"[OPP] really thinks they can [VERB] with me?\nI've seen [NOUN]s with more rhythm than that.\nStay [ADJECTIVE], stay quiet, stay out my [NOUN].", blanks:['VERB','NOUN','ADJECTIVE','NOUN'] },
-    { id:'bp04', template:"Real talk, [OPP] — that verse was [ADJECTIVE].\nI'm the [NOUN] in the room and you're the [NOUN] in the corner.\nGo [VERB] before I really get started.", blanks:['ADJECTIVE','NOUN','NOUN','VERB'] },
-    { id:'bp05', template:"[OPP], you pulled up with a [NOUN] and called it bars?\nMy pen's too [ADJECTIVE], my crate's too deep.\nGo [VERB] somewhere, this beat's not for you.", blanks:['NOUN','ADJECTIVE','VERB'] },
-    { id:'bp06', template:"History's gonna remember [OPP] as the one who [VERB]ed a [NOUN] and called it a comeback.\nI'm [ADJECTIVE], I'm timeless, you're a footnote.", blanks:['VERB','NOUN','ADJECTIVE'] },
-    { id:'bp07', template:"[OPP] brought a [NOUN] energy to a [ADJECTIVE] battle.\nMeanwhile I'm out here [VERB]ing circles around the whole crew.\nBetter luck at [PLACE].", blanks:['NOUN','ADJECTIVE','VERB','PLACE'] },
-    { id:'bp08', template:"Honestly [OPP], your whole thing is [ADJECTIVE] [NOUN] and everyone can hear it.\nI'm about to [VERB] this track into the history books.", blanks:['ADJECTIVE','NOUN','VERB'] },
-    { id:'bp09', template:"[OPP] said they came to win — with a [NOUN] like that?\nI'm too [ADJECTIVE] for the competition, too [ADJECTIVE] for the room.\nGo [VERB] and try again next round.", blanks:['NOUN','ADJECTIVE','ADJECTIVE','VERB'] },
-    { id:'bp10', template:"Last time someone this [ADJECTIVE] stepped to me, they turned into a [NOUN].\n[OPP], you sure you wanna [VERB] with this?", blanks:['ADJECTIVE','NOUN','VERB'] },
-    { id:'bp11', template:"[OPP], I heard you practiced at [PLACE] — didn't help.\nYou're still out here sounding like a [NOUN] set to [ADJECTIVE].\nI'm [VERB]ing straight to the top.", blanks:['PLACE','NOUN','ADJECTIVE','VERB'] },
-    { id:'bp12', template:"They said [OPP] had bars — I heard a [NOUN] falling down some stairs.\nI'm [ADJECTIVE] on this beat, you're just here to [VERB].", blanks:['NOUN','ADJECTIVE','VERB'] },
-    { id:'bp13', template:"[OPP], you're the [NOUN] of this whole battle — [ADJECTIVE] and forgettable.\nI'm about to [VERB] my way to the final round.", blanks:['NOUN','ADJECTIVE','VERB'] },
-    { id:'bp14', template:"Yo [OPP] — nice try, but I'm built for this, you're built like a [NOUN].\nI'll be [VERB]ing this beat while you [VERB] home.\nStay [ADJECTIVE], champ.", blanks:['NOUN','VERB','VERB','ADJECTIVE'] },
+    { id:'bp01', template:"Yo [OPP], you rap like a [ADJECTIVE] [NOUN].\nSit down before I really start.", blanks:['ADJECTIVE','NOUN'] },
+    { id:'bp02', template:"[OPP], your bars belong in a [NOUN].\nMine belong at [PLACE].", blanks:['NOUN','PLACE'] },
+    { id:'bp03', template:"They call you [OPP]? More like a [ADJECTIVE] [NOUN].\nBoo this person.", blanks:['ADJECTIVE','NOUN'] },
+    { id:'bp04', template:"[OPP], your verse was straight [NOUN].\nGo [VERB] yourself a new hobby.", blanks:['NOUN','VERB'] },
+    { id:'bp05', template:"Breaking news: [OPP] just got dropped like a [ADJECTIVE] [NOUN].\nBack to you in the studio.", blanks:['ADJECTIVE','NOUN'] },
+    { id:'bp06', template:"[OPP], even a [NOUN] could out-rap you.\nStay [ADJECTIVE], champ.", blanks:['NOUN','ADJECTIVE'] },
+    { id:'bp07', template:"I'd roast you, [OPP], but you're already [ADJECTIVE].\nNow watch me [VERB] this beat.", blanks:['ADJECTIVE','VERB'] },
+    { id:'bp08', template:"[OPP] flows like a [NOUN] stuck in [PLACE].\nI'm the champ, you're the chump.", blanks:['NOUN','PLACE'] },
+    { id:'bp09', template:"Last warning, [OPP] — go [VERB] at [PLACE] instead.\nThis stage is mine.", blanks:['VERB','PLACE'] },
+    { id:'bp10', template:"[OPP] rhymes so bad, [NOUN]s file complaints.\nCase closed.", blanks:['NOUN'] },
+    { id:'bp11', template:"I'm the GOAT — [OPP]'s just a [ADJECTIVE] [NOUN].\nEnd of story.", blanks:['ADJECTIVE','NOUN'] },
+    { id:'bp12', template:"[OPP], you sound like a [NOUN] learning to [VERB].\nKeep practicing, baby.", blanks:['NOUN','VERB'] },
 ];
 // Zero-friction ad-lib fallback since no real stinger clips exist yet — synthesized client-side
 // via the existing oscillator-synth code. Real recording (adapted from Rizz or Roast) is the

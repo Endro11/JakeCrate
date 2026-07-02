@@ -5106,8 +5106,7 @@ function bbUpdateScrubOverlay() {
     head.style.left=lx+'px';
     const info=document.getElementById('bb-loop-info');
     const hitLen = bbLoopEnd - bbLoopStart;
-    const realDur = bbPlaybackRate && bbPlaybackRate !== 1 ? ` (${(hitLen/bbPlaybackRate).toFixed(1)}s real)` : '';
-    if(info) info.textContent=`${bbHitCount} hits · ${hitLen.toFixed(1)}s${realDur} · ${bbLoopStart.toFixed(1)}s–${bbLoopEnd.toFixed(1)}s · viewing ${zs.toFixed(0)}s–${ze.toFixed(0)}s`;
+    if(info) info.textContent=`${bbHitCount} hits · ${hitLen.toFixed(1)}s loop`;
     const btn=document.getElementById('bb-lock-btn');
     if(btn) btn.disabled=false;
 }
@@ -5182,13 +5181,10 @@ function bbWireScrub() {
 }
 
 // ── spit screen — mad-lib diss verse, adapted from Rizz or Roast's rrRenderTemplate/rrSubmitFills ──
+// Ad-lib submission UI was cut in the party-playtest simplification pass (screen was too busy);
+// bbHearVerse still plays received ad-libs defensively, but this client never submits one.
 let bbSpitTemplateRaw   = '';
 let bbSpitFlowPreset    = 'straight';
-let bbSpitAdlibChoice   = null; // {type:'canned',id} | {type:'recorded',dataUrl} | null
-let bbSpitMediaRecorder = null;
-let bbSpitAudioChunks   = [];
-let bbSpitAudioDataUrl  = null;
-let bbSpitCurrentAudioEl= null;
 
 function bbRenderSpitTemplate(template) {
     bbSpitTemplateRaw = template;
@@ -5229,65 +5225,10 @@ function bbPreviewSpit() {
     bbSpeakVerse(lines, bbSpitFlowPreset);
 }
 
-function bbPickCannedAdlib(id) {
-    bbSpitAdlibChoice = { type: 'canned', id };
-    bbSpitAudioDataUrl = null;
-    bbPlayCannedAdlib(id);
-    document.querySelectorAll('.bb-adlib-canned-btn').forEach(b=>{
-        const active = b.dataset.id===id;
-        b.style.borderColor = active ? '#5ee6c5' : '#2a3450';
-        b.style.color       = active ? '#5ee6c5' : '#9fb0cc';
-    });
-    const recBtn = document.getElementById('bb-spit-record-btn');
-    if (recBtn) { recBtn.style.borderColor='#e91e63'; recBtn.style.color='#e91e63'; recBtn.textContent='🎙️'; }
-    const play = document.getElementById('bb-spit-adlib-play'); if (play) play.style.display='none';
-    const hint = document.getElementById('bb-spit-record-hint'); if(hint) hint.textContent='Tap to record your own instead';
-}
-
-async function bbToggleSpitRecord() {
-    if (bbSpitMediaRecorder && bbSpitMediaRecorder.state === 'recording') { bbSpitMediaRecorder.stop(); return; }
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        bbSpitAudioChunks = [];
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-        bbSpitMediaRecorder = new MediaRecorder(stream, { mimeType });
-        bbSpitMediaRecorder.ondataavailable = e => { if (e.data.size>0) bbSpitAudioChunks.push(e.data); };
-        bbSpitMediaRecorder.onstop = () => {
-            stream.getTracks().forEach(t=>t.stop());
-            const blob = new Blob(bbSpitAudioChunks, {type:mimeType});
-            const reader = new FileReader();
-            reader.onload = () => {
-                bbSpitAudioDataUrl = reader.result;
-                bbSpitAdlibChoice = { type: 'recorded', dataUrl: bbSpitAudioDataUrl };
-                const btn=document.getElementById('bb-spit-record-btn');
-                if(btn){btn.style.borderColor='#26c47c';btn.style.color='#26c47c';btn.textContent='✅';}
-                const hint=document.getElementById('bb-spit-record-hint'); if(hint) hint.textContent='Recorded!';
-                const play=document.getElementById('bb-spit-adlib-play'); if(play) play.style.display='inline-block';
-                document.querySelectorAll('.bb-adlib-canned-btn').forEach(b=>{b.style.borderColor='#2a3450';b.style.color='#9fb0cc';});
-            };
-            reader.readAsDataURL(blob);
-        };
-        bbSpitMediaRecorder.start();
-        const btn=document.getElementById('bb-spit-record-btn');
-        if(btn){btn.style.borderColor='#ff3b3b';btn.style.color='#ff3b3b';btn.textContent='⏹';}
-        const hint=document.getElementById('bb-spit-record-hint'); if(hint) hint.textContent='Recording… tap to stop';
-        setTimeout(()=>{ if(bbSpitMediaRecorder?.state==='recording') bbSpitMediaRecorder.stop(); }, 6000);
-    } catch(e) {
-        showToast('Mic not available — pick a canned ad-lib instead');
-    }
-}
-
-function bbPlaySpitAdlibRecording() {
-    if (!bbSpitAudioDataUrl) return;
-    if (bbSpitCurrentAudioEl) { bbSpitCurrentAudioEl.pause(); bbSpitCurrentAudioEl=null; }
-    bbSpitCurrentAudioEl = new Audio(bbSpitAudioDataUrl);
-    bbSpitCurrentAudioEl.play();
-}
-
 function bbSubmitSpit() {
     const fills = bbCurrentSpitFills();
     if (fills.some(f=>!f)) { showToast('Fill in all the blanks first!'); return; }
-    socket.emit('bbSubmitSpit', { fills, flowPreset: bbSpitFlowPreset, adlib: bbSpitAdlibChoice });
+    socket.emit('bbSubmitSpit', { fills, flowPreset: bbSpitFlowPreset, adlib: null });
     document.querySelectorAll('#bb-spit-template-wrap .bb-spit-blank').forEach(el=>el.disabled=true);
     const btn = document.getElementById('bb-spit-submit-btn'); if(btn) btn.disabled=true;
     showToast('Locked in! Waiting for others…');
@@ -5404,8 +5345,8 @@ socket.on('bbChopPhase',({timeLeft,audioProxyUrl,duration})=>{
     }
     const hdr=document.getElementById('bb-scrub-header');
     const hnt=document.getElementById('bb-scrub-hint');
-    if(hdr) hdr.textContent='CHOP YOUR LOOP';
-    if(hnt) hnt.textContent='Drag to snap your loop to real beats — tap 8/16 hits to change length';
+    if(hdr) hdr.textContent='STEP 1 · CHOP YOUR BEAT';
+    if(hnt) hnt.textContent='Drag the orange box to the best part, then lock it';
     bbShowScreen('bb-scrub-screen');
     const timer=document.getElementById('bb-scrub-timer'); if(timer) timer.textContent=timeLeft;
     const wldr=document.getElementById('bb-waveform-loading');
@@ -5428,19 +5369,10 @@ socket.on('bbChopLocked',({start,end,hitCount})=>{
 
 socket.on('bbSpitPhase',({template,timeLeft})=>{
     bbStopLoop(); bbStreamStop();
-    bbSpitAdlibChoice=null; bbSpitAudioDataUrl=null; bbSpitAudioChunks=[];
-    if (bbSpitCurrentAudioEl) { try{bbSpitCurrentAudioEl.pause();}catch(e){} bbSpitCurrentAudioEl=null; }
-    if (bbSpitMediaRecorder && bbSpitMediaRecorder.state==='recording') { try{bbSpitMediaRecorder.stop();}catch(e){} }
-    bbSpitMediaRecorder=null;
     bbSpitFlowPreset='straight';
     bbShowScreen('bb-spit-screen');
     bbRenderSpitTemplate(template);
     bbSetFlowPreset('straight');
-    const recBtn=document.getElementById('bb-spit-record-btn');
-    if(recBtn){recBtn.style.borderColor='#e91e63';recBtn.style.color='#e91e63';recBtn.textContent='🎙️';}
-    const recHint=document.getElementById('bb-spit-record-hint'); if(recHint) recHint.textContent='Tap to record your own';
-    const play=document.getElementById('bb-spit-adlib-play'); if(play) play.style.display='none';
-    document.querySelectorAll('.bb-adlib-canned-btn').forEach(b=>{b.style.borderColor='#2a3450';b.style.color='#9fb0cc';});
     const submitBtn=document.getElementById('bb-spit-submit-btn'); if(submitBtn) submitBtn.disabled=false;
     const timer=document.getElementById('bb-spit-timer'); if(timer) timer.textContent=timeLeft;
 });
@@ -5550,6 +5482,7 @@ socket.on('bbLobby',()=>{
     <div id="bb-crate-year"  class="bb-track-year"></div>
   </div>
   <div id="bb-crate-loading" style="font-size:0.7em;color:#4a6a8a;">Pulling from the crates…</div>
+  <div style="font-size:0.62em;color:#7a9abf;text-align:center;line-height:1.6;max-width:300px;">🎧 This is your record for the round.<br>Chop a beat from it, write a diss, battle 1v1.</div>
 </div>
 
 <!-- Scrub screen -->
@@ -5594,7 +5527,6 @@ socket.on('bbLobby',()=>{
       style="width:100%;height:6px;accent-color:#5ee6c5;cursor:pointer;">
     <div style="text-align:center;margin-top:4px;">
       <span id="bb-pitch-label" style="font-size:0.72em;font-weight:800;color:#5ee6c5;">1.00×</span>
-      <span style="font-size:0.6em;color:#4a6a8a;margin-left:6px;">set speed first, then drag your loop</span>
     </div>
   </div>
 
@@ -5605,18 +5537,19 @@ socket.on('bbLobby',()=>{
 <!-- Spit screen -->
 <div id="bb-spit-screen" style="display:none;position:fixed;inset:0;z-index:200;background:#090b12;color:#fff;flex-direction:column;align-items:center;gap:12px;padding:18px 14px;overflow-y:auto;">
   <div style="width:100%;display:flex;align-items:center;justify-content:space-between;max-width:440px;">
-    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">SPIT YOUR VERSE</div>
+    <div style="font-size:0.72em;font-weight:800;color:#ff9800;letter-spacing:.06em;">STEP 2 · WRITE YOUR DISS</div>
     <div style="display:flex;align-items:center;gap:6px;">
       <div id="bb-spit-timer" style="font-size:1.6em;font-weight:900;"></div>
       <div style="font-size:0.55em;color:#4a6a8a;line-height:1.3;">secs<br>left</div>
     </div>
   </div>
+  <div style="width:100%;max-width:440px;font-size:0.68em;color:#9fb0cc;line-height:1.5;">Fill the blanks — everyone hears it read out loud in the battle.</div>
 
   <div id="bb-spit-template-wrap" style="width:100%;max-width:440px;background:#0d1525;border:1.5px solid #2a3450;border-radius:12px;padding:16px;font-size:0.95em;line-height:2.1;"></div>
 
   <!-- Flow preset picker -->
   <div style="width:100%;max-width:440px;">
-    <div style="font-size:0.6em;color:#4a6a8a;margin-bottom:6px;letter-spacing:.04em;">PICK YOUR FLOW</div>
+    <div style="font-size:0.6em;color:#4a6a8a;margin-bottom:6px;letter-spacing:.04em;">PICK A VOICE</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
       <button id="bb-flow-chipmunk" onclick="bbSetFlowPreset('chipmunk')" style="padding:9px 0;border-radius:10px;border:2px solid #ff9800;background:rgba(255,152,0,.15);color:#ff9800;font-size:0.72em;font-weight:800;cursor:pointer;">🐿️ Chipmunk</button>
       <button id="bb-flow-villain" onclick="bbSetFlowPreset('villain')" style="padding:9px 0;border-radius:10px;border:2px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.72em;font-weight:800;cursor:pointer;">😈 Villain</button>
@@ -5625,25 +5558,7 @@ socket.on('bbLobby',()=>{
     </div>
   </div>
 
-  <button onclick="bbPreviewSpit()" style="padding:11px 0;width:100%;max-width:440px;border:2px solid #5ee6c5;border-radius:12px;background:rgba(94,230,197,.08);color:#5ee6c5;font-size:0.75em;font-weight:900;cursor:pointer;letter-spacing:.04em;">▶ PREVIEW VERSE</button>
-
-  <!-- Ad-lib picker -->
-  <div style="width:100%;max-width:440px;">
-    <div style="font-size:0.6em;color:#4a6a8a;margin-bottom:6px;letter-spacing:.04em;">AD-LIB STINGER (OPTIONAL)</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <button id="bb-spit-record-btn" onclick="bbToggleSpitRecord()" style="width:52px;height:52px;border-radius:50%;border:3px solid #e91e63;background:#1a0010;color:#e91e63;font-size:1.4em;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🎙️</button>
-      <div style="flex:1;">
-        <div id="bb-spit-record-hint" style="font-size:0.65em;color:#9fb0cc;">Tap to record your own</div>
-        <button id="bb-spit-adlib-play" onclick="bbPlaySpitAdlibRecording()" style="display:none;margin-top:4px;padding:4px 10px;border-radius:8px;border:1.5px solid #5ee6c5;background:none;color:#5ee6c5;font-size:0.65em;cursor:pointer;">▶ Play back</button>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-      <button class="bb-adlib-canned-btn" data-id="airhorn" onclick="bbPickCannedAdlib('airhorn')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">📯 Airhorn</button>
-      <button class="bb-adlib-canned-btn" data-id="laugh" onclick="bbPickCannedAdlib('laugh')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">😂 Laugh</button>
-      <button class="bb-adlib-canned-btn" data-id="scratch" onclick="bbPickCannedAdlib('scratch')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">💿 Scratch</button>
-      <button class="bb-adlib-canned-btn" data-id="boo" onclick="bbPickCannedAdlib('boo')" style="padding:8px 0;border-radius:10px;border:1.5px solid #2a3450;background:#0d1525;color:#9fb0cc;font-size:0.68em;font-weight:700;cursor:pointer;">👎 Boo</button>
-    </div>
-  </div>
+  <button onclick="bbPreviewSpit()" style="padding:11px 0;width:100%;max-width:440px;border:2px solid #5ee6c5;border-radius:12px;background:rgba(94,230,197,.08);color:#5ee6c5;font-size:0.75em;font-weight:900;cursor:pointer;letter-spacing:.04em;">▶ HEAR IT FIRST</button>
 
   <button id="bb-spit-submit-btn" onclick="bbSubmitSpit()" style="padding:14px 0;width:100%;max-width:440px;font-size:0.85em;border:none;border-radius:12px;background:#ff9800;color:#090b12;font-weight:900;letter-spacing:.04em;cursor:pointer;">LOCK IT IN</button>
 </div>
@@ -5654,6 +5569,7 @@ socket.on('bbLobby',()=>{
     <div id="bb-battle-label" style="font-size:0.68em;font-weight:800;color:#ff9800;letter-spacing:.05em;"></div>
     <div id="bb-battle-timer" style="font-size:1.4em;font-weight:900;"></div>
   </div>
+  <div style="width:100%;max-width:440px;font-size:0.68em;color:#9fb0cc;line-height:1.5;">Tap ▶ to hear each verse — then vote for the winner.</div>
 
   <div style="width:100%;max-width:440px;display:flex;flex-direction:column;gap:10px;">
     <div style="background:#0d1525;border:1.5px solid #2a3450;border-radius:14px;padding:14px;">
