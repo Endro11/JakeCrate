@@ -184,6 +184,7 @@ function makeRoom(code) {
         seekerCameras: {},      // socketId -> { x, y, scale, screenW, screenH, name, color }
         viewportPoints: {},     // socketId -> accumulated points
         viewportTick: null,
+        tsReady: {},            // socketId -> true — pre-round ready-up in the lobby, tacostealth only
         gamePhase: 'LOBBY',   // LOBBY | HIDING | SEEKING | REVEAL
         selectedGame: null,   // 'tacostealth' | 'strokeoff'
         strokePainting: null, // selected PAINTINGS entry
@@ -327,6 +328,7 @@ function broadcastGameState(room) {
         hostSocketId: room.hostSocketId,
         pokesLeft: room.seekerPokesLeft,
         selectedGame: room.selectedGame,
+        tsReadyIds: Object.keys(room.tsReady).filter(id => room.tsReady[id]),
     });
 }
 
@@ -360,7 +362,7 @@ function transferHostIfNeeded(room) {
 function rekeySocketState(room, oldId, newId) {
     if (!oldId || oldId === newId) return;
     const maps = [
-        'avatars', 'lastReactionTimes', 'seekerPokes', 'seekerCameras', 'viewportPoints',
+        'avatars', 'lastReactionTimes', 'seekerPokes', 'seekerCameras', 'viewportPoints', 'tsReady',
         'ppPlayerPhotos', 'ppReady', 'ppHands', 'ppVotes', 'ppSubUsed',
         'sqSquiggles', 'sqHistories', 'sqVotes', 'sqScores',
         'rrPlayerFills', 'rrFillReady', 'rrPlayerRecordings', 'rrRecordReady',
@@ -526,6 +528,7 @@ function ts_returnToLobby(room) {
     room.seekerPokesLeft = 0;
     room.seekerCameras = {};
     room.viewportPoints = {};
+    room.tsReady = {};
     Object.values(room.players).forEach(p => { p.isDead = false; });
     for (const t in room.playerState) delete room.playerState[t];
     broadcastRoom(room, 'updatePlayers', room.players);
@@ -2345,6 +2348,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         room.gameVotes[socket.id] = gameId;
         if (isHost(room, socket)) {
+            if (room.selectedGame !== gameId) room.tsReady = {}; // stale ready-ups don't carry across a game switch
             room.selectedGame = gameId;
             broadcastGameState(room);
         }
@@ -2460,6 +2464,7 @@ io.on('connection', (socket) => {
         Object.values(room.players).forEach(p => { p.isDead = false; });
         for (const t in room.playerState) delete room.playerState[t];
         broadcastRoom(room, 'updatePlayers', room.players);
+        room.tsReady = {};
 
         room.gamePhase = 'HIDING';
         room.timeLeft = room.lastHideTime;
@@ -2471,6 +2476,15 @@ io.on('connection', (socket) => {
             if (room.timeLeft <= 0) { ts_startSeeking(room); return; }
             broadcastGameState(room);
         }, 1000);
+    });
+
+    // Pre-round ready-up, lobby only — lets the host see who's actually paying attention
+    // before opening the settings modal and starting the hide timer on everyone at once.
+    socket.on('tsToggleReady', () => {
+        const room = socketRoom(socket);
+        if (!room || room.gamePhase !== 'LOBBY' || room.selectedGame !== 'tacostealth') return;
+        if (room.tsReady[socket.id]) delete room.tsReady[socket.id]; else room.tsReady[socket.id] = true;
+        broadcastGameState(room);
     });
 
     socket.on('tsLockIn', ({ locked }) => {

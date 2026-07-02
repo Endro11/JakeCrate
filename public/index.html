@@ -27,6 +27,7 @@
         .btn-secondary { background:var(--c-card); color:var(--c-ink2); border:1.5px solid var(--c-border); padding:11px 18px; font-size:.8em; }
         .btn-quiet { background:transparent; color:var(--c-ink3); padding:8px 12px; font-size:.8em; }
         .btn-quiet:active, .btn-secondary:active { filter:brightness(1.35); }
+        .btn-secondary.btn-active { background:rgba(94,230,197,.15); border-color:#5ee6c5; color:#5ee6c5; }
         canvas { display:block; touch-action:none; cursor:crosshair; }
         #global-leave { display:none; position:fixed; top:calc(env(safe-area-inset-top) + 6px); left:6px; z-index:250; background:rgba(198,40,40,0.82); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.7em; font-weight:bold; letter-spacing:1px; cursor:pointer; -webkit-user-select:none; user-select:none; }
 
@@ -718,6 +719,8 @@
             </div>
         </div>
     </div>
+    <button id="rl-ready-btn" class="btn btn-secondary" onclick="tsToggleReady()" style="display:none;">✅ READY UP</button>
+    <div id="rl-ready-row" style="display:none;font-family:monospace;color:#5ee6c5;font-size:0.78em;letter-spacing:1px;"></div>
     <button id="rl-volunteer" class="btn btn-secondary" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
     <button id="rl-submit-photo" class="btn btn-secondary" onclick="openSubmitPhoto()" style="display:none;">📷 Suggest a Room Photo</button>
     <input type="file" id="submit-photo-input" accept="image/*" style="display:none;" onchange="onSubmitPhotoChosen(this.files[0])">
@@ -1288,6 +1291,7 @@ let otherPlayers = {};
 let gamePhase = 'LOBBY';
 let seekerSocketId = null;
 let seekerSocketIds = [];    // all current seekers (snowball)
+let tsReadyIds = [];         // socketIds who've readied up in the lobby (tacostealth only)
 let viewportMap = {};        // socketId -> { x, y, scale, screenW, screenH, name, color }
 let selfViewportPoints = 0;
 let wasInViewport = false;
@@ -1380,6 +1384,13 @@ socket.on('stateSnapshot', (data) => {
         // Server will immediately follow this with bbRecordPhase / bbBuildPhase / bbMatchupStart
         // to put the player on the right screen — just show a brief toast
         showToast('Rejoining Bad Pitches…');
+    } else if (data.selectedGame === 'tacostealth') {
+        // Sleight of Hands has no phase-start event to hide the overlay at (it's a
+        // continuously-live game, not phase-gated) — the 'gameState' broadcast that
+        // fires on every reconnect already fully resyncs phase/seeker/position, and
+        // 'selfState' already resyncs isDead. Showing the overlay here left it stuck
+        // on screen forever with nothing to ever dismiss it — bug, not a real wait.
+        showToast('Rejoining Sleight of Hands…');
     } else {
         showReconnectOverlay();
     }
@@ -1446,6 +1457,10 @@ function pickGame(gameId) {
     socket.emit('gameVote', gameId);
 }
 
+function tsToggleReady() {
+    socket.emit('tsToggleReady');
+}
+
 function rlStartGame() {
     if (!isRoomHost || !selectedGame) return;
     const pCount = Object.keys(otherPlayers).length;
@@ -1492,7 +1507,7 @@ function leaveRoom() {
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     isJoined = false; isRoomHost = false; currentRoomCode = null;
-    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
+    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY'; tsReadyIds = [];
     seekerSocketIds = []; seekerSocketId = null;
     suggestedPhotos = [];
     syncGlobalLeave();
@@ -1566,7 +1581,7 @@ socket.on('roomClosed', () => {
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     isJoined = false; isRoomHost = false; currentRoomCode = null;
-    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
+    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY'; tsReadyIds = [];
     syncGlobalLeave();
     showToast('The host closed the room');
 });
@@ -1588,7 +1603,7 @@ socket.on('kicked', ({ reason } = {}) => {
     hide('room-lobby');
     document.getElementById('hub-screen').style.display = 'flex';
     isJoined = false; isRoomHost = false; currentRoomCode = null;
-    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY';
+    otherPlayers = {}; selectedGame = null; gamePhase = 'LOBBY'; tsReadyIds = [];
     syncGlobalLeave();
     showToast('You were removed from the room');
 });
@@ -1613,6 +1628,26 @@ function renderRoomLobby() {
     document.getElementById('rl-volunteer').style.display = (isRoomHost || selectedGame !== 'tacostealth') ? 'none' : 'block';
     document.getElementById('rl-submit-photo').style.display = (!isRoomHost && selectedGame === 'tacostealth') ? 'block' : 'none';
     document.getElementById('rl-close-btn').style.display = isRoomHost ? 'block' : 'none';
+
+    // Ready-up (tacostealth only) — everyone including host can toggle it; it's a signal
+    // for the host, not a hard gate, so it never blocks START GAME.
+    const tsReadyBtn = document.getElementById('rl-ready-btn');
+    const tsReadyRow = document.getElementById('rl-ready-row');
+    if (selectedGame === 'tacostealth') {
+        const amReady = tsReadyIds.includes(socket.id);
+        if (tsReadyBtn) {
+            tsReadyBtn.style.display = 'block';
+            tsReadyBtn.textContent = amReady ? '✓ READY' : '✅ READY UP';
+            tsReadyBtn.classList.toggle('btn-active', amReady);
+        }
+        if (tsReadyRow) {
+            tsReadyRow.style.display = 'block';
+            tsReadyRow.textContent = `${tsReadyIds.length}/${list.length} ready`;
+        }
+    } else {
+        if (tsReadyBtn) tsReadyBtn.style.display = 'none';
+        if (tsReadyRow) tsReadyRow.style.display = 'none';
+    }
 
     document.querySelectorAll('.game-card:not(.soon)').forEach(el => el.classList.remove('selected'));
     if (selectedGame) {
@@ -1776,6 +1811,7 @@ socket.on('gameState', (state) => {
     hostId = state.hostSocketId;
     isRoomHost = socket.id === state.hostSocketId;
     selectedGame = state.selectedGame || null;
+    tsReadyIds = state.tsReadyIds || [];
     const isSeeker = meSeeker();
     const inLobby = state.phase === 'LOBBY';
 
