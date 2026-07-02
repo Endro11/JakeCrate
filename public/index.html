@@ -11,6 +11,22 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         body, html { margin:0; padding:0; width:100%; height:100%; background:#050508; overflow:hidden; font-family:sans-serif; overscroll-behavior:none; touch-action:none; }
+
+        /* ── Design tokens + button system ─────────────────────────────────────
+           Exactly three button weights. Every screen gets ONE .btn-primary (the
+           single thing the player should do next); everything else is secondary
+           or quiet. New/migrated UI should use these instead of inline styles. */
+        :root {
+            --c-card:#0d1525; --c-border:#2a3450;
+            --c-ink:#fff; --c-ink2:#9fb0cc; --c-ink3:#4a6a8a;
+            --c-brand:#ffeb3b; --c-danger:#c62828;
+        }
+        .btn { border:none; cursor:pointer; font-weight:800; letter-spacing:.04em; border-radius:12px; -webkit-tap-highlight-color:transparent; font-family:inherit; }
+        .btn:disabled { opacity:.4; }
+        .btn-primary { background:var(--c-brand); color:#090b12; padding:16px 22px; font-size:1em; }
+        .btn-secondary { background:var(--c-card); color:var(--c-ink2); border:1.5px solid var(--c-border); padding:11px 18px; font-size:.8em; }
+        .btn-quiet { background:transparent; color:var(--c-ink3); padding:8px 12px; font-size:.8em; }
+        .btn-quiet:active, .btn-secondary:active { filter:brightness(1.35); }
         canvas { display:block; touch-action:none; cursor:crosshair; }
         #global-leave { display:none; position:fixed; top:calc(env(safe-area-inset-top) + 6px); left:6px; z-index:250; background:rgba(198,40,40,0.82); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.7em; font-weight:bold; letter-spacing:1px; cursor:pointer; -webkit-user-select:none; user-select:none; }
 
@@ -72,14 +88,23 @@
         .gc-desc { font-size:0.78em; color:#7a8fa8; margin-top:2px; }
         .gc-badge { font-size:0.7em; background:#37474f; color:#90a4ae; padding:3px 8px; border-radius:10px; font-family:monospace; }
         .gc-voters { display:flex; flex-wrap:wrap; gap:1px; margin-top:5px; font-size:1.15em; line-height:1; min-height:1.3em; }
-        #rl-start-btn { padding:10px 28px; font-weight:bold; font-size:0.9em; border:none; border-radius:20px; background:#c62828; color:#fff; cursor:pointer; letter-spacing:1px; text-transform:uppercase; display:none; }
+        /* Sticky action bar — START GAME is the lobby's single primary action.
+           margin-top:auto pushes it to the bottom even when content is short. */
+        #rl-actionbar { position:sticky; bottom:0; width:min(380px,100%); margin-top:auto; padding:12px 0 calc(10px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, #050508 35%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:4; }
+        #rl-start-btn { width:100%; text-transform:uppercase; display:none; }
         #rl-wait { font-family:monospace; color:#556; font-size:0.9em; text-align:center; }
-        #rl-volunteer { background:#37474f; border:none; border-radius:10px; padding:12px 24px; color:#fff; font-weight:bold; cursor:pointer; text-transform:uppercase; font-size:0.9em; }
-        #rl-room-actions { display:flex; gap:10px; justify-content:center; margin-top:4px; }
-        #rl-leave-btn { background:transparent; border:1px solid #2a3a55; border-radius:10px; padding:9px 18px; color:#556; font-size:0.82em; font-weight:bold; cursor:pointer; letter-spacing:1px; text-transform:uppercase; }
-        #rl-leave-btn:active { background:rgba(255,255,255,0.05); }
-        #rl-close-btn { background:transparent; border:1px solid #5a1a1a; border-radius:10px; padding:9px 18px; color:#c62828; font-size:0.82em; font-weight:bold; cursor:pointer; letter-spacing:1px; text-transform:uppercase; }
-        #rl-close-btn:active { background:rgba(198,40,40,0.1); }
+        /* Room code + invite live on one row; QR/share collapse into a panel */
+        .rl-code-row { display:flex; align-items:center; gap:10px; }
+        #rl-invite { display:none; flex-direction:column; align-items:center; gap:8px; }
+        #rl-invite.open { display:flex; }
+        /* Leave/Close live behind the ⋯ corner menu — rare, destructive actions
+           shouldn't take permanent lobby real estate (and CLOSE was a misclick hazard) */
+        .rl-topbar { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right)); z-index:6; }
+        #rl-menu-btn { font-size:1.5em; line-height:1; padding:8px 14px; color:var(--c-ink2); }
+        #rl-menu { position:absolute; right:0; top:44px; background:var(--c-card); border:1.5px solid var(--c-border); border-radius:12px; display:none; flex-direction:column; min-width:180px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.5); }
+        #rl-menu button { background:none; border:none; padding:14px 18px; color:var(--c-ink2); text-align:left; font-size:0.85em; font-weight:700; cursor:pointer; font-family:inherit; }
+        #rl-menu button:active { background:rgba(255,255,255,.06); }
+        #rl-menu #rl-close-btn { color:var(--c-danger); }
 
         /* ── Shared game HUD ── */
         #monitor-hud { position:absolute; top:calc(10px + env(safe-area-inset-top)); left:calc(12px + env(safe-area-inset-left)); display:flex; align-items:center; gap:8px; pointer-events:none; z-index:10; font-family:monospace; color:#fff; font-size:1em; text-shadow:2px 2px 2px #000; max-width:46vw; }
@@ -615,12 +640,25 @@
 
 <!-- ════════════════════ ROOM LOBBY ════════════════════ -->
 <div id="room-lobby">
+    <div class="rl-topbar">
+        <button id="rl-menu-btn" class="btn btn-quiet" onclick="toggleRlMenu(event)">⋯</button>
+        <div id="rl-menu">
+            <button onclick="leaveRoom()">← Leave room</button>
+            <button id="rl-close-btn" onclick="closeRoom()" style="display:none;">✕ Close room</button>
+        </div>
+    </div>
     <div class="rl-logo">🎮 JAKECRATE</div>
     <div style="font-family:monospace; color:#556; font-size:0.8em; letter-spacing:3px;">ROOM CODE</div>
-    <div class="rl-code" id="rl-code-display">----</div>
-    <div id="rl-qr" style="background:#fff;padding:12px;border-radius:14px;margin:12px auto 6px;width:196px;height:196px;display:none;align-items:center;justify-content:center;"></div>
-    <div id="rl-qr-cap" style="font-family:monospace;color:#66708a;font-size:0.68em;letter-spacing:1px;word-break:break-all;max-width:260px;margin:0 auto;"></div>
-    <div class="rl-hint">📷 Scan to join — or share the code</div>
+    <div class="rl-code-row">
+        <div class="rl-code" id="rl-code-display">----</div>
+        <button id="rl-invite-btn" class="btn btn-secondary" onclick="toggleInvite()">📤 INVITE</button>
+    </div>
+    <div id="rl-invite">
+        <div id="rl-qr" style="background:#fff;padding:12px;border-radius:14px;margin:6px auto 0;width:196px;height:196px;display:none;align-items:center;justify-content:center;"></div>
+        <div id="rl-qr-cap" style="font-family:monospace;color:#66708a;font-size:0.68em;letter-spacing:1px;word-break:break-all;max-width:260px;margin:0 auto;"></div>
+        <div class="rl-hint">📷 Scan to join — or share the code</div>
+        <button id="rl-share-btn" class="btn btn-secondary" onclick="shareRoom()">📤 SHARE ROOM LINK</button>
+    </div>
     <div id="rl-players"></div>
     <div id="rl-game-pick">
         <div class="game-card" id="gc-ts" onclick="pickGame('tacostealth')">
@@ -680,15 +718,12 @@
             </div>
         </div>
     </div>
-    <button id="rl-start-btn" onclick="rlStartGame()">🚀 START GAME</button>
-    <div id="rl-wait">Waiting for the host to start…</div>
-    <button id="rl-volunteer" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
-    <button id="rl-submit-photo" onclick="openSubmitPhoto()" style="display:none;background:#1565c0;border:none;border-radius:10px;padding:11px 22px;color:#fff;font-size:0.88em;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;width:min(280px,88%);">📷 Suggest a Room Photo</button>
+    <button id="rl-volunteer" class="btn btn-secondary" onclick="sendVolunteer()" style="display:none;">🙋 Volunteer as Seeker</button>
+    <button id="rl-submit-photo" class="btn btn-secondary" onclick="openSubmitPhoto()" style="display:none;">📷 Suggest a Room Photo</button>
     <input type="file" id="submit-photo-input" accept="image/*" style="display:none;" onchange="onSubmitPhotoChosen(this.files[0])">
-    <button id="rl-share-btn" onclick="shareRoom()" style="background:#1565c0;border:none;border-radius:10px;padding:11px 22px;color:#fff;font-size:0.88em;font-weight:bold;cursor:pointer;letter-spacing:1px;text-transform:uppercase;width:min(280px,88%);">📤 SHARE ROOM LINK</button>
-    <div id="rl-room-actions">
-        <button id="rl-leave-btn" onclick="leaveRoom()">← LEAVE ROOM</button>
-        <button id="rl-close-btn" onclick="closeRoom()" style="display:none;">✕ CLOSE ROOM</button>
+    <div id="rl-actionbar">
+        <button id="rl-start-btn" class="btn btn-primary" onclick="rlStartGame()">🚀 START GAME</button>
+        <div id="rl-wait">Waiting for the host to start…</div>
     </div>
     <div id="scoreboard" style="display:none;"><div id="score-list"></div></div>
     <div id="so-scoreboard" style="display:none;"><div id="so-score-list"></div></div>
@@ -1357,8 +1392,26 @@ function showRoomLobby() {
     show('room-lobby');
     document.getElementById('rl-code-display').innerText = currentRoomCode || '----';
     renderJoinQr();
+    // The invite panel (QR + share) starts open — a fresh room's whole job is inviting.
+    // Once the player collapses it themselves, respect that for the rest of the session.
+    if (!window._rlInviteTouched) document.getElementById('rl-invite')?.classList.add('open');
     isJoined = true;
 }
+
+function toggleInvite() {
+    window._rlInviteTouched = true;
+    document.getElementById('rl-invite')?.classList.toggle('open');
+}
+
+function toggleRlMenu(e) {
+    e.stopPropagation();
+    const m = document.getElementById('rl-menu');
+    if (m) m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+}
+document.addEventListener('click', (e) => {
+    const m = document.getElementById('rl-menu');
+    if (m && m.style.display === 'flex' && !e.target.closest('.rl-topbar')) m.style.display = 'none';
+});
 
 // Resolve the origin to advertise for joining. If the page was opened via localhost,
 // try swapping in the LAN IP others can reach — but the server only hands one back

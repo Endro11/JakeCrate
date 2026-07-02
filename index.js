@@ -12,6 +12,10 @@ const io = new Server(server, { maxHttpBufferSize: 8e6 }); // 8MB cap per messag
 
 app.use(express.static('public'));
 
+// Uptime-pinger target — hit this every ~10min from a free monitor (e.g. cron-job.org)
+// to keep the Render free instance from spinning down and cold-starting on players.
+app.get('/healthz', (req, res) => res.json({ ok: true, rooms: Object.keys(rooms).length }));
+
 // ─── Bad Pitches offline cache ────────────────────────────────────────────────
 // When public/bb-cache/manifest.json exists (built by `node bb-cache-build.js`),
 // Bad Pitches serves pre-downloaded audio + art from disk and never touches the
